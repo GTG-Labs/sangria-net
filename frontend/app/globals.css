@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@variant dark (&:where(.dark, .dark *));
 
 @theme inline {
   --color-surface-DEFAULT: #0a0a0b;
@@ -22,9 +23,31 @@
   --font-mono: 'JetBrains Mono', monospace;
 }
 
+:root {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f9fafb;
+  --bg-tertiary: #f3f4f6;
+  --text-primary: #111827;
+  --text-secondary: #4b5563;
+  --text-tertiary: #6b7280;
+  --border-color: #e5e7eb;
+  --surface-bg: rgba(255, 255, 255, 0.8);
+}
+
+.dark {
+  --bg-primary: #0a0a0b;
+  --bg-secondary: #18181b;
+  --bg-tertiary: #1e1e22;
+  --text-primary: #ffffff;
+  --text-secondary: #d4d4d8;
+  --text-tertiary: #a1a1aa;
+  --border-color: rgba(255, 255, 255, 0.05);
+  --surface-bg: rgba(10, 10, 11, 0.8);
+}
+
 body {
-  background: #0a0a0b;
-  color: #d4d4d8;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
   font-family: 'Inter', system-ui, sans-serif;
 }
 
@@ -37,7 +60,7 @@ body {
 
 .gradient-border {
   position: relative;
-  background: #18181b;
+  background: var(--bg-secondary);
   border-radius: 1rem;
 }
 .gradient-border::before {
@@ -87,5 +110,5 @@ body {
 }
 
 .code-block {
-  background: linear-gradient(145deg, #18181b 0%, #0f0f12 100%);
+  background: var(--bg-secondary);
 }

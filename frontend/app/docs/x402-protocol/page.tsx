@@ -4,7 +4,7 @@ import { ArrowLeft } from 'lucide-react';
 export default function X402Protocol() {
   return (
     <>
-      <Link href="/docs" className="inline-flex items-center gap-2 text-zinc-400 hover:text-white transition-colors mb-8">
+      <Link href="/docs" className="inline-flex items-center gap-2 text-zinc-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white transition-colors mb-8">
         <ArrowLeft className="w-4 h-4" />
         Back to Docs
       </Link>
@@ -15,7 +15,7 @@ export default function X402Protocol() {
         <h2>What Is It?</h2>
         
         <p>
-          x402 revives the HTTP 402 "Payment Required" status code — a code that's been in the HTTP spec since the 90s but was never actually used. 
+          x402 revives the HTTP 402 &quot;Payment Required&quot; status code — a code that&apos;s been in the HTTP spec since the 90s but was never actually used. 
           Coinbase built a real protocol around it: <strong>pay-per-request over HTTP using crypto (USDC)</strong>.
         </p>
 
@@ -63,7 +63,7 @@ export default function X402Protocol() {
 
         <ol>
           <li>Client makes a normal HTTP request</li>
-          <li>Server says "this costs money" via a 402 response with payment details</li>
+          <li>Server says &quot;this costs money&quot; via a 402 response with payment details</li>
           <li>Client signs an ERC-3009 authorization (not a transaction — just a signature)</li>
           <li>Client retries the request with the signed payment in a header</li>
           <li>Server forwards the payment to the facilitator for verification</li>
@@ -87,7 +87,7 @@ export default function X402Protocol() {
             <tr>
               <td><code>PAYMENT-REQUIRED</code></td>
               <td>Server → Client</td>
-              <td>"Here's what you need to pay" — price, token address, network, recipient wallet, facilitator URL</td>
+              <td>&quot;Here&apos;s what you need to pay&quot; — price, token address, network, recipient wallet, facilitator URL</td>
             </tr>
             <tr>
               <td><code>X-PAYMENT</code></td>
@@ -117,8 +117,8 @@ export default function X402Protocol() {
 
         <ul>
           <li><strong>maxAmountRequired</strong> — The price (in USDC, so $0.10)</li>
-          <li><strong>payTo</strong> — The seller's wallet address (where the money goes)</li>
-          <li><strong>asset</strong> — The token contract address (USDC's address on that chain)</li>
+          <li><strong>payTo</strong> — The seller&apos;s wallet address (where the money goes)</li>
+          <li><strong>asset</strong> — The token contract address (USDC&apos;s address on that chain)</li>
           <li><strong>network</strong> — Which blockchain to pay on</li>
         </ul>
 
@@ -126,14 +126,14 @@ export default function X402Protocol() {
 
         <p>
           This is the clever part. Instead of the client actually <em>sending</em> a transaction (which would need ETH for gas), 
-          x402 uses <strong>ERC-3009 "TransferWithAuthorization"</strong>.
+          x402 uses <strong>ERC-3009 &quot;TransferWithAuthorization&quot;</strong>.
         </p>
 
         <h3>How it works:</h3>
 
         <ol>
-          <li><strong>Client signs a message</strong> (not a transaction) that says: "I authorize transferring X USDC from my wallet to wallet Y, valid between time A and time B, with nonce Z"</li>
-          <li><strong>This signature gets sent in the <code>X-PAYMENT</code> header</strong> — it's just bytes, no blockchain involved yet</li>
+          <li><strong>Client signs a message</strong> (not a transaction) that says: &quot;I authorize transferring X USDC from my wallet to wallet Y, valid between time A and time B, with nonce Z&quot;</li>
+          <li><strong>This signature gets sent in the <code>X-PAYMENT</code> header</strong> — it&apos;s just bytes, no blockchain involved yet</li>
           <li><strong>The facilitator</strong> takes that signature and submits it to the blockchain on your behalf</li>
           <li><strong>The USDC contract</strong> verifies the signature is valid and executes the transfer</li>
         </ol>
@@ -143,13 +143,13 @@ export default function X402Protocol() {
         <ul>
           <li><strong>The client never pays gas</strong> — the facilitator submits the transaction, so they cover the (tiny) gas fee</li>
           <li><strong>No on-chain transaction until the server is ready</strong> — the client just signs, the facilitator settles later</li>
-          <li><strong>Replay protection</strong> — each authorization has a unique nonce and time window, so it can't be reused</li>
+          <li><strong>Replay protection</strong> — each authorization has a unique nonce and time window, so it can&apos;t be reused</li>
         </ul>
 
         <h3>Important limitation:</h3>
 
         <p>
-          Currently <strong>only USDC supports ERC-3009</strong> (it was proposed by Circle, USDC's creator). 
+          Currently <strong>only USDC supports ERC-3009</strong> (it was proposed by Circle, USDC&apos;s creator). 
           So despite x402 being theoretically token-agnostic, USDC is the only practical option right now.
         </p>
 
@@ -195,7 +195,7 @@ async def premium_endpoint():
 
         <h2>Payment Schemes</h2>
 
-        <p>x402 defines different "schemes" — ways to structure payment:</p>
+        <p>x402 defines different &quot;schemes&quot; — ways to structure payment:</p>
 
         <table>
           <thead>
@@ -219,7 +219,7 @@ async def premium_endpoint():
           </tbody>
         </table>
 
-        <p>See <Link href="/docs/variable-pricing">Variable Pricing with x402</Link> for a deep dive on the "upto" scheme.</p>
+        <p>See <Link href="/docs/variable-pricing">Variable Pricing with x402</Link> for a deep dive on the &quot;upto&quot; scheme.</p>
 
         <h2>SDKs Available</h2>
 

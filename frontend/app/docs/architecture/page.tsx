@@ -4,7 +4,7 @@ import { ArrowLeft } from 'lucide-react';
 export default function Architecture() {
   return (
     <>
-      <Link href="/docs" className="inline-flex items-center gap-2 text-zinc-400 hover:text-white transition-colors mb-8">
+      <Link href="/docs" className="inline-flex items-center gap-2 text-zinc-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white transition-colors mb-8">
         <ArrowLeft className="w-4 h-4" />
         Back to Docs
       </Link>
@@ -185,8 +185,8 @@ asyncio.run(setup())`}</code></pre>
         <h2>Important Security Notes</h2>
 
         <ul>
-          <li><strong>CDP manages private keys server-side</strong>: The wallet secret in your <code>.env</code> encrypts them at rest — don't lose it or you lose access to your wallets</li>
-          <li><strong>Private key export</strong>: The buyer's private key is exported from CDP only to sign x402 payment headers. This is the one place where the raw key is used locally</li>
+          <li><strong>CDP manages private keys server-side</strong>: The wallet secret in your <code>.env</code> encrypts them at rest — don&apos;t lose it or you lose access to your wallets</li>
+          <li><strong>Private key export</strong>: The buyer&apos;s private key is exported from CDP only to sign x402 payment headers. This is the one place where the raw key is used locally</li>
           <li><strong>Testnet only</strong>: This demo runs on Base Sepolia testnet — all funds are fake, no real money is involved</li>
         </ul>
 

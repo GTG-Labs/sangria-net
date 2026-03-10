@@ -4,13 +4,13 @@ import { ArrowLeft } from 'lucide-react';
 export default function VariablePricing() {
   return (
     <>
-      <Link href="/docs" className="inline-flex items-center gap-2 text-zinc-400 hover:text-white transition-colors mb-8">
+      <Link href="/docs" className="inline-flex items-center gap-2 text-zinc-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white transition-colors mb-8">
         <ArrowLeft className="w-4 h-4" />
         Back to Docs
       </Link>
 
       <article>
-        <h1>Variable Pricing with x402 — The "upto" Scheme</h1>
+        <h1>Variable Pricing with x402 — The &quot;upto&quot; Scheme</h1>
         
         <blockquote>
           <strong>Prerequisite:</strong> Read <Link href="/docs/x402-protocol">x402 Protocol — How It Works</Link> first.
@@ -18,21 +18,21 @@ export default function VariablePricing() {
 
         <h2>The Problem</h2>
 
-        <p>With the <strong>"exact"</strong> scheme, the price is fixed upfront:</p>
+        <p>With the <strong>&quot;exact&quot;</strong> scheme, the price is fixed upfront:</p>
         
         <ul>
-          <li>Client asks for resource → server says "that's $0.10" → client pays exactly $0.10</li>
+          <li>Client asks for resource → server says &quot;that&apos;s $0.10&quot; → client pays exactly $0.10</li>
         </ul>
 
         <p>
-          But for an LLM API, <strong>you don't know the cost until the work is done</strong>. A short response might use 50 tokens ($0.0005), 
-          a long one might use 5,000 tokens ($0.05). You can't charge a fixed price without either overcharging or undercharging.
+          But for an LLM API, <strong>you don&apos;t know the cost until the work is done</strong>. A short response might use 50 tokens ($0.0005), 
+          a long one might use 5,000 tokens ($0.05). You can&apos;t charge a fixed price without either overcharging or undercharging.
         </p>
 
-        <h2>The Solution: "upto" Scheme</h2>
+        <h2>The Solution: &quot;upto&quot; Scheme</h2>
 
         <p>
-          The "upto" scheme splits the payment flow into <strong>two steps</strong>: <strong>verify</strong> first, <strong>settle</strong> later.
+          The &quot;upto&quot; scheme splits the payment flow into <strong>two steps</strong>: <strong>verify</strong> first, <strong>settle</strong> later.
         </p>
 
         <p>The client authorizes a <strong>maximum</strong> amount, but only gets charged for what they actually used.</p>
@@ -170,7 +170,7 @@ return Response.json({ answer });`}</code></pre>
         <ol>
           <li><strong>Allowance</strong> — The ERC-3009 authorization is valid and covers at least <code>minPrice</code></li>
           <li><strong>Balance</strong> — The wallet actually has enough USDC</li>
-          <li><strong>Expiration</strong> — The signed authorization hasn't timed out</li>
+          <li><strong>Expiration</strong> — The signed authorization hasn&apos;t timed out</li>
         </ol>
 
         <p>If any check fails → 402 back to the client, no work done, no compute wasted.</p>
@@ -187,7 +187,7 @@ return Response.json({ answer });`}</code></pre>
         </ol>
 
         <p>
-          The verify step protects you: <strong>don't burn compute until you know you'll get paid</strong>.
+          The verify step protects you: <strong>don&apos;t burn compute until you know you&apos;ll get paid</strong>.
         </p>
 
         <h2>Reusable Authorizations</h2>
@@ -205,7 +205,7 @@ return Response.json({ answer });`}</code></pre>
 
         <ul>
           <li><strong><code>price</code></strong> (max) — The ceiling. Client authorizes up to this amount. Protects the client from being overcharged.</li>
-          <li><strong><code>minPrice</code></strong> (min) — The floor. Server won't do work for less than this. Protects the server from abuse (e.g., someone sending queries that cost you compute but settle for $0.000001).</li>
+          <li><strong><code>minPrice</code></strong> (min) — The floor. Server won&apos;t do work for less than this. Protects the server from abuse (e.g., someone sending queries that cost you compute but settle for $0.000001).</li>
         </ul>
 
         <p>Example for an LLM API:</p>
@@ -217,11 +217,11 @@ minPrice: "$0.001"   // server won't run inference for less than 0.1 cents`}</co
 
         <h2>For Sangria</h2>
 
-        <p>If we're building an LLM API with x402 payments, the flow would be:</p>
+        <p>If we&apos;re building an LLM API with x402 payments, the flow would be:</p>
 
         <ol>
-          <li>Our server advertises <code>scheme: "upto"</code>, <code>price: "$0.50"</code> (max per request)</li>
-          <li>Client's wallet signs an authorization for up to $0.50 in USDC</li>
+          <li>Our server advertises <code>scheme: &quot;upto&quot;</code>, <code>price: &quot;$0.50&quot;</code> (max per request)</li>
+          <li>Client&apos;s wallet signs an authorization for up to $0.50 in USDC</li>
           <li>We verify they can pay → run the LLM → count tokens → settle for actual cost</li>
           <li>Client pays $0.003 for a short response, $0.15 for a long one — fair for everyone</li>
         </ol>

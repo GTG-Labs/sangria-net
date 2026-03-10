@@ -4,7 +4,7 @@ import { ArrowLeft } from 'lucide-react';
 export default function GettingStarted() {
   return (
     <>
-      <Link href="/docs" className="inline-flex items-center gap-2 text-zinc-400 hover:text-white transition-colors mb-8">
+      <Link href="/docs" className="inline-flex items-center gap-2 text-zinc-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white transition-colors mb-8">
         <ArrowLeft className="w-4 h-4" />
         Back to Docs
       </Link>
@@ -54,7 +54,7 @@ CDP_WALLET_SECRET="your-wallet-secret"`}</code></pre>
 
         <h2>Running the Demo</h2>
 
-        <p>You'll need two terminal windows running simultaneously.</p>
+        <p>You&apos;ll need two terminal windows running simultaneously.</p>
 
         <h3>Terminal 1: Start the merchant server</h3>
         
@@ -99,11 +99,11 @@ Waiting for settlement...
         <ol>
           <li>The buyer client made an HTTP GET request to <code>/premium</code></li>
           <li>The server responded with <code>402 Payment Required</code></li>
-          <li>The client's x402 library automatically signed a USDC payment authorization</li>
+          <li>The client&apos;s x402 library automatically signed a USDC payment authorization</li>
           <li>The client retried the request with the signed payment in the header</li>
           <li>The server verified the payment and returned the premium content</li>
           <li>The payment was settled on-chain (Base Sepolia testnet)</li>
-          <li>Both wallets' balances were updated</li>
+          <li>Both wallets&apos; balances were updated</li>
         </ol>
 
         <h2>Important Notes</h2>
@@ -111,7 +111,7 @@ Waiting for settlement...
         <ul>
           <li>This runs on <strong>Base Sepolia testnet</strong> — all funds are fake. No real money is involved.</li>
           <li>CDP manages private keys server-side. The wallet secret in your <code>.env</code> encrypts them at rest.</li>
-          <li>The buyer's private key is exported from CDP only to sign x402 payment headers.</li>
+          <li>The buyer&apos;s private key is exported from CDP only to sign x402 payment headers.</li>
         </ul>
 
         <h2>Next Steps</h2>
