@@ -4,13 +4,13 @@ export const GET = handleAuth({
   onSuccess: async (user: any) => {
     try {
       // Call Go backend to create/check financial account for this user
-      const response = await fetch('http://127.0.0.1:8080/accounts', {
+      const response = await fetch(`${process.env.BACKEND_URL}/accounts`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
         body: new URLSearchParams({
-          account_number: `ACC-${Math.random().toString(36).toUpperCase().substring(2, 10)}`,
+          workos_user_id: user.user?.id,
           owner: user.user?.firstName && user.user?.lastName
             ? `${user.user.firstName} ${user.user.lastName}`
             : user.user?.email || 'Unknown User',
