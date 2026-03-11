@@ -62,11 +62,11 @@ type LedgerEntry struct {
 
 // LedgerLine is an input struct used when building entries to insert.
 type LedgerLine struct {
-	Currency    string  `json:"currency"`
-	Amount      int64   `json:"amount"`
-	Direction   string  `json:"direction"`
-	AssetID     *string `json:"asset_id"`
-	LiabilityID *string `json:"liability_id"`
-	ExpenseID   *string `json:"expense_id"`
-	RevenueID   *string `json:"revenue_id"`
+	Currency    Currency  `json:"currency"`
+	Amount      int64     `json:"amount"`
+	Direction   Direction `json:"direction"`
+	AssetID     *string   `json:"asset_id"`
+	LiabilityID *string   `json:"liability_id"`
+	ExpenseID   *string   `json:"expense_id"`
+	RevenueID   *string   `json:"revenue_id"`
 }
