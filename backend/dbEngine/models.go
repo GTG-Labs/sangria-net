@@ -38,6 +38,15 @@ type Account struct {
 	CreatedAt time.Time   `json:"created_at"`
 }
 
+type WAccount struct {
+  ID            int64     `json:"id"`
+	AccountNumber string    `json:"account_number"`
+	Owner         string    `json:"owner"`
+	WorkosID      string    `json:"workos_id"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
 type Transaction struct {
 	ID             string    `json:"id"`
 	IdempotencyKey string    `json:"idempotency_key"`

@@ -9,6 +9,7 @@ import {
   unique,
 } from "drizzle-orm/pg-core";
 
+
 export const directionEnum = pgEnum("direction", ["DEBIT", "CREDIT"]);
 export const currencyEnum = pgEnum("currency", ["USD", "USDC", "ETH"]);
 export const accountTypeEnum = pgEnum("account_type", [
@@ -18,6 +19,16 @@ export const accountTypeEnum = pgEnum("account_type", [
   "REVENUE",
   "EXPENSE",
 ]);
+
+export const waccounts = pgTable("waccounts", {
+  id: bigserial({ mode: "number" }).primaryKey(),
+  accountNumber: text("account_number").notNull().unique(),
+  owner: text().notNull(),
+  workosId: text("workos_id").notNull().unique(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 
 // ---------------------------------------------------------------------------
 // Unified Accounts Table

@@ -6,29 +6,23 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func GetAllAccounts(ctx context.Context, pool *pgxpool.Pool) ([]Account, error) {
-	rows, err := pool.Query(ctx,
-		`SELECT id, name, type, currency, user_id, created_at FROM accounts ORDER BY created_at`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var accounts []Account
-	for rows.Next() {
-		var a Account
-		if err := rows.Scan(&a.ID, &a.Name, &a.Type, &a.Currency, &a.UserID, &a.CreatedAt); err != nil {
-			return nil, err
-		}
-		accounts = append(accounts, a)
-	}
-	return accounts, rows.Err()
+// InsertAccount creates a new account and returns the full row.
+func InsertAccount(ctx context.Context, pool *pgxpool.Pool, accountNumber, owner, workosID string) (Account, error) {
+	var a Account
+	err := pool.QueryRow(ctx,
+		`INSERT INTO accounts (account_number, owner, workos_id)
+		 VALUES ($1, $2, $3)
+		 ON CONFLICT (workos_id) DO UPDATE
+		 	SET owner = EXCLUDED.owner
+		 RETURNING id, account_number, owner, workos_id, created_at, updated_at`,
+		accountNumber, owner, workosID,
+	).Scan(&a.ID, &a.AccountNumber, &a.Owner, &a.WorkosID, &a.CreatedAt, &a.UpdatedAt)
+	return a, err
 }
 
 func GetAccountsByType(ctx context.Context, pool *pgxpool.Pool, accountType AccountType) ([]Account, error) {
 	rows, err := pool.Query(ctx,
-		`SELECT id, name, type, currency, user_id, created_at FROM accounts WHERE type = $1 ORDER BY created_at`,
-		accountType)
+		`SELECT id, account_number, owner, workos_id, created_at, updated_at FROM accounts ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -37,7 +31,7 @@ func GetAccountsByType(ctx context.Context, pool *pgxpool.Pool, accountType Acco
 	var accounts []Account
 	for rows.Next() {
 		var a Account
-		if err := rows.Scan(&a.ID, &a.Name, &a.Type, &a.Currency, &a.UserID, &a.CreatedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.AccountNumber, &a.Owner, &a.WorkosID, &a.CreatedAt, &a.UpdatedAt); err != nil {
 			return nil, err
 		}
 		accounts = append(accounts, a)
