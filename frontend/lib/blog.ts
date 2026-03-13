@@ -16,6 +16,8 @@ export interface BlogPost extends BlogPostMeta {
 
 const BLOGS_DIR = path.join(process.cwd(), "content", "blogs");
 
+const VALID_SLUG = /^[a-zA-Z0-9_-]+$/;
+
 export function getAllPosts(): BlogPostMeta[] {
   const files = fs.readdirSync(BLOGS_DIR).filter((f) => f.endsWith(".mdx"));
 
@@ -39,8 +41,9 @@ export function getAllPosts(): BlogPostMeta[] {
 }
 
 export function getPostBySlug(slug: string): BlogPost | null {
-  const filePath = path.join(BLOGS_DIR, `${slug}.mdx`);
+  if (!VALID_SLUG.test(slug)) return null;
 
+  const filePath = path.join(BLOGS_DIR, `${slug}.mdx`);
   if (!fs.existsSync(filePath)) return null;
 
   const raw = fs.readFileSync(filePath, "utf-8");
