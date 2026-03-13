@@ -26,6 +26,7 @@ export default async function Navigation() {
           <Link href="/#features" className="hover:text-gray-900 dark:hover:text-white transition-colors">Features</Link>
           <Link href="/#developers" className="hover:text-gray-900 dark:hover:text-white transition-colors">Developers</Link>
           <Link href="/docs" className="hover:text-gray-900 dark:hover:text-white transition-colors">Docs</Link>
+          <Link href="/blog" className="hover:text-gray-900 dark:hover:text-white transition-colors">Blog</Link>
         </div>
         <div className="flex items-center gap-3">
           <ThemeToggle />

@@ -1,0 +1,46 @@
+---
+title: "Hello, Sangria!"
+date: "2026-03-11"
+description: "Introducing Sangria — a payment network for agents and merchants powered by the x402 protocol."
+tags: ["announcement", "x402"]
+---
+
+We're excited to introduce **Sangria** — a payment network that makes it dead simple for agents and merchants to pay each other over HTTP.
+
+## Why We Built This
+
+The internet was supposed to have native payments. HTTP 402 "Payment Required" has been in the spec since the 90s, but nobody ever built a real protocol around it — until now.
+
+With the [x402 protocol](https://www.x402.org/), any HTTP endpoint can require payment, and clients can automatically pay and get access. No accounts, no API keys, no subscriptions.
+
+## How It Works
+
+The flow is simple:
+
+1. Client makes a normal HTTP request
+2. Server responds with `402 Payment Required` and a price
+3. Client signs a USDC payment authorization
+4. Client retries the request with the payment header
+5. Server verifies, settles on-chain, and returns the data
+
+```python
+from fastapi import FastAPI
+from fastapi_x402 import pay
+
+app = FastAPI()
+
+@app.get("/premium")
+@pay(amount_required=0.0001, pay_to="0xYourWallet...")
+async def premium():
+    return {"message": "Paid content!", "paid": True}
+```
+
+## What's Next
+
+We're working on:
+
+- **Variable pricing** — pay based on actual usage, not a fixed price
+- **Multi-chain support** — beyond Base Sepolia
+- **Agent-to-agent payments** — autonomous agents transacting with each other
+
+Stay tuned for more updates.
