@@ -4,11 +4,19 @@ import { Moon, Sun } from "lucide-react";
 import { useCallback, useSyncExternalStore } from "react";
 
 function getThemeSnapshot(): "light" | "dark" {
-  const saved = localStorage.getItem("theme");
-  if (saved === "light" || saved === "dark") return saved;
-  return window.matchMedia("(prefers-color-scheme: dark)").matches
-    ? "dark"
-    : "light";
+  try {
+    const saved = localStorage.getItem("theme");
+    if (saved === "light" || saved === "dark") return saved;
+  } catch {
+    // localStorage may throw SecurityError in restricted contexts
+  }
+  try {
+    return window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
+  } catch {
+    return "dark";
+  }
 }
 
 function getThemeServerSnapshot(): "dark" {
@@ -34,7 +42,11 @@ export default function ThemeToggle() {
 
   const toggleTheme = useCallback(() => {
     const newTheme = theme === "dark" ? "light" : "dark";
-    localStorage.setItem("theme", newTheme);
+    try {
+      localStorage.setItem("theme", newTheme);
+    } catch {
+      // localStorage may throw in restricted contexts
+    }
     document.documentElement.classList.toggle("dark", newTheme === "dark");
     // Force re-read by dispatching a storage event
     window.dispatchEvent(
