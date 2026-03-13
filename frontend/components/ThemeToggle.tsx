@@ -44,6 +44,7 @@ export default function ThemeToggle() {
 
   return (
     <button
+      type="button"
       onClick={toggleTheme}
       className="p-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white/50 dark:bg-white/5 hover:bg-white/80 dark:hover:bg-white/10 transition-colors cursor-pointer"
       aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}

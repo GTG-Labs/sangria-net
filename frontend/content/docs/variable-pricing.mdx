@@ -110,7 +110,7 @@ const { answer, tokensUsed } = await callLLM(userQuery);
 const pricePerToken = 0.00001; // $0.00001 per token
 const settleResult = await settlePayment({
   ...paymentArgs,
-  price: tokensUsed * pricePerToken, // actual cost, NOT the max
+  price: `$${(tokensUsed * pricePerToken).toFixed(5)}`, // actual cost, NOT the max
 });
 
 // 5. Return the response
