@@ -18,7 +18,8 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: "Sangria — HTTP-native Micropayments with x402",
-  description: "A demo of the x402 payment protocol — HTTP-native micropayments using USDC on Base Sepolia.",
+  description:
+    "A demo of the x402 payment protocol — HTTP-native micropayments using USDC on Base Sepolia.",
 };
 
 export default function RootLayout({

@@ -70,13 +70,13 @@ The critical difference: the server **verifies** the client can pay before doing
 
 ## exact vs upto — Side by Side
 
-| | exact | upto |
-|---|---|---|
-| **Price known?** | Yes, upfront | No, determined after work |
-| **Client authorizes** | Exact amount | Maximum amount |
-| **Server flow** | `settlePayment()` (one step) | `verifyPayment()` → do work → `settlePayment()` (two steps) |
-| **Client charged** | Exactly the price | Anywhere from `minPrice` to `price` |
-| **Use case** | Static content, fixed-price APIs | LLM inference, metered compute, variable workloads |
+|                       | exact                            | upto                                                        |
+| --------------------- | -------------------------------- | ----------------------------------------------------------- |
+| **Price known?**      | Yes, upfront                     | No, determined after work                                   |
+| **Client authorizes** | Exact amount                     | Maximum amount                                              |
+| **Server flow**       | `settlePayment()` (one step)     | `verifyPayment()` → do work → `settlePayment()` (two steps) |
+| **Client charged**    | Exactly the price                | Anywhere from `minPrice` to `price`                         |
+| **Use case**          | Static content, fixed-price APIs | LLM inference, metered compute, variable workloads          |
 
 ## Server-Side Code Example
 
@@ -85,12 +85,12 @@ The critical difference: the server **verifies** the client can pay before doing
 const paymentArgs = {
   resourceUrl: "https://api.example.com/llm",
   method: "POST",
-  paymentData,                    // the signed auth from the client's header
-  payTo: "0xYourWallet...",       // where you get paid
+  paymentData, // the signed auth from the client's header
+  payTo: "0xYourWallet...", // where you get paid
   network: base,
-  scheme: "upto",                 // enables variable pricing
-  price: "$0.10",                 // max the client can be charged
-  minPrice: "$0.01",              // min (protects against zero-cost abuse)
+  scheme: "upto", // enables variable pricing
+  price: "$0.10", // max the client can be charged
+  minPrice: "$0.01", // min (protects against zero-cost abuse)
   facilitator: facilitatorUrl,
 };
 
@@ -98,7 +98,7 @@ const paymentArgs = {
 const verifyResult = await verifyPayment(paymentArgs);
 if (verifyResult.status !== 200) {
   return Response.json(verifyResult.responseBody, {
-    status: verifyResult.status,                  // 402
+    status: verifyResult.status, // 402
     headers: verifyResult.responseHeaders,
   });
 }
@@ -107,10 +107,10 @@ if (verifyResult.status !== 200) {
 const { answer, tokensUsed } = await callLLM(userQuery);
 
 // 4. SETTLE based on actual usage
-const pricePerToken = 0.00001;  // $0.00001 per token
+const pricePerToken = 0.00001; // $0.00001 per token
 const settleResult = await settlePayment({
   ...paymentArgs,
-  price: tokensUsed * pricePerToken,  // actual cost, NOT the max
+  price: tokensUsed * pricePerToken, // actual cost, NOT the max
 });
 
 // 5. Return the response

@@ -61,11 +61,11 @@ Client                          Server                      Facilitator (Coinbas
 
 ## The Three Headers
 
-| Header | Direction | What it contains |
-|---|---|---|
-| `PAYMENT-REQUIRED` | Server → Client | "Here's what you need to pay" — price, token address, network, recipient wallet, facilitator URL |
-| `X-PAYMENT` | Client → Server | The signed payment authorization (ERC-3009 signature) |
-| `X-PAYMENT-RESPONSE` | Server → Client | Settlement receipt — the blockchain transaction hash |
+| Header               | Direction       | What it contains                                                                                 |
+| -------------------- | --------------- | ------------------------------------------------------------------------------------------------ |
+| `PAYMENT-REQUIRED`   | Server → Client | "Here's what you need to pay" — price, token address, network, recipient wallet, facilitator URL |
+| `X-PAYMENT`          | Client → Server | The signed payment authorization (ERC-3009 signature)                                            |
+| `X-PAYMENT-RESPONSE` | Server → Client | Settlement receipt — the blockchain transaction hash                                             |
 
 ## The 402 Response (What the Server Sends Back)
 
@@ -89,7 +89,7 @@ When you hit a paywalled endpoint without paying:
 
 ## ERC-3009: TransferWithAuthorization
 
-This is the clever part. Instead of the client actually *sending* a transaction (which would need ETH for gas), x402 uses **ERC-3009 "TransferWithAuthorization"**.
+This is the clever part. Instead of the client actually _sending_ a transaction (which would need ETH for gas), x402 uses **ERC-3009 "TransferWithAuthorization"**.
 
 ### How it works:
 
@@ -147,10 +147,10 @@ The `@pay` decorator handles the 402 response, verification, and settlement auto
 
 x402 defines different "schemes" — ways to structure payment:
 
-| Scheme | Description | Status |
-|---|---|---|
-| **exact** | Client pays a fixed, predetermined amount | Production-ready |
-| **upto** | Client authorizes a max amount, charged based on actual usage | Supported in V2 |
+| Scheme    | Description                                                   | Status           |
+| --------- | ------------------------------------------------------------- | ---------------- |
+| **exact** | Client pays a fixed, predetermined amount                     | Production-ready |
+| **upto**  | Client authorizes a max amount, charged based on actual usage | Supported in V2  |
 
 See [Variable Pricing with x402](/docs/variable-pricing) for a deep dive on the "upto" scheme.
 
