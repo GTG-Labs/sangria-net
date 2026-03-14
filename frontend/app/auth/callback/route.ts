@@ -12,12 +12,12 @@ export const GET = handleAuth({
       throw new Error("BACKEND_URL environment variable is not set");
     }
 
-    // Call Go backend to create/check financial account using JWT token
+    // Call Go backend to upsert user record on login
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
 
     try {
-      const response = await fetch(`${process.env.BACKEND_URL}/accounts`, {
+      const response = await fetch(`${process.env.BACKEND_URL}/users`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -26,24 +26,23 @@ export const GET = handleAuth({
         signal: controller.signal,
       });
 
-      clearTimeout(timeoutId); // Clear timeout on successful completion
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(
-          `Failed to create account: ${response.status} ${errorText}`,
+          `Failed to upsert user: ${response.status} ${errorText}`,
         );
       }
 
-      console.log("Financial account created for user");
+      console.log("User record upserted successfully");
     } catch (error) {
-      clearTimeout(timeoutId); // Clear timeout on error
+      clearTimeout(timeoutId);
 
-      // Re-throw the error to fail the authentication flow
       if (error instanceof Error) {
         throw error;
       } else {
-        throw new Error(`Error creating financial account: ${error}`);
+        throw new Error(`Error upserting user: ${error}`);
       }
     }
   },

@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -231,37 +230,58 @@ func main() {
 		return c.SendString("Hello, Sangria!")
 	})
 
-	// POST /accounts — create an account (requires authentication)
-	app.Post("/accounts", workosAuthMiddleware, func(c fiber.Ctx) error {
-		// Get authenticated user from middleware
+	// POST /users — register/upsert a user on login (requires authentication)
+	app.Post("/users", workosAuthMiddleware, func(c fiber.Ctx) error {
 		user := c.Locals("workos_user").(WorkOSUser)
 
-		// Validate user has WorkOS ID (should never be empty due to middleware, but defensive programming)
 		if user.ID == "" {
 			log.Printf("User missing WorkOS ID: %+v", user)
 			return c.Status(500).JSON(fiber.Map{"error": "Invalid user session"})
 		}
 
-		// Generate display name from authenticated user data
 		owner := user.Email
 		if user.FirstName != "" && user.LastName != "" {
 			owner = fmt.Sprintf("%s %s", user.FirstName, user.LastName)
 		}
 
-		// Generate deterministic account number from WorkOS user ID
 		accountNumber := fmt.Sprintf("ACC-%s", strings.ToUpper(user.ID[:8]))
 
-		// Create account using verified user data only
-		account, err := dbengine.InsertAccount(c.Context(), pool, accountNumber, owner, user.ID)
+		u, err := dbengine.UpsertUser(c.Context(), pool, accountNumber, owner, user.ID)
 		if err != nil {
-			log.Printf("insert error: %v", err)
+			log.Printf("upsert user error: %v", err)
+			return c.Status(500).JSON(fiber.Map{"error": "failed to create user"})
+		}
+
+		return c.Status(201).JSON(u)
+	})
+
+	// POST /accounts — create a financial ledger account
+	app.Post("/accounts", workosAuthMiddleware, func(c fiber.Ctx) error {
+		var body struct {
+			Name     string               `json:"name"`
+			Type     dbengine.AccountType  `json:"type"`
+			Currency dbengine.Currency     `json:"currency"`
+		}
+		if err := c.Bind().JSON(&body); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid request body"})
+		}
+		if body.Name == "" || body.Type == "" || body.Currency == "" {
+			return c.Status(400).JSON(fiber.Map{"error": "name, type, and currency are required"})
+		}
+
+		user := c.Locals("workos_user").(WorkOSUser)
+		userID := user.ID
+
+		account, err := dbengine.CreateAccount(c.Context(), pool, body.Name, body.Type, body.Currency, &userID)
+		if err != nil {
+			log.Printf("create account error: %v", err)
 			return c.Status(500).JSON(fiber.Map{"error": "failed to create account"})
 		}
 
 		return c.Status(201).JSON(account)
 	})
 
-	// GET /accounts — list all accounts
+	// GET /accounts — list all financial ledger accounts
 	app.Get("/accounts", func(c fiber.Ctx) error {
 		accounts, err := dbengine.GetAllAccounts(c.Context(), pool)
 		if err != nil {
@@ -272,31 +292,26 @@ func main() {
 		return c.JSON(accounts)
 	})
 
-	// POST /transactions — create a transaction
-	app.Post("/transactions", func(c fiber.Ctx) error {
-		fromStr := c.Query("from_account")
-		toStr := c.Query("to_account")
-		value := c.Query("value")
-		if fromStr == "" || toStr == "" || value == "" {
-			return c.Status(400).JSON(fiber.Map{"error": "from_account, to_account, and value are required"})
+	// POST /transactions — create a double-entry transaction
+	app.Post("/transactions", workosAuthMiddleware, func(c fiber.Ctx) error {
+		var body struct {
+			IdempotencyKey string              `json:"idempotency_key"`
+			Lines          []dbengine.LedgerLine `json:"lines"`
+		}
+		if err := c.Bind().JSON(&body); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid request body"})
+		}
+		if body.IdempotencyKey == "" || len(body.Lines) == 0 {
+			return c.Status(400).JSON(fiber.Map{"error": "idempotency_key and lines are required"})
 		}
 
-		fromAccount, err := strconv.ParseInt(fromStr, 10, 64)
+		entries, err := dbengine.InsertTransaction(c.Context(), pool, body.IdempotencyKey, body.Lines)
 		if err != nil {
-			return c.Status(400).JSON(fiber.Map{"error": "from_account must be an integer"})
-		}
-		toAccount, err := strconv.ParseInt(toStr, 10, 64)
-		if err != nil {
-			return c.Status(400).JSON(fiber.Map{"error": "to_account must be an integer"})
-		}
-
-		txn, err := dbengine.InsertTransaction(c.Context(), pool, fromAccount, toAccount, value)
-		if err != nil {
-			log.Printf("insert error: %v", err)
+			log.Printf("insert transaction error: %v", err)
 			return c.Status(500).JSON(fiber.Map{"error": "failed to create transaction"})
 		}
 
-		return c.Status(201).JSON(txn)
+		return c.Status(201).JSON(entries)
 	})
 
 	// GET /transactions — list all transactions
