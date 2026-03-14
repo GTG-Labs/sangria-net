@@ -440,7 +440,7 @@ const PixelBlast: React.FC<PixelBlastProps> = ({
       if (threeRef.current) {
         const t = threeRef.current;
         t.resizeObserver?.disconnect();
-        cancelAnimationFrame(t.raf!);
+        if (t.raf !== undefined) cancelAnimationFrame(t.raf);
         t.quad?.geometry.dispose();
         t.material.dispose();
         t.composer?.dispose();
@@ -685,11 +685,11 @@ const PixelBlast: React.FC<PixelBlastProps> = ({
     }
     prevConfigRef.current = cfg;
     return () => {
-      if (threeRef.current && mustReinit) return;
       if (!threeRef.current) return;
+      if (mustReinit) return;
       const t = threeRef.current;
       t.resizeObserver?.disconnect();
-      cancelAnimationFrame(t.raf!);
+      if (t.raf !== undefined) cancelAnimationFrame(t.raf);
       t.quad?.geometry.dispose();
       t.material.dispose();
       t.composer?.dispose();
@@ -727,7 +727,8 @@ const PixelBlast: React.FC<PixelBlastProps> = ({
       ref={containerRef}
       className={`w-full h-full relative overflow-hidden ${className ?? ""}`}
       style={style}
-      aria-label="PixelBlast interactive background"
+      role="img"
+      aria-label="Interactive background"
     />
   );
 };
