@@ -308,7 +308,7 @@ func main() {
 		entries, err := dbengine.InsertTransaction(c.Context(), pool, body.IdempotencyKey, body.Lines)
 		if err != nil {
 			log.Printf("insert transaction error: %v", err)
-			return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+			return c.Status(500).JSON(fiber.Map{"error": "failed to create transaction"})
 		}
 
 		return c.Status(201).JSON(entries)
