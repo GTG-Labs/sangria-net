@@ -38,8 +38,8 @@ type Account struct {
 	CreatedAt time.Time   `json:"created_at"`
 }
 
-type WAccount struct {
-  ID            int64     `json:"id"`
+type User struct {
+	ID            int64     `json:"id"`
 	AccountNumber string    `json:"account_number"`
 	Owner         string    `json:"owner"`
 	WorkosID      string    `json:"workos_id"`

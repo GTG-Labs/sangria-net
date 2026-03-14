@@ -6,23 +6,24 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// InsertAccount creates a new account and returns the full row.
-func InsertAccount(ctx context.Context, pool *pgxpool.Pool, accountNumber, owner, workosID string) (Account, error) {
-	var a Account
+// UpsertUser creates or updates a user (WorkOS identity) and returns the full row.
+func UpsertUser(ctx context.Context, pool *pgxpool.Pool, accountNumber, owner, workosID string) (User, error) {
+	var u User
 	err := pool.QueryRow(ctx,
-		`INSERT INTO accounts (account_number, owner, workos_id)
+		`INSERT INTO users (account_number, owner, workos_id)
 		 VALUES ($1, $2, $3)
 		 ON CONFLICT (workos_id) DO UPDATE
 		 	SET owner = EXCLUDED.owner
 		 RETURNING id, account_number, owner, workos_id, created_at, updated_at`,
 		accountNumber, owner, workosID,
-	).Scan(&a.ID, &a.AccountNumber, &a.Owner, &a.WorkosID, &a.CreatedAt, &a.UpdatedAt)
-	return a, err
+	).Scan(&u.ID, &u.AccountNumber, &u.Owner, &u.WorkosID, &u.CreatedAt, &u.UpdatedAt)
+	return u, err
 }
 
-func GetAccountsByType(ctx context.Context, pool *pgxpool.Pool, accountType AccountType) ([]Account, error) {
+// GetAllAccounts returns all financial ledger accounts.
+func GetAllAccounts(ctx context.Context, pool *pgxpool.Pool) ([]Account, error) {
 	rows, err := pool.Query(ctx,
-		`SELECT id, account_number, owner, workos_id, created_at, updated_at FROM accounts ORDER BY id`)
+		`SELECT id, name, type, currency, user_id, created_at FROM accounts ORDER BY created_at`)
 	if err != nil {
 		return nil, err
 	}
@@ -31,7 +32,7 @@ func GetAccountsByType(ctx context.Context, pool *pgxpool.Pool, accountType Acco
 	var accounts []Account
 	for rows.Next() {
 		var a Account
-		if err := rows.Scan(&a.ID, &a.AccountNumber, &a.Owner, &a.WorkosID, &a.CreatedAt, &a.UpdatedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.Name, &a.Type, &a.Currency, &a.UserID, &a.CreatedAt); err != nil {
 			return nil, err
 		}
 		accounts = append(accounts, a)
@@ -39,6 +40,48 @@ func GetAccountsByType(ctx context.Context, pool *pgxpool.Pool, accountType Acco
 	return accounts, rows.Err()
 }
 
+// GetAccountsByType returns financial ledger accounts filtered by type.
+func GetAccountsByType(ctx context.Context, pool *pgxpool.Pool, accountType AccountType) ([]Account, error) {
+	rows, err := pool.Query(ctx,
+		`SELECT id, name, type, currency, user_id, created_at FROM accounts WHERE type = $1 ORDER BY created_at`,
+		accountType)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var accounts []Account
+	for rows.Next() {
+		var a Account
+		if err := rows.Scan(&a.ID, &a.Name, &a.Type, &a.Currency, &a.UserID, &a.CreatedAt); err != nil {
+			return nil, err
+		}
+		accounts = append(accounts, a)
+	}
+	return accounts, rows.Err()
+}
+
+// GetAllTransactions returns all transactions.
+func GetAllTransactions(ctx context.Context, pool *pgxpool.Pool) ([]Transaction, error) {
+	rows, err := pool.Query(ctx,
+		`SELECT id, idempotency_key, created_at FROM transactions ORDER BY created_at`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var txns []Transaction
+	for rows.Next() {
+		var t Transaction
+		if err := rows.Scan(&t.ID, &t.IdempotencyKey, &t.CreatedAt); err != nil {
+			return nil, err
+		}
+		txns = append(txns, t)
+	}
+	return txns, rows.Err()
+}
+
+// GetAllLedgerEntries returns all ledger entries ordered by transaction.
 func GetAllLedgerEntries(ctx context.Context, pool *pgxpool.Pool) ([]LedgerEntry, error) {
 	rows, err := pool.Query(ctx,
 		`SELECT id, transaction_id, currency, amount, direction, account_id
@@ -60,6 +103,7 @@ func GetAllLedgerEntries(ctx context.Context, pool *pgxpool.Pool) ([]LedgerEntry
 	return entries, rows.Err()
 }
 
+// GetLedgerEntriesByTransaction returns ledger entries for a specific transaction.
 func GetLedgerEntriesByTransaction(ctx context.Context, pool *pgxpool.Pool, txID string) ([]LedgerEntry, error) {
 	rows, err := pool.Query(ctx,
 		`SELECT id, transaction_id, currency, amount, direction, account_id
@@ -81,6 +125,7 @@ func GetLedgerEntriesByTransaction(ctx context.Context, pool *pgxpool.Pool, txID
 	return entries, rows.Err()
 }
 
+// GetAccountBalance computes the net balance for an account in a given currency.
 func GetAccountBalance(ctx context.Context, pool *pgxpool.Pool, accountID string, currency Currency) (int64, error) {
 	var balance int64
 	err := pool.QueryRow(ctx,
