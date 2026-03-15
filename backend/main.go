@@ -18,6 +18,7 @@ import (
 	"github.com/workos/workos-go/v4/pkg/usermanagement"
 
 	dbengine "sangrianet/backend/dbEngine"
+	"sangrianet/backend/merchantPaymentHandler"
 )
 
 // WorkOSUser contains user information from validated session
@@ -173,36 +174,6 @@ func isOriginAllowed(origin string, allowedOrigins []string) bool {
 func main() {
 	godotenv.Load()
 
-	// WorkOS configuration
-	workosAPIKey := os.Getenv("WORKOS_API_KEY")
-	if workosAPIKey == "" {
-		log.Fatal("WORKOS_API_KEY environment variable is required")
-	}
-	workosClientID := os.Getenv("WORKOS_CLIENT_ID")
-	if workosClientID == "" {
-		log.Fatal("WORKOS_CLIENT_ID environment variable is required")
-	}
-	usermanagement.SetAPIKey(workosAPIKey)
-
-	// Initialize JWKS cache
-	if err := initJWKSCache(workosClientID); err != nil {
-		log.Fatalf("Failed to initialize JWKS cache: %v", err)
-	}
-
-	ctx := context.Background()
-
-	connStr := os.Getenv("DATABASE_URL")
-	if connStr == "" {
-		log.Fatal("DATABASE_URL is not set")
-	}
-
-	pool, err := dbengine.Connect(ctx, connStr)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer pool.Close()
-	log.Println("Connected to database")
-
 	app := fiber.New()
 
 	// Configure allowed origins from environment
@@ -229,28 +200,55 @@ func main() {
 		return c.SendString("Hello, Sangria!")
 	})
 
-	// POST /users — register/upsert a user on login (requires authentication)
-	app.Post("/users", workosAuthMiddleware, func(c fiber.Ctx) error {
-		user := c.Locals("workos_user").(WorkOSUser)
+	// --- Stub payment routes (no auth / DB required) ---
+	merchantPaymentHandler.RegisterRoutes(app)
 
-		if user.ID == "" {
-			log.Printf("User missing WorkOS ID: %+v", user)
-			return c.Status(500).JSON(fiber.Map{"error": "Invalid user session"})
+	// --- WorkOS/DB-dependent routes (optional) ---
+
+	workosAPIKey := os.Getenv("WORKOS_API_KEY")
+	workosClientID := os.Getenv("WORKOS_CLIENT_ID")
+	connStr := os.Getenv("DATABASE_URL")
+
+	if workosAPIKey != "" && workosClientID != "" && connStr != "" {
+		usermanagement.SetAPIKey(workosAPIKey)
+
+		if err := initJWKSCache(workosClientID); err != nil {
+			log.Fatalf("Failed to initialize JWKS cache: %v", err)
 		}
 
-		owner := user.Email
-		if user.FirstName != "" && user.LastName != "" {
-			owner = fmt.Sprintf("%s %s", user.FirstName, user.LastName)
-		}
-
-		u, err := dbengine.UpsertUser(c.Context(), pool, owner, user.ID)
+		ctx := context.Background()
+		pool, err := dbengine.Connect(ctx, connStr)
 		if err != nil {
-			log.Printf("upsert user error: %v", err)
-			return c.Status(500).JSON(fiber.Map{"error": "failed to create user"})
+			log.Fatal(err)
 		}
+		defer pool.Close()
+		log.Println("Connected to database")
 
-		return c.Status(201).JSON(u)
-	})
+		// POST /users — register/upsert a user on login (requires authentication)
+		app.Post("/users", workosAuthMiddleware, func(c fiber.Ctx) error {
+			user := c.Locals("workos_user").(WorkOSUser)
+
+			if user.ID == "" {
+				log.Printf("User missing WorkOS ID: %+v", user)
+				return c.Status(500).JSON(fiber.Map{"error": "Invalid user session"})
+			}
+
+			owner := user.Email
+			if user.FirstName != "" && user.LastName != "" {
+				owner = fmt.Sprintf("%s %s", user.FirstName, user.LastName)
+			}
+
+			u, err := dbengine.UpsertUser(c.Context(), pool, owner, user.ID)
+			if err != nil {
+				log.Printf("upsert user error: %v", err)
+				return c.Status(500).JSON(fiber.Map{"error": "failed to create user"})
+			}
+
+			return c.Status(201).JSON(u)
+		})
+	} else {
+		log.Println("Warning: WORKOS_API_KEY, WORKOS_CLIENT_ID, or DATABASE_URL not set — /users route disabled")
+	}
 
 	log.Fatal(app.Listen(":8080"))
 }
