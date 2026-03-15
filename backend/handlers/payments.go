@@ -124,7 +124,9 @@ func SettlePayment(pool *pgxpool.Pool) fiber.Handler {
 
 		// Check expiry.
 		if dbengine.IsPaymentExpired(payment) {
-			dbengine.UpdatePaymentExpired(c.Context(), pool, payment.ID)
+			if err := dbengine.UpdatePaymentExpired(c.Context(), pool, payment.ID); err != nil {
+				log.Printf("update payment expired: %v", err)
+			}
 			return c.Status(400).JSON(fiber.Map{"error": "payment has expired"})
 		}
 
@@ -159,7 +161,9 @@ func SettlePayment(pool *pgxpool.Pool) fiber.Handler {
 		verifyResp, err := x402.Verify(c.Context(), payload, req.PaymentRequirements)
 		if err != nil {
 			log.Printf("facilitator verify error: %v", err)
-			dbengine.UpdatePaymentFailed(c.Context(), pool, payment.ID)
+			if err := dbengine.UpdatePaymentFailed(c.Context(), pool, payment.ID); err != nil {
+				log.Printf("update payment failed: %v", err)
+			}
 			return c.Status(502).JSON(fiber.Map{
 				"success":       false,
 				"payment_id":    payment.ID,
@@ -169,7 +173,9 @@ func SettlePayment(pool *pgxpool.Pool) fiber.Handler {
 		}
 
 		if !verifyResp.IsValid {
-			dbengine.UpdatePaymentFailed(c.Context(), pool, payment.ID)
+			if err := dbengine.UpdatePaymentFailed(c.Context(), pool, payment.ID); err != nil {
+				log.Printf("update payment failed: %v", err)
+			}
 			return c.Status(400).JSON(fiber.Map{
 				"success":       false,
 				"payment_id":    payment.ID,
@@ -182,7 +188,9 @@ func SettlePayment(pool *pgxpool.Pool) fiber.Handler {
 		settleResp, err := x402.Settle(c.Context(), payload, req.PaymentRequirements)
 		if err != nil {
 			log.Printf("facilitator settle error: %v", err)
-			dbengine.UpdatePaymentFailed(c.Context(), pool, payment.ID)
+			if err := dbengine.UpdatePaymentFailed(c.Context(), pool, payment.ID); err != nil {
+				log.Printf("update payment failed: %v", err)
+			}
 			return c.Status(502).JSON(fiber.Map{
 				"success":       false,
 				"payment_id":    payment.ID,
@@ -192,7 +200,9 @@ func SettlePayment(pool *pgxpool.Pool) fiber.Handler {
 		}
 
 		if !settleResp.Success {
-			dbengine.UpdatePaymentFailed(c.Context(), pool, payment.ID)
+			if err := dbengine.UpdatePaymentFailed(c.Context(), pool, payment.ID); err != nil {
+				log.Printf("update payment failed: %v", err)
+			}
 			return c.Status(400).JSON(fiber.Map{
 				"success":       false,
 				"payment_id":    payment.ID,
