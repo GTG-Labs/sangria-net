@@ -1,14 +1,15 @@
-package dbengine
+package handlers
 
 import (
 	"context"
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"sangrianet/backend/dbEngine"
 )
 
 // CreateAPIKey creates a new API key for a user
-func CreateAPIKey(ctx context.Context, pool *pgxpool.Pool, userID, name string, isLive bool) (*Merchant, string, error) {
+func CreateAPIKey(ctx context.Context, pool *pgxpool.Pool, userID, name string, isLive bool) (*dbengine.Merchant, string, error) {
 	// Generate new API key first
 	fullKey, keyID, err := GenerateAPIKey(isLive)
 	if err != nil {
@@ -28,12 +29,21 @@ func CreateAPIKey(ctx context.Context, pool *pgxpool.Pool, userID, name string, 
 	}
 	defer tx.Rollback(ctx)
 
+	// Lock the user row to prevent concurrent key creation
+	lockQuery := `
+		SELECT workos_id FROM users WHERE workos_id = $1 FOR UPDATE
+	`
+	var lockedUserID string
+	err = tx.QueryRow(ctx, lockQuery, userID).Scan(&lockedUserID)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to lock user for key creation: %w", err)
+	}
+
 	// Check active key count within transaction
 	countQuery := `
 		SELECT COUNT(*)
 		FROM merchants
 		WHERE user_id = $1 AND is_active = true
-		FOR UPDATE
 	`
 	var activeCount int
 	err = tx.QueryRow(ctx, countQuery, userID).Scan(&activeCount)
@@ -51,7 +61,7 @@ func CreateAPIKey(ctx context.Context, pool *pgxpool.Pool, userID, name string, 
 		RETURNING id, user_id, api_key, key_id, name, is_active, last_used_at, created_at
 	`
 
-	var merchant Merchant
+	var merchant dbengine.Merchant
 	err = tx.QueryRow(ctx, insertQuery, userID, apiKeyHash, keyID, name).Scan(
 		&merchant.ID,
 		&merchant.UserID,
@@ -76,7 +86,7 @@ func CreateAPIKey(ctx context.Context, pool *pgxpool.Pool, userID, name string, 
 }
 
 // GetAPIKeysByUserID retrieves all API keys for a user
-func GetAPIKeysByUserID(ctx context.Context, pool *pgxpool.Pool, userID string) ([]Merchant, error) {
+func GetAPIKeysByUserID(ctx context.Context, pool *pgxpool.Pool, userID string) ([]dbengine.Merchant, error) {
 	query := `
 		SELECT id, user_id, api_key, key_id, name, is_active, last_used_at, created_at
 		FROM merchants
@@ -90,9 +100,9 @@ func GetAPIKeysByUserID(ctx context.Context, pool *pgxpool.Pool, userID string) 
 	}
 	defer rows.Close()
 
-	var merchants []Merchant
+	var merchants []dbengine.Merchant
 	for rows.Next() {
-		var merchant Merchant
+		var merchant dbengine.Merchant
 		err := rows.Scan(
 			&merchant.ID,
 			&merchant.UserID,
@@ -117,14 +127,14 @@ func GetAPIKeysByUserID(ctx context.Context, pool *pgxpool.Pool, userID string) 
 }
 
 // GetAPIKeyByID retrieves a specific API key by ID
-func GetAPIKeyByID(ctx context.Context, pool *pgxpool.Pool, keyID string) (*Merchant, error) {
+func GetAPIKeyByID(ctx context.Context, pool *pgxpool.Pool, keyID string) (*dbengine.Merchant, error) {
 	query := `
 		SELECT id, user_id, api_key, key_id, name, is_active, last_used_at, created_at
 		FROM merchants
 		WHERE id = $1
 	`
 
-	var merchant Merchant
+	var merchant dbengine.Merchant
 	err := pool.QueryRow(ctx, query, keyID).Scan(
 		&merchant.ID,
 		&merchant.UserID,
@@ -143,8 +153,8 @@ func GetAPIKeyByID(ctx context.Context, pool *pgxpool.Pool, keyID string) (*Merc
 }
 
 // AuthenticateAPIKey validates an API key and returns the associated user
-// This is used for API authentication
-func AuthenticateAPIKey(ctx context.Context, pool *pgxpool.Pool, providedKey string) (*Merchant, error) {
+// This is used for API authentication with GitHub-style indexed lookup
+func AuthenticateAPIKey(ctx context.Context, pool *pgxpool.Pool, providedKey string) (*dbengine.Merchant, error) {
 	// Validate format first
 	if err := ValidateAPIKeyFormat(providedKey); err != nil {
 		return nil, fmt.Errorf("invalid API key format: %w", err)
@@ -156,7 +166,7 @@ func AuthenticateAPIKey(ctx context.Context, pool *pgxpool.Pool, providedKey str
 		return nil, fmt.Errorf("failed to extract key ID: %w", err)
 	}
 
-	// Query by key_id instead of scanning all keys
+	// Query by key_id instead of scanning all keys (O(1) vs O(N))
 	query := `
 		SELECT id, user_id, api_key, key_id, name, is_active, last_used_at, created_at
 		FROM merchants
@@ -171,7 +181,7 @@ func AuthenticateAPIKey(ctx context.Context, pool *pgxpool.Pool, providedKey str
 	defer rows.Close()
 
 	for rows.Next() {
-		var merchant Merchant
+		var merchant dbengine.Merchant
 		err := rows.Scan(
 			&merchant.ID,
 			&merchant.UserID,

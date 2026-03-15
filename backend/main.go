@@ -19,6 +19,7 @@ import (
 	"github.com/workos/workos-go/v4/pkg/usermanagement"
 
 	dbengine "sangrianet/backend/dbEngine"
+	handlers "sangrianet/backend/handlers"
 )
 
 // WorkOSUser contains user information from validated session
@@ -99,7 +100,7 @@ func apiKeyAuthMiddleware(c fiber.Ctx) error {
 	}
 
 	// Validate and authenticate the API key
-	merchantKey, err := dbengine.AuthenticateAPIKey(c.Context(), globalPool, apiKey)
+	merchantKey, err := handlers.AuthenticateAPIKey(c.Context(), globalPool, apiKey)
 	if err != nil {
 		log.Printf("API key authentication failed: %v", err)
 		return c.Status(401).JSON(fiber.Map{"error": "Invalid API key"})
@@ -303,7 +304,7 @@ func main() {
 	apiKeysGroup.Get("/", func(c fiber.Ctx) error {
 		user := c.Locals("workos_user").(WorkOSUser)
 
-		apiKeys, err := dbengine.GetAPIKeysByUserID(c.Context(), pool, user.ID)
+		apiKeys, err := handlers.GetAPIKeysByUserID(c.Context(), pool, user.ID)
 		if err != nil {
 			log.Printf("Failed to get API keys for user %s: %v", user.ID, err)
 			return c.Status(500).JSON(fiber.Map{"error": "Failed to retrieve API keys"})
@@ -339,7 +340,7 @@ func main() {
 			return c.Status(400).JSON(fiber.Map{"error": "API key name too long (max 255 characters)"})
 		}
 
-		apiKey, fullKey, err := dbengine.CreateAPIKey(c.Context(), pool, user.ID, req.Name, req.IsLive)
+		apiKey, fullKey, err := handlers.CreateAPIKey(c.Context(), pool, user.ID, req.Name, req.IsLive)
 		if err != nil {
 			// Check if it's the max keys error and return appropriate response
 			if strings.Contains(err.Error(), "max active API keys reached") {
@@ -370,7 +371,7 @@ func main() {
 			return c.Status(400).JSON(fiber.Map{"error": "API key ID is required"})
 		}
 
-		err := dbengine.RevokeAPIKey(c.Context(), pool, keyID, user.ID)
+		err := handlers.RevokeAPIKey(c.Context(), pool, keyID, user.ID)
 		if err != nil {
 			log.Printf("Failed to revoke API key %s for user %s: %v", keyID, user.ID, err)
 			return c.Status(500).JSON(fiber.Map{"error": "Failed to revoke API key"})
