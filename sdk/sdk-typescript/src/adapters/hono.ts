@@ -1,27 +1,34 @@
-import type { Context, MiddlewareHandler } from "hono";
+import type { MiddlewareHandler } from "hono";
+import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { SangriaRequestData, FixedPriceOptions } from "../types.js";
 import { SangriaNet } from "../core.js";
 
+type SangriaNetEnv = {
+  Variables: {
+    sangrianet: SangriaRequestData;
+  };
+};
+
+type SangriaNetContext = Parameters<MiddlewareHandler<SangriaNetEnv>>[0];
+
 export interface HonoConfig {
-  bypassPaymentIf?: (c: Context) => boolean;
+  bypassPaymentIf?: (c: SangriaNetContext) => boolean;
 }
 
-const SANGRIANET_KEY = "sangrianet";
-
-export function getSangriaNet(c: Context): SangriaRequestData | undefined {
-  return c.get(SANGRIANET_KEY as never) as SangriaRequestData | undefined;
+export function getSangriaNet(c: SangriaNetContext): SangriaRequestData | undefined {
+  return c.get("sangrianet");
 }
 
 export function fixedPrice(
   sangrianet: SangriaNet,
   options: FixedPriceOptions,
   config?: HonoConfig,
-): MiddlewareHandler {
+): MiddlewareHandler<SangriaNetEnv> {
   sangrianet.validateFixedPriceOptions(options);
 
   return async (c, next) => {
     if (config?.bypassPaymentIf?.(c)) {
-      c.set(SANGRIANET_KEY as never, { paid: false, amount: 0 } as never);
+      c.set("sangrianet", { paid: false, amount: 0 });
       return next();
     }
 
@@ -35,10 +42,13 @@ export function fixedPrice(
     );
 
     if (result.action === "respond") {
-      return c.json(result.body as {}, result.status as 402);
+      return c.json(
+        result.body as Record<string, unknown>,
+        result.status as ContentfulStatusCode,
+      );
     }
 
-    c.set(SANGRIANET_KEY as never, result.data as never);
+    c.set("sangrianet", result.data);
     return next();
   };
 }

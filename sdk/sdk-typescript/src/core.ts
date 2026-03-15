@@ -21,8 +21,8 @@ export class SangriaNet {
   }
 
   validateFixedPriceOptions(options: FixedPriceOptions): void {
-    if (options.price <= 0) {
-      throw new Error("SangriaNet: price must be greater than 0");
+    if (!Number.isFinite(options.price) || options.price <= 0) {
+      throw new Error("SangriaNet: price must be a finite number greater than 0");
     }
   }
 
@@ -30,6 +30,8 @@ export class SangriaNet {
     ctx: PaymentContext,
     options: FixedPriceOptions,
   ): Promise<PaymentResult> {
+    this.validateFixedPriceOptions(options);
+
     if (!ctx.paymentHeader) {
       try {
         const terms = await this.post("/v1/generate-payment", {
@@ -89,6 +91,7 @@ export class SangriaNet {
         Authorization: `Bearer ${this.apiKey}`,
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(8000),
     });
 
     if (!res.ok) {

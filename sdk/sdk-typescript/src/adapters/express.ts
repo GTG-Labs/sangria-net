@@ -29,8 +29,10 @@ export function fixedPrice(
 
     const result = await sangrianet.handleFixedPrice(
       {
-        paymentHeader: req.headers["x-payment"] as string | undefined,
-        resourceUrl: `${req.protocol}://${req.get("host")}${req.originalUrl}`,
+        paymentHeader: Array.isArray(req.headers["x-payment"])
+          ? req.headers["x-payment"][0]
+          : req.headers["x-payment"],
+        resourceUrl: `${req.protocol}://${req.hostname}${req.originalUrl}`,
       },
       options,
     );
