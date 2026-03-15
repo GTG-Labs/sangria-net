@@ -4,6 +4,7 @@ import matter from "gray-matter";
 
 export interface BlogPostMeta {
   slug: string;
+  author: string;
   title: string;
   date: string;
   description: string;
@@ -28,6 +29,10 @@ export function getAllPosts(): BlogPostMeta[] {
 
     return {
       slug,
+      author:
+        typeof data.author === "string" && data.author.trim() !== ""
+          ? data.author.trim()
+          : "Sangria Team",
       title: data.title ?? slug,
       date: data.date ?? "",
       description: data.description ?? "",
@@ -51,6 +56,10 @@ export function getPostBySlug(slug: string): BlogPost | null {
 
   return {
     slug,
+    author:
+      typeof data.author === "string" && data.author.trim() !== ""
+        ? data.author.trim()
+        : "Sangria Team",
     title: data.title ?? slug,
     date: data.date ?? "",
     description: data.description ?? "",
