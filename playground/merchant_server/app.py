@@ -35,6 +35,16 @@ app = FastAPI(title="x402 Payment Demo")
 init_x402(app, pay_to=MERCHANT_ADDRESS, network=NETWORK)
 
 
+def _payment_required_response(content: dict) -> JSONResponse:
+    encoded = base64.b64encode(json.dumps(content).encode()).decode()
+    return JSONResponse(status_code=402, content=content, headers={"PAYMENT-REQUIRED": encoded})
+
+
+def _payment_response_headers(transaction: str) -> dict:
+    payload = json.dumps({"transaction": transaction}) if transaction else ""
+    return {"PAYMENT-RESPONSE": payload} if payload else {}
+
+
 def _compute_body_hash(body: dict) -> str:
     return hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()
 
@@ -60,16 +70,15 @@ def premium():
 @app.get("/variable")
 async def variable(request: Request):
     asset_config = get_default_asset_config(NETWORK)
-    payment_header = request.headers.get("X-PAYMENT")
+    payment_header = request.headers.get("PAYMENT-SIGNATURE")
 
     if not payment_header:
         actual_cost = round(random.uniform(VARIABLE_MIN_PRICE, VARIABLE_MAX_PRICE), 6)
         resource = f"{request.url.scheme}://{request.url.netloc}{request.url.path}"
-        return JSONResponse(
-            status_code=402,
-            content={
-                "x402Version": 1,
-                "error": "X-PAYMENT header is required",
+        return _payment_required_response(
+            {
+                "x402Version": 2,
+                "error": "PAYMENT-SIGNATURE header is required",
                 "accepts": [
                     {
                         "scheme": "exact",
@@ -87,7 +96,7 @@ async def variable(request: Request):
                         },
                     }
                 ],
-            },
+            }
         )
 
     facilitator = get_facilitator_client()
@@ -125,18 +134,21 @@ async def variable(request: Request):
     if not settle_result.success:
         return JSONResponse(status_code=500, content={"error": settle_result.errorReason or "Settlement failed"})
 
-    return {
-        "message": f"Work done! Actual cost: ${actual_cost_usd}",
-        "paid": True,
-        "actual_cost_usd": actual_cost_usd,
-        "transaction": settle_result.transaction or "",
-    }
+    return JSONResponse(
+        content={
+            "message": f"Work done! Actual cost: ${actual_cost_usd}",
+            "paid": True,
+            "actual_cost_usd": actual_cost_usd,
+            "transaction": settle_result.transaction or "",
+        },
+        headers=_payment_response_headers(settle_result.transaction or ""),
+    )
 
 
 @app.post("/run")
 async def run_automation(request: Request):
     asset_config = get_default_asset_config(NETWORK)
-    payment_header = request.headers.get("X-PAYMENT")
+    payment_header = request.headers.get("PAYMENT-SIGNATURE")
     body = await request.json()
     body_hash = _compute_body_hash(body)
 
@@ -184,11 +196,10 @@ async def run_automation(request: Request):
 
         cached = _tinyfish_cache[body_hash]
         resource = f"{request.url.scheme}://{request.url.netloc}{request.url.path}"
-        return JSONResponse(
-            status_code=402,
-            content={
-                "x402Version": 1,
-                "error": "X-PAYMENT header is required",
+        return _payment_required_response(
+            {
+                "x402Version": 2,
+                "error": "PAYMENT-SIGNATURE header is required",
                 "accepts": [
                     {
                         "scheme": "exact",
@@ -206,7 +217,7 @@ async def run_automation(request: Request):
                         },
                     }
                 ],
-            },
+            }
         )
 
     # Phase 2: Has payment header — look up cache, verify, settle, return result
@@ -254,10 +265,13 @@ async def run_automation(request: Request):
     price_usd = cached["price_usd"]
     del _tinyfish_cache[body_hash]
 
-    return {
-        **result,
-        "payment": {
-            "cost_usd": price_usd,
-            "transaction": settle_result.transaction or "",
+    return JSONResponse(
+        content={
+            **result,
+            "payment": {
+                "cost_usd": price_usd,
+                "transaction": settle_result.transaction or "",
+            },
         },
-    }
+        headers=_payment_response_headers(settle_result.transaction or ""),
+    )

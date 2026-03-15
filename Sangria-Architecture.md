@@ -6,7 +6,7 @@ Sangria uses a **hybrid stack** to bridge centralized fiat rails with decentrali
 
 ### High-level layers
 
-```
+```text
 Client Layer (SDK)
 	↓
 Orchestration Layer (Backend)
@@ -18,13 +18,13 @@ Frontend (Docs + Merchant dashboard)
 
 ### Architecture diagram (from spec)
 
-```
+```text
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                              CLIENT LAYER                                    │
 │  ┌──────────────────────────────────────────────────────────────────────┐   │
 │  │  Sangria SDK  (Python / HTTPX extension)                             │   │
-│  │  • 402 negotiation loop      • EIP-712 structured data signing       │   │
-│  │  • ERC-3009 authorization    • Automatic retries                     │   │
+│  │  • 402 negotiation loop      • External-wallet EIP-712 signing        │   │
+│  │  • ERC-3009 (external only)  • Automatic retries                     │   │
 │  │  • Credit balance check      • Future: Java, C#, Swift SDKs          │   │
 │  └──────────────────────────────────────────────────────────────────────┘   │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -35,6 +35,7 @@ Frontend (Docs + Merchant dashboard)
 │  ┌──────────────────────────────────────────────────────────────────────┐   │
 │  │  Sangria Backend  (Go — dbEngine)                                    │   │
 │  │  • Merchant treasury wallet management (CDP)                         │   │
+│  │  • Treasury ERC-3009 auth signing (server-side)                      │   │
 │  │  • Transaction mutex enforcement (anti-double-spend)                 │   │
 │  │  • Payment verification & settlement via Facilitator                 │   │
 │  │  • Internal fiat-to-credit ledger                                    │   │
@@ -58,8 +59,8 @@ Frontend (Docs + Merchant dashboard)
 
 | Layer | Technology | Responsibility |
 | --- | --- | --- |
-| **Client** | Python, HTTPX, x402, `eth_account` | 402 negotiation, EIP-712 signing, credit verification |
-| **Orchestration** | Go, CDP SDK | Treasury wallets, mutexes, settlement, ledger management |
+| **Client** | Python, HTTPX, x402, `eth_account` | 402 negotiation, external-wallet EIP-712 signing, credit verification |
+| **Orchestration** | Go, CDP SDK | Treasury wallets, server-side ERC-3009 authorization signing, mutexes, settlement, ledger management |
 | **Persistence** | PostgreSQL, Drizzle ORM | User balances, API keys, audit logs |
 | **Infrastructure** | Coinbase Facilitator, Base Blockchain | Gas-free settlement, on-chain USDC transfer |
 | **Frontend** | Next.js 16, React 19, Tailwind CSS 4 | Merchant dashboard, documentation, auth |
@@ -75,7 +76,7 @@ A Python client library extending HTTPX with x402 payment capabilities.
     1. Reads payment terms from response headers.
     2. Verifies the user has sufficient Sangria Credits.
     3. For Sangria-credit flows (Scenario 1), requests a backend-generated **ERC-3009 TransferWithAuthorization** signed server-side by the Treasury wallet; for external raw x402 clients (Scenario 3), the client signs the **ERC-3009 TransferWithAuthorization** with its own wallet.
-    4. Retries the request with the signed payment in the `X-PAYMENT` header.
+    4. Retries the request with the signed payment in the `PAYMENT-SIGNATURE` header.
 - Supports both `exact` (fixed price) and `upto` (variable price) schemes.
 
 **Key file:** `playground/main.py`
@@ -84,7 +85,7 @@ A Python client library extending HTTPX with x402 payment capabilities.
 
 A Go-based service using `dbEngine` for server-side business logic.
 
-- Accepts payment requests by validating incoming `X-PAYMENT` headers.
+- Accepts payment requests by validating incoming `PAYMENT-SIGNATURE` headers.
 - Verifies and settles via the Coinbase Facilitator API.
 - Manages treasury wallets via Coinbase CDP.
 - Enforces transaction mutexes to prevent double-processing.

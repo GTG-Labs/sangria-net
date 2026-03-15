@@ -42,7 +42,7 @@ The client uses **Sangria Credits**. The merchant is a raw x402 endpoint and rec
 
 **Phase III — Settlement & delivery**
 
-1. **Payment submission**: SDK retries with the authorization in `X-PAYMENT`.
+1. **Payment submission**: SDK retries with the authorization in `PAYMENT-SIGNATURE`.
 2. **Verify & settle**: merchant calls the **Facilitator (Coinbase)** to verify signature and settle on Base.
 3. **Data release**: user receives data and a TX hash receipt.
 4. **Ledger update**: Sangria deducts the equivalent credits from the user balance.

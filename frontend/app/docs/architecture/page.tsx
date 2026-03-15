@@ -102,7 +102,7 @@ export default function Architecture() {
 
         <h4>Phase III — Settlement &amp; Data Delivery</h4>
         <ol>
-          <li><strong>Payment Submission</strong> — The SDK retries with the Treasury-signed authorization in the <code>X-PAYMENT</code> header.</li>
+          <li><strong>Payment Submission</strong> — The SDK retries with the Treasury-signed authorization in the <code>PAYMENT-SIGNATURE</code> header.</li>
           <li><strong>Verify &amp; Settle</strong> — The Merchant calls the <strong>Facilitator (Coinbase)</strong> to verify the Treasury signature and settle on Base.</li>
           <li><strong>Data Release</strong> — The Merchant receives USDC from Sangria&apos;s Treasury; the User receives the data and a TX hash.</li>
           <li><strong>Ledger Update</strong> — Sangria deducts the equivalent Credits from the User&apos;s internal balance.</li>
@@ -119,7 +119,7 @@ export default function Architecture() {
       │                       │  Sign ERC-3009 auth  │                 │               │
       │                       │  (Treasury→Merchant) │                 │               │
       │<──────────────────────│                      │                 │               │
-      │  4. Retry + X-PAYMENT │                      │                 │               │
+      │  4. Retry + PAYMENT-SIGNATURE │              │                 │               │
       │  (Treasury signature) │                      │                 │               │
       │────────────────────────────────────────────>│                 │               │
       │                       │                      │  5. verify()    │               │
@@ -272,7 +272,7 @@ export default function Architecture() {
               <li>Reads payment terms from the response headers</li>
               <li>Verifies the user has sufficient Sangria Credits</li>
               <li>For Sangria-credit flows (Scenario 1), requests a backend-generated <strong>ERC-3009 TransferWithAuthorization</strong> signed server-side by the <strong>Treasury Wallet</strong> via secure orchestration/key custody (not client-side keys)</li>
-              <li>Retries the request with the signed payment in the <code>X-PAYMENT</code> header</li>
+              <li>Retries the request with the signed payment in the <code>PAYMENT-SIGNATURE</code> header</li>
             </ol>
           </li>
           <li>Supports both <code>exact</code> (fixed price) and <code>upto</code> (variable price) schemes</li>
@@ -283,7 +283,7 @@ export default function Architecture() {
         <h3>Sangria Backend (Orchestration Layer)</h3>
         <p>A Go-based service using <code>dbEngine</code> for server-side business logic.</p>
         <ul>
-          <li><strong>Accept Payment Requests</strong> — Validates incoming <code>X-PAYMENT</code> headers</li>
+          <li><strong>Accept Payment Requests</strong> — Validates incoming <code>PAYMENT-SIGNATURE</code> headers</li>
           <li><strong>Verify &amp; Settle via Facilitator</strong> — Calls Coinbase&apos;s facilitator API</li>
           <li><strong>Treasury Wallet Management</strong> — Manages merchant receiving wallets via CDP</li>
           <li><strong>Transaction Mutexes</strong> — Prevents double-processing of concurrent payments</li>
