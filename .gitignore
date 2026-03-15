@@ -4,3 +4,5 @@ backend/backend
 __pycache__/
 *.pyc
 node_modules
+
+guides-and-knowledge/*
