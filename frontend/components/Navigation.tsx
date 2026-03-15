@@ -3,6 +3,7 @@ import Image from "next/image";
 
 import { withAuth, getSignInUrl } from "@workos-inc/authkit-nextjs";
 import { SignOutButton } from "./SignOutButton";
+import ScrollNav from "./ScrollNav";
 
 async function getStarCount(): Promise<number | null> {
   const controller = new AbortController();
@@ -30,7 +31,7 @@ export default async function Navigation() {
   ]);
 
   return (
-    <nav className="fixed top-0 w-full z-50 border-b border-gray-200 dark:border-white/5 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-xl">
+    <ScrollNav>
       <div className="w-full px-6 h-16 flex items-center">
         <Link href="/" className="flex items-center gap-2 mr-auto">
           <Image
@@ -40,8 +41,8 @@ export default async function Navigation() {
             height={32}
             className="w-8 h-8 dark:mix-blend-normal mix-blend-multiply"
           />
-          <span className="text-gray-900 dark:text-white text-lg">
-            Sangria
+          <span className="text-gray-900 dark:text-white text-lg font-bold">
+            sangriaNet
           </span>
         </Link>
         <div className="hidden md:flex items-center gap-8 text-sm text-gray-600 dark:text-zinc-400">
@@ -108,6 +109,6 @@ export default async function Navigation() {
           </Link>
         </div>
       </div>
-    </nav>
+    </ScrollNav>
   );
 }

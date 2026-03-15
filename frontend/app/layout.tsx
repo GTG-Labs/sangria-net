@@ -35,7 +35,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="scroll-smooth dark">
+    <html lang="en" className="scroll-smooth">
       <head></head>
       <body
         className={`${ptSerif.variable} ${ubuntu.variable} ${jetbrainsMono.variable} antialiased`}

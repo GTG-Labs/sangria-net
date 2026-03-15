@@ -28,7 +28,7 @@ export default function Home() {
           <h1 className="text-4xl sm:text-5xl md:text-7xl italic font-normal text-gray-900 dark:text-white leading-[1.1] tracking-tight mb-6">
             HTTP-native
             <br />
-            <span className="text-white">micropayments.</span>
+            <span className="text-sangria-500">micropayments.</span>
           </h1>
 
           <p className="text-lg md:text-xl text-zinc-600 dark:text-zinc-400 max-w-2xl mx-auto mb-10 leading-relaxed">
