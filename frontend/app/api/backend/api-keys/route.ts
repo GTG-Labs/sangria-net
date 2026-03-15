@@ -12,22 +12,44 @@ export async function GET() {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
-    // Forward request to backend with access token
-    const response = await fetch(`${BACKEND_URL}/api-keys`, {
-      method: "GET",
-      headers: {
-        "Authorization": `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-    });
+    // Create AbortController for timeout handling
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
-    const data = await response.json();
+    try {
+      // Forward request to backend with access token
+      const response = await fetch(`${BACKEND_URL}/api-keys`, {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      return NextResponse.json(data, { status: response.status });
+      clearTimeout(timeoutId);
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        return NextResponse.json(data, { status: response.status });
+      }
+
+      return NextResponse.json(data);
+    } catch (fetchError: any) {
+      clearTimeout(timeoutId);
+
+      // Check if request was aborted due to timeout
+      if (fetchError.name === 'AbortError' || controller.signal.aborted) {
+        return NextResponse.json(
+          { error: "Gateway timeout - backend request took too long" },
+          { status: 504 }
+        );
+      }
+
+      // Re-throw other fetch errors to be handled by outer catch
+      throw fetchError;
     }
-
-    return NextResponse.json(data);
   } catch (error) {
     console.error("API Keys GET error:", error);
     return NextResponse.json(
@@ -49,23 +71,45 @@ export async function POST(request: NextRequest) {
     // Get request body
     const body = await request.json();
 
-    // Forward request to backend with access token
-    const response = await fetch(`${BACKEND_URL}/api-keys`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
+    // Create AbortController for timeout handling
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
-    const data = await response.json();
+    try {
+      // Forward request to backend with access token
+      const response = await fetch(`${BACKEND_URL}/api-keys`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      return NextResponse.json(data, { status: response.status });
+      clearTimeout(timeoutId);
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        return NextResponse.json(data, { status: response.status });
+      }
+
+      return NextResponse.json(data);
+    } catch (fetchError: any) {
+      clearTimeout(timeoutId);
+
+      // Check if request was aborted due to timeout
+      if (fetchError.name === 'AbortError' || controller.signal.aborted) {
+        return NextResponse.json(
+          { error: "Gateway timeout - backend request took too long" },
+          { status: 504 }
+        );
+      }
+
+      // Re-throw other fetch errors to be handled by outer catch
+      throw fetchError;
     }
-
-    return NextResponse.json(data);
   } catch (error) {
     console.error("API Keys POST error:", error);
     return NextResponse.json(

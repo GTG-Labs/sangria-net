@@ -9,8 +9,8 @@ import (
 
 // CreateAPIKey creates a new API key for a user
 func CreateAPIKey(ctx context.Context, pool *pgxpool.Pool, userID, name string, isLive bool) (*Merchant, string, error) {
-	// Generate new API key
-	fullKey, _, err := GenerateAPIKey(isLive) // Ignore display ID since we don't store it
+	// Generate new API key first
+	fullKey, keyID, err := GenerateAPIKey(isLive)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to generate API key: %w", err)
 	}
@@ -21,18 +21,42 @@ func CreateAPIKey(ctx context.Context, pool *pgxpool.Pool, userID, name string, 
 		return nil, "", fmt.Errorf("failed to hash API key: %w", err)
 	}
 
-	// Insert into database - store only the hash, like GitHub
-	query := `
-		INSERT INTO merchants (user_id, api_key, name, is_active, created_at)
-		VALUES ($1, $2, $3, true, NOW())
-		RETURNING id, user_id, api_key, name, is_active, last_used_at, created_at
+	// Use transaction to prevent race condition
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// Check active key count within transaction
+	countQuery := `
+		SELECT COUNT(*)
+		FROM merchants
+		WHERE user_id = $1 AND is_active = true
+		FOR UPDATE
+	`
+	var activeCount int
+	err = tx.QueryRow(ctx, countQuery, userID).Scan(&activeCount)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to check active API key count: %w", err)
+	}
+	if activeCount >= 10 {
+		return nil, "", fmt.Errorf("max active API keys reached (limit: 10)")
+	}
+
+	// Insert new key
+	insertQuery := `
+		INSERT INTO merchants (user_id, api_key, key_id, name, is_active, created_at)
+		VALUES ($1, $2, $3, $4, true, NOW())
+		RETURNING id, user_id, api_key, key_id, name, is_active, last_used_at, created_at
 	`
 
 	var merchant Merchant
-	err = pool.QueryRow(ctx, query, userID, apiKeyHash, name).Scan(
+	err = tx.QueryRow(ctx, insertQuery, userID, apiKeyHash, keyID, name).Scan(
 		&merchant.ID,
 		&merchant.UserID,
 		&merchant.APIKey,
+		&merchant.KeyID,
 		&merchant.Name,
 		&merchant.IsActive,
 		&merchant.LastUsedAt,
@@ -42,13 +66,19 @@ func CreateAPIKey(ctx context.Context, pool *pgxpool.Pool, userID, name string, 
 		return nil, "", fmt.Errorf("failed to create merchant: %w", err)
 	}
 
+	// Commit transaction
+	err = tx.Commit(ctx)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
 	return &merchant, fullKey, nil
 }
 
 // GetAPIKeysByUserID retrieves all API keys for a user
 func GetAPIKeysByUserID(ctx context.Context, pool *pgxpool.Pool, userID string) ([]Merchant, error) {
 	query := `
-		SELECT id, user_id, api_key, name, is_active, last_used_at, created_at
+		SELECT id, user_id, api_key, key_id, name, is_active, last_used_at, created_at
 		FROM merchants
 		WHERE user_id = $1
 		ORDER BY created_at DESC
@@ -67,6 +97,7 @@ func GetAPIKeysByUserID(ctx context.Context, pool *pgxpool.Pool, userID string) 
 			&merchant.ID,
 			&merchant.UserID,
 			&merchant.APIKey,
+			&merchant.KeyID,
 			&merchant.Name,
 			&merchant.IsActive,
 			&merchant.LastUsedAt,
@@ -88,7 +119,7 @@ func GetAPIKeysByUserID(ctx context.Context, pool *pgxpool.Pool, userID string) 
 // GetAPIKeyByID retrieves a specific API key by ID
 func GetAPIKeyByID(ctx context.Context, pool *pgxpool.Pool, keyID string) (*Merchant, error) {
 	query := `
-		SELECT id, user_id, api_key, name, is_active, last_used_at, created_at
+		SELECT id, user_id, api_key, key_id, name, is_active, last_used_at, created_at
 		FROM merchants
 		WHERE id = $1
 	`
@@ -98,6 +129,7 @@ func GetAPIKeyByID(ctx context.Context, pool *pgxpool.Pool, keyID string) (*Merc
 		&merchant.ID,
 		&merchant.UserID,
 		&merchant.APIKey,
+		&merchant.KeyID,
 		&merchant.Name,
 		&merchant.IsActive,
 		&merchant.LastUsedAt,
@@ -118,14 +150,21 @@ func AuthenticateAPIKey(ctx context.Context, pool *pgxpool.Pool, providedKey str
 		return nil, fmt.Errorf("invalid API key format: %w", err)
 	}
 
-	// Query all active API keys - we need to check hashes
+	// Extract key_id for indexed lookup
+	keyID, err := ExtractKeyID(providedKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract key ID: %w", err)
+	}
+
+	// Query by key_id instead of scanning all keys
 	query := `
-		SELECT id, user_id, api_key, name, is_active, last_used_at, created_at
+		SELECT id, user_id, api_key, key_id, name, is_active, last_used_at, created_at
 		FROM merchants
-		WHERE is_active = true
+		WHERE key_id = $1 AND is_active = true
+		LIMIT 5
 	`
 
-	rows, err := pool.Query(ctx, query)
+	rows, err := pool.Query(ctx, query, keyID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query merchants for authentication: %w", err)
 	}
@@ -137,6 +176,7 @@ func AuthenticateAPIKey(ctx context.Context, pool *pgxpool.Pool, providedKey str
 			&merchant.ID,
 			&merchant.UserID,
 			&merchant.APIKey,
+			&merchant.KeyID,
 			&merchant.Name,
 			&merchant.IsActive,
 			&merchant.LastUsedAt,

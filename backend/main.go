@@ -259,7 +259,7 @@ func main() {
 		if isOriginAllowed(origin, allowedOrigins) {
 			c.Set("Access-Control-Allow-Origin", origin)
 			c.Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-			c.Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			c.Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key")
 		}
 
 		if c.Method() == "OPTIONS" {
@@ -339,19 +339,12 @@ func main() {
 			return c.Status(400).JSON(fiber.Map{"error": "API key name too long (max 255 characters)"})
 		}
 
-		// Check if user has too many active keys (limit to 10)
-		activeCount, err := dbengine.GetActiveAPIKeyCount(c.Context(), pool, user.ID)
-		if err != nil {
-			log.Printf("Failed to count active API keys for user %s: %v", user.ID, err)
-			return c.Status(500).JSON(fiber.Map{"error": "Failed to create API key"})
-		}
-
-		if activeCount >= 10 {
-			return c.Status(400).JSON(fiber.Map{"error": "Maximum number of API keys reached (10)"})
-		}
-
 		apiKey, fullKey, err := dbengine.CreateAPIKey(c.Context(), pool, user.ID, req.Name, req.IsLive)
 		if err != nil {
+			// Check if it's the max keys error and return appropriate response
+			if strings.Contains(err.Error(), "max active API keys reached") {
+				return c.Status(400).JSON(fiber.Map{"error": "Maximum number of API keys reached (10)"})
+			}
 			log.Printf("Failed to create API key for user %s: %v", user.ID, err)
 			return c.Status(500).JSON(fiber.Map{"error": "Failed to create API key"})
 		}
@@ -420,8 +413,6 @@ func main() {
 
 	// POST /facilitator/verify — verify a payment authorization
 	facilitatorGroup.Post("/verify", func(c fiber.Ctx) error {
-		merchantKey := c.Locals("merchant_api_key").(*dbengine.Merchant)
-
 		type VerifyPaymentRequest struct {
 			PaymentHeader string                    `json:"payment_header"`
 			Requirements  map[string]interface{}   `json:"requirements"`
@@ -432,23 +423,15 @@ func main() {
 			return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
 		}
 
-		// For now, return a simple success response
-		// In production, this would verify the payment authorization signature
-		// and check balances, nonces, etc.
-		response := fiber.Map{
-			"isValid": true,
-			"message": "Payment verification successful",
-			"merchant_id": merchantKey.UserID,
-			"api_key_name": merchantKey.Name,
-		}
-
-		return c.JSON(response)
+		// Payment verification logic not yet implemented
+		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{
+			"error": "Payment verification functionality not yet implemented",
+			"code": "NOT_IMPLEMENTED",
+		})
 	})
 
 	// POST /facilitator/settle — settle a verified payment
 	facilitatorGroup.Post("/settle", func(c fiber.Ctx) error {
-		merchantKey := c.Locals("merchant_api_key").(*dbengine.Merchant)
-
 		type SettlePaymentRequest struct {
 			PaymentHeader string                    `json:"payment_header"`
 			Requirements  map[string]interface{}   `json:"requirements"`
@@ -459,17 +442,11 @@ func main() {
 			return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
 		}
 
-		// For now, return a mock transaction hash
-		// In production, this would submit the payment to the blockchain
-		response := fiber.Map{
-			"success": true,
-			"transaction": "0x1234567890abcdef1234567890abcdef12345678",
-			"message": "Payment settled successfully",
-			"merchant_id": merchantKey.UserID,
-			"api_key_name": merchantKey.Name,
-		}
-
-		return c.JSON(response)
+		// Payment settlement logic not yet implemented
+		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{
+			"error": "Payment settlement functionality not yet implemented",
+			"code": "NOT_IMPLEMENTED",
+		})
 	})
 
 	log.Fatal(app.Listen(":8080"))

@@ -11,23 +11,30 @@ import (
 )
 
 const (
-	// API key format: sg_live_32randomchars or sg_test_32randomchars
+	// API key format: sg_live_8charKeyID_32randomchars or sg_test_8charKeyID_32randomchars
 	KeyPrefixLive = "sg_live_"
 	KeyPrefixTest = "sg_test_"
+	KeyIDLength = 8
 	KeyRandomLength = 32
 )
 
-// GenerateAPIKey generates a new API key with the specified environment
-// Returns the full key and a display identifier (first 8 chars for identification)
+// GenerateAPIKey generates a new API key with embedded key_id like GitHub
+// Returns the full key, key_id, and display identifier
 func GenerateAPIKey(isLive bool) (string, string, error) {
-	// Generate 32 random bytes
-	randomBytes := make([]byte, KeyRandomLength/2) // hex encoding doubles the length
-	_, err := rand.Read(randomBytes)
+	// Generate 8-char key ID for database lookup (4 bytes -> 8 hex chars)
+	keyIDBytes := make([]byte, KeyIDLength/2)
+	_, err := rand.Read(keyIDBytes)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to generate key ID: %w", err)
+	}
+	keyID := hex.EncodeToString(keyIDBytes)
+
+	// Generate 32 random bytes for the secret portion
+	randomBytes := make([]byte, KeyRandomLength/2)
+	_, err = rand.Read(randomBytes)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to generate random key: %w", err)
 	}
-
-	// Convert to hex string
 	randomStr := hex.EncodeToString(randomBytes)
 
 	// Choose prefix based on environment
@@ -38,13 +45,10 @@ func GenerateAPIKey(isLive bool) (string, string, error) {
 		prefix = KeyPrefixTest
 	}
 
-	// Construct full key
-	fullKey := prefix + randomStr
+	// Construct full key: prefix + keyID + randomStr
+	fullKey := prefix + keyID + "_" + randomStr
 
-	// Create display identifier (prefix + first 8 chars for identification only)
-	displayId := prefix + randomStr[:8]
-
-	return fullKey, displayId, nil
+	return fullKey, keyID, nil
 }
 
 // HashAPIKey hashes an API key using bcrypt for secure storage
@@ -74,12 +78,32 @@ func ValidateAPIKeyFormat(key string) error {
 		return fmt.Errorf("API key must start with %s or %s", KeyPrefixLive, KeyPrefixTest)
 	}
 
-	// Extract the random portion
-	var randomPart string
+	// Extract the portion after prefix
+	var afterPrefix string
 	if strings.HasPrefix(key, KeyPrefixLive) {
-		randomPart = strings.TrimPrefix(key, KeyPrefixLive)
+		afterPrefix = strings.TrimPrefix(key, KeyPrefixLive)
 	} else {
-		randomPart = strings.TrimPrefix(key, KeyPrefixTest)
+		afterPrefix = strings.TrimPrefix(key, KeyPrefixTest)
+	}
+
+	// Split by underscore: keyID_randomPart
+	parts := strings.Split(afterPrefix, "_")
+	if len(parts) != 2 {
+		return fmt.Errorf("API key must have format: prefix_keyID_randomPart")
+	}
+
+	keyIDPart := parts[0]
+	randomPart := parts[1]
+
+	// Check key ID length
+	if len(keyIDPart) != KeyIDLength {
+		return fmt.Errorf("API key ID must be %d characters", KeyIDLength)
+	}
+
+	// Check that key ID is valid hex
+	_, err := hex.DecodeString(keyIDPart)
+	if err != nil {
+		return fmt.Errorf("API key ID must be valid hexadecimal")
 	}
 
 	// Check random part length
@@ -88,7 +112,7 @@ func ValidateAPIKeyFormat(key string) error {
 	}
 
 	// Check that random part is valid hex
-	_, err := hex.DecodeString(randomPart)
+	_, err = hex.DecodeString(randomPart)
 	if err != nil {
 		return fmt.Errorf("API key random part must be valid hexadecimal")
 	}
@@ -124,6 +148,38 @@ func GetKeyPrefix(key string) string {
 	}
 
 	return prefix + randomPart + "..."
+}
+
+// ExtractKeyID extracts the key_id from a full API key for database lookup
+func ExtractKeyID(fullKey string) (string, error) {
+	if err := ValidateAPIKeyFormat(fullKey); err != nil {
+		return "", fmt.Errorf("invalid API key format: %w", err)
+	}
+
+	var keyID string
+	if strings.HasPrefix(fullKey, KeyPrefixLive) {
+		// Format: sg_live_keyID_randomPart
+		parts := strings.Split(strings.TrimPrefix(fullKey, KeyPrefixLive), "_")
+		if len(parts) != 2 {
+			return "", fmt.Errorf("invalid live key format")
+		}
+		keyID = parts[0]
+	} else if strings.HasPrefix(fullKey, KeyPrefixTest) {
+		// Format: sg_test_keyID_randomPart
+		parts := strings.Split(strings.TrimPrefix(fullKey, KeyPrefixTest), "_")
+		if len(parts) != 2 {
+			return "", fmt.Errorf("invalid test key format")
+		}
+		keyID = parts[0]
+	} else {
+		return "", fmt.Errorf("unsupported key prefix")
+	}
+
+	if len(keyID) != KeyIDLength {
+		return "", fmt.Errorf("invalid key ID length: expected %d, got %d", KeyIDLength, len(keyID))
+	}
+
+	return keyID, nil
 }
 
 // SecureCompare performs constant-time comparison of API key hashes

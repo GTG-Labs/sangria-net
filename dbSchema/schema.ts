@@ -41,6 +41,7 @@ export const merchants = pgTable(
       .notNull()
       .references(() => users.workosId),
     apiKey: text("api_key").notNull(),
+    keyId: varchar("key_id", { length: 8 }).notNull(),
     name: varchar({ length: 255 }).notNull(),
     isActive: boolean("is_active").notNull().default(true),
     lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
@@ -48,6 +49,7 @@ export const merchants = pgTable(
   },
   (table) => [
     index("idx_merchants_user_id").on(table.userId),
+    index("idx_merchants_key_id").on(table.keyId),
     unique("uq_merchants_api_key").on(table.apiKey),
   ]
 );

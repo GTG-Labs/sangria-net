@@ -72,6 +72,7 @@ type Merchant struct {
 	ID         string     `json:"id"`
 	UserID     string     `json:"user_id"`
 	APIKey     string     `json:"api_key"`
+	KeyID      string     `json:"key_id"`
 	Name       string     `json:"name"`
 	IsActive   bool       `json:"is_active"`
 	LastUsedAt *time.Time `json:"last_used_at"`
