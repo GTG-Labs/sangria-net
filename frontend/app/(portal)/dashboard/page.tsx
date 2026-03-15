@@ -65,7 +65,7 @@ export default async function DashboardPage() {
             return (
               <CardComponent
                 key={card.title}
-                href={card.disabled ? undefined : card.href}
+                href={card.disabled ? "" : card.href}
                 className={`group relative p-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-zinc-800 rounded-lg ${
                   card.disabled
                     ? "opacity-50 cursor-not-allowed"
