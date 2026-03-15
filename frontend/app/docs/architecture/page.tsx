@@ -208,7 +208,7 @@ export default function Architecture() {
       │  2. HTTP 402      │                    │                     │
       │<──────────────────│                    │                     │
       │  3. Sign ERC-3009 │                    │                     │
-      │  4. Retry+PAYMENT │                    │                     │
+      │  4. Retry+PAYMENT-SIGNATURE │          │                     │
       │──────────────────>│                    │                     │
       │                   │  5. Settle to      │                     │
       │                   │     Sangria Wallet │                     │
