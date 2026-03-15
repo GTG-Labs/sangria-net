@@ -12,12 +12,14 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/workos/workos-go/v4/pkg/usermanagement"
 
 	dbengine "sangrianet/backend/dbEngine"
+	handlers "sangrianet/backend/handlers"
 	"sangrianet/backend/merchantPaymentHandler"
 )
 
@@ -31,6 +33,9 @@ type WorkOSUser struct {
 
 // Global JWKS cache for WorkOS JWT validation
 var jwksCache *jwk.Cache
+
+// Global database pool
+var globalPool *pgxpool.Pool
 
 // workosAuthMiddleware validates WorkOS JWT session tokens and extracts user info
 func workosAuthMiddleware(c fiber.Ctx) error {
@@ -69,6 +74,42 @@ func workosAuthMiddleware(c fiber.Ctx) error {
 		FirstName: user.FirstName,
 		LastName:  user.LastName,
 	})
+
+	return c.Next()
+}
+
+// apiKeyAuthMiddleware validates API keys for merchant authentication
+func apiKeyAuthMiddleware(c fiber.Ctx) error {
+	// Get API key from Authorization header or X-API-Key header
+	var apiKey string
+
+	// Check Authorization header first (Bearer token style)
+	authHeader := c.Get("Authorization")
+	if authHeader != "" {
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			apiKey = strings.TrimPrefix(authHeader, "Bearer ")
+		}
+	}
+
+	// Fall back to X-API-Key header
+	if apiKey == "" {
+		apiKey = c.Get("X-API-Key")
+	}
+
+	if apiKey == "" {
+		return c.Status(401).JSON(fiber.Map{"error": "API key required"})
+	}
+
+	// Validate and authenticate the API key
+	merchantKey, err := handlers.AuthenticateAPIKey(c.Context(), globalPool, apiKey)
+	if err != nil {
+		log.Printf("API key authentication failed: %v", err)
+		return c.Status(401).JSON(fiber.Map{"error": "Invalid API key"})
+	}
+
+	// Store the authenticated merchant info in context
+	c.Locals("merchant_api_key", merchantKey)
+	c.Locals("merchant_user_id", merchantKey.UserID)
 
 	return c.Next()
 }
@@ -174,6 +215,40 @@ func isOriginAllowed(origin string, allowedOrigins []string) bool {
 func main() {
 	godotenv.Load()
 
+	// WorkOS configuration
+	workosAPIKey := os.Getenv("WORKOS_API_KEY")
+	if workosAPIKey == "" {
+		log.Fatal("WORKOS_API_KEY environment variable is required")
+	}
+	workosClientID := os.Getenv("WORKOS_CLIENT_ID")
+	if workosClientID == "" {
+		log.Fatal("WORKOS_CLIENT_ID environment variable is required")
+	}
+	usermanagement.SetAPIKey(workosAPIKey)
+
+	// Initialize JWKS cache
+	if err := initJWKSCache(workosClientID); err != nil {
+		log.Fatalf("Failed to initialize JWKS cache: %v", err)
+	}
+
+	ctx := context.Background()
+
+	connStr := os.Getenv("DATABASE_URL")
+	if connStr == "" {
+		log.Fatal("DATABASE_URL is not set")
+	}
+
+	pool, err := dbengine.Connect(ctx, connStr)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer pool.Close()
+
+	// Set global pool for middleware access
+	globalPool = pool
+
+	log.Println("Connected to database")
+
 	app := fiber.New()
 
 	// Configure allowed origins from environment
@@ -186,7 +261,7 @@ func main() {
 		if isOriginAllowed(origin, allowedOrigins) {
 			c.Set("Access-Control-Allow-Origin", origin)
 			c.Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-			c.Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			c.Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key")
 		}
 
 		if c.Method() == "OPTIONS" {
@@ -203,52 +278,181 @@ func main() {
 	// --- Stub payment routes (no auth / DB required) ---
 	merchantPaymentHandler.RegisterRoutes(app)
 
-	// --- WorkOS/DB-dependent routes (optional) ---
+	// POST /users — register/upsert a user on login (requires authentication)
+	app.Post("/users", workosAuthMiddleware, func(c fiber.Ctx) error {
+		user := c.Locals("workos_user").(WorkOSUser)
 
-	workosAPIKey := os.Getenv("WORKOS_API_KEY")
-	workosClientID := os.Getenv("WORKOS_CLIENT_ID")
-	connStr := os.Getenv("DATABASE_URL")
-
-	if workosAPIKey != "" && workosClientID != "" && connStr != "" {
-		usermanagement.SetAPIKey(workosAPIKey)
-
-		if err := initJWKSCache(workosClientID); err != nil {
-			log.Fatalf("Failed to initialize JWKS cache: %v", err)
+		if user.ID == "" {
+			log.Printf("User missing WorkOS ID: %+v", user)
+			return c.Status(500).JSON(fiber.Map{"error": "Invalid user session"})
 		}
 
-		ctx := context.Background()
-		pool, err := dbengine.Connect(ctx, connStr)
+		owner := user.Email
+		if user.FirstName != "" && user.LastName != "" {
+			owner = fmt.Sprintf("%s %s", user.FirstName, user.LastName)
+		}
+
+		u, err := dbengine.UpsertUser(c.Context(), pool, owner, user.ID)
 		if err != nil {
-			log.Fatal(err)
+			log.Printf("upsert user error: %v", err)
+			return c.Status(500).JSON(fiber.Map{"error": "failed to create user"})
 		}
-		defer pool.Close()
-		log.Println("Connected to database")
 
-		// POST /users — register/upsert a user on login (requires authentication)
-		app.Post("/users", workosAuthMiddleware, func(c fiber.Ctx) error {
-			user := c.Locals("workos_user").(WorkOSUser)
+		return c.Status(201).JSON(u)
+	})
 
-			if user.ID == "" {
-				log.Printf("User missing WorkOS ID: %+v", user)
-				return c.Status(500).JSON(fiber.Map{"error": "Invalid user session"})
+	// API Key management endpoints
+	apiKeysGroup := app.Group("/api-keys", workosAuthMiddleware)
+
+	// GET /api-keys — list user's API keys
+	apiKeysGroup.Get("/", func(c fiber.Ctx) error {
+		user := c.Locals("workos_user").(WorkOSUser)
+
+		apiKeys, err := handlers.GetAPIKeysByUserID(c.Context(), pool, user.ID)
+		if err != nil {
+			log.Printf("Failed to get API keys for user %s: %v", user.ID, err)
+			return c.Status(500).JSON(fiber.Map{"error": "Failed to retrieve API keys"})
+		}
+
+		// Remove sensitive data before returning
+		for i := range apiKeys {
+			apiKeys[i].APIKey = "" // Never expose the hash
+		}
+
+		return c.JSON(apiKeys)
+	})
+
+	// POST /api-keys — create new API key
+	apiKeysGroup.Post("/", func(c fiber.Ctx) error {
+		user := c.Locals("workos_user").(WorkOSUser)
+
+		type CreateAPIKeyRequest struct {
+			Name   string `json:"name"`
+			IsLive bool   `json:"is_live"`
+		}
+
+		var req CreateAPIKeyRequest
+		if err := c.Bind().JSON(&req); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
+		}
+
+		if req.Name == "" {
+			return c.Status(400).JSON(fiber.Map{"error": "API key name is required"})
+		}
+
+		if len(req.Name) > 255 {
+			return c.Status(400).JSON(fiber.Map{"error": "API key name too long (max 255 characters)"})
+		}
+
+		apiKey, fullKey, err := handlers.CreateAPIKey(c.Context(), pool, user.ID, req.Name, req.IsLive)
+		if err != nil {
+			// Check if it's the max keys error and return appropriate response
+			if errors.Is(err, handlers.ErrMaxAPIKeysReached) {
+				return c.Status(400).JSON(fiber.Map{"error": "Maximum number of API keys reached (10)"})
 			}
+			log.Printf("Failed to create API key for user %s: %v", user.ID, err)
+			return c.Status(500).JSON(fiber.Map{"error": "Failed to create API key"})
+		}
 
-			owner := user.Email
-			if user.FirstName != "" && user.LastName != "" {
-				owner = fmt.Sprintf("%s %s", user.FirstName, user.LastName)
-			}
+		// Return the full key only once, and the safe API key object
+		response := fiber.Map{
+			"api_key": apiKey,
+			"key":     fullKey, // This is the only time the full key is returned
+		}
 
-			u, err := dbengine.UpsertUser(c.Context(), pool, owner, user.ID)
-			if err != nil {
-				log.Printf("upsert user error: %v", err)
-				return c.Status(500).JSON(fiber.Map{"error": "failed to create user"})
-			}
+		// Remove sensitive data from the api_key object
+		apiKey.APIKey = ""
 
-			return c.Status(201).JSON(u)
+		return c.Status(201).JSON(response)
+	})
+
+	// DELETE /api-keys/:id — revoke/delete API key
+	apiKeysGroup.Delete("/:id", func(c fiber.Ctx) error {
+		user := c.Locals("workos_user").(WorkOSUser)
+		keyID := c.Params("id")
+
+		if keyID == "" {
+			return c.Status(400).JSON(fiber.Map{"error": "API key ID is required"})
+		}
+
+		err := handlers.RevokeAPIKey(c.Context(), pool, keyID, user.ID)
+		if err != nil {
+			log.Printf("Failed to revoke API key %s for user %s: %v", keyID, user.ID, err)
+			return c.Status(500).JSON(fiber.Map{"error": "Failed to revoke API key"})
+		}
+
+		return c.Status(204).Send(nil)
+	})
+
+	// Merchant API endpoints (protected by API key authentication)
+	merchantGroup := app.Group("/merchant", apiKeyAuthMiddleware)
+
+	// GET /merchant/profile — get merchant profile using API key
+	merchantGroup.Get("/profile", func(c fiber.Ctx) error {
+		merchantKey := c.Locals("merchant_api_key").(*dbengine.Merchant)
+		userID := c.Locals("merchant_user_id").(string)
+
+		// Get user information
+		user, err := dbengine.GetUserByWorkosID(c.Context(), pool, userID)
+		if err != nil {
+			log.Printf("Failed to get user for API key %s: %v", merchantKey.ID, err)
+			return c.Status(500).JSON(fiber.Map{"error": "Failed to retrieve merchant profile"})
+		}
+
+		response := fiber.Map{
+			"user": user,
+			"api_key": fiber.Map{
+				"id":           merchantKey.ID,
+				"name":         merchantKey.Name,
+				"is_active":    merchantKey.IsActive,
+				"last_used_at": merchantKey.LastUsedAt,
+				"created_at":   merchantKey.CreatedAt,
+			},
+		}
+
+		return c.JSON(response)
+	})
+
+	// Facilitator endpoints (x402 protocol) - protected by API key authentication
+	facilitatorGroup := app.Group("/facilitator", apiKeyAuthMiddleware)
+
+	// POST /facilitator/verify — verify a payment authorization
+	facilitatorGroup.Post("/verify", func(c fiber.Ctx) error {
+		type VerifyPaymentRequest struct {
+			PaymentHeader string                 `json:"payment_header"`
+			Requirements  map[string]interface{} `json:"requirements"`
+		}
+
+		var req VerifyPaymentRequest
+		if err := c.Bind().JSON(&req); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
+		}
+
+		// Payment verification logic not yet implemented
+		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{
+			"error": "Payment verification functionality not yet implemented",
+			"code":  "NOT_IMPLEMENTED",
 		})
-	} else {
-		log.Println("Warning: WORKOS_API_KEY, WORKOS_CLIENT_ID, or DATABASE_URL not set — /users route disabled")
-	}
+	})
+
+	// POST /facilitator/settle — settle a verified payment
+	facilitatorGroup.Post("/settle", func(c fiber.Ctx) error {
+		type SettlePaymentRequest struct {
+			PaymentHeader string                 `json:"payment_header"`
+			Requirements  map[string]interface{} `json:"requirements"`
+		}
+
+		var req SettlePaymentRequest
+		if err := c.Bind().JSON(&req); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
+		}
+
+		// Payment settlement logic not yet implemented
+		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{
+			"error": "Payment settlement functionality not yet implemented",
+			"code":  "NOT_IMPLEMENTED",
+		})
+	})
 
 	log.Fatal(app.Listen(":8080"))
 }
