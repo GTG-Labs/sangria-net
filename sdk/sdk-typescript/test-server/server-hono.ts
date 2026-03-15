@@ -1,9 +1,9 @@
-import express from "express";
+import { serve } from "@hono/node-server";
+import { Hono } from "hono";
 import { SangriaNet } from "../src/index.js";
-import { fixedPrice } from "../src/adapters/express.js";
+import { fixedPrice } from "../src/adapters/hono.js";
 
-const app = express();
-app.use(express.json());
+const app = new Hono();
 
 // ── Initialize SangriaNet ──
 const sangrianet = new SangriaNet({
@@ -12,23 +12,23 @@ const sangrianet = new SangriaNet({
 });
 
 // ── Free endpoint ──
-app.get("/", (_req, res) => {
-  res.json({ message: "Hello! This endpoint is free." });
+app.get("/", (c) => {
+  return c.json({ message: "Hello! This endpoint is free." });
 });
 
 // ── Fixed-price endpoint ──
 app.get(
   "/premium",
   fixedPrice(sangrianet, { price: 0.01, description: "Access premium content" }),
-  (_req, res) => {
-    res.json({ message: "You accessed the premium endpoint!" });
+  (c) => {
+    return c.json({ message: "You accessed the premium endpoint!" });
   }
 );
 
 // ── Start ──
-const PORT = process.env.PORT ?? 3333;
-app.listen(PORT, () => {
-  console.log(`Test server running on http://localhost:${PORT}`);
+const PORT = Number(process.env.PORT ?? 3334);
+serve({ fetch: app.fetch, port: PORT }, () => {
+  console.log(`Hono test server running on http://localhost:${PORT}`);
   console.log(`  GET /         → free`);
   console.log(`  GET /premium  → $0.01 (fixed)`);
 });

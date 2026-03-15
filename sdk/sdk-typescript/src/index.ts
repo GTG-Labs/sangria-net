@@ -1,2 +1,6 @@
-export { SangriaNet } from "./sangrianet";
-export type { SangriaNetConfig, FixedPriceOptions, SangriaRequestData } from "./types";
+export { SangriaNet } from "./core.js";
+export type {
+  SangriaNetConfig,
+  FixedPriceOptions,
+  SangriaRequestData,
+} from "./types.js";

@@ -1,9 +1,6 @@
-import type { Request } from "express";
-
 export interface SangriaNetConfig {
   apiKey: string;
   baseUrl?: string;
-  bypassPaymentIf?: (req: Request) => boolean;
 }
 
 export interface FixedPriceOptions {
@@ -17,10 +14,13 @@ export interface SangriaRequestData {
   transaction?: string;
 }
 
-declare global {
-  namespace Express {
-    interface Request {
-      sangria?: SangriaRequestData;
-    }
-  }
+/** Normalized request context that adapters extract from their framework */
+export interface PaymentContext {
+  paymentHeader: string | undefined;
+  resourceUrl: string;
 }
+
+/** Discriminated union returned by core payment logic */
+export type PaymentResult =
+  | { action: "respond"; status: number; body: unknown }
+  | { action: "proceed"; data: SangriaRequestData };
