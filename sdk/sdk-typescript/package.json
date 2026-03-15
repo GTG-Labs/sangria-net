@@ -1,0 +1,73 @@
+{
+  "name": "@sangrianet/core",
+  "version": "0.1.0",
+  "description": "SangriaNet payment network SDK for Express, Hono, and Fastify",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./express": {
+      "import": "./dist/adapters/express.js",
+      "types": "./dist/adapters/express.d.ts"
+    },
+    "./hono": {
+      "import": "./dist/adapters/hono.js",
+      "types": "./dist/adapters/hono.d.ts"
+    },
+    "./fastify": {
+      "import": "./dist/adapters/fastify.js",
+      "types": "./dist/adapters/fastify.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test-server": "tsx --watch test-server/server.ts",
+    "test-server:express": "tsx --watch test-server/server.ts",
+    "test-server:hono": "tsx --watch test-server/server-hono.ts",
+    "test-server:fastify": "tsx --watch test-server/server-fastify.ts"
+  },
+  "keywords": [
+    "x402",
+    "payments",
+    "express",
+    "hono",
+    "fastify",
+    "middleware"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "fastify-plugin": "^5.1.0"
+  },
+  "peerDependencies": {
+    "express": ">=4.0.0",
+    "fastify": ">=4.0.0",
+    "hono": ">=4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "express": {
+      "optional": true
+    },
+    "hono": {
+      "optional": true
+    },
+    "fastify": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@hono/node-server": "^1.19.11",
+    "@types/express": "^5.0.0",
+    "fastify": "^5.0.0",
+    "hono": "^4.0.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.0"
+  }
+}

@@ -1,0 +1,26 @@
+export interface SangriaNetConfig {
+  apiKey: string;
+  baseUrl?: string;
+}
+
+export interface FixedPriceOptions {
+  price: number;
+  description?: string;
+}
+
+export interface SangriaRequestData {
+  paid: boolean;
+  amount: number;
+  transaction?: string;
+}
+
+/** Normalized request context that adapters extract from their framework */
+export interface PaymentContext {
+  paymentHeader: string | undefined;
+  resourceUrl: string;
+}
+
+/** Discriminated union returned by core payment logic */
+export type PaymentResult =
+  | { action: "respond"; status: number; body: unknown }
+  | { action: "proceed"; data: SangriaRequestData };
