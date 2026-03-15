@@ -255,7 +255,7 @@ export default function Architecture() {
             <tr>
               <td><strong>Frontend</strong></td>
               <td>Next.js 16, React 19, Tailwind CSS 4</td>
-              <td>Merchant dashboard, documentation, auth</td>
+              <td>Merchant dashboard, documentation, auth (planned)</td>
             </tr>
           </tbody>
         </table>
