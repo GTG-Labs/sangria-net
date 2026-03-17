@@ -1,0 +1,102 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any
+
+
+@dataclass(slots=True)
+class MerchantContext:
+    merchant_id: str
+    resource: str
+    method: str = "GET"
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class GeneratePaymentRequest:
+    amount: float
+    resource: str
+    scheme: str = "exact"
+    description: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "amount": self.amount,
+            "resource": self.resource,
+            "scheme": self.scheme,
+        }
+        if self.description:
+            payload["description"] = self.description
+        return payload
+
+
+@dataclass(slots=True)
+class ChallengeConfig:
+    x402_version: int = 2
+    description: str | None = None
+    resource: str | None = None
+    accepts: list[dict[str, Any]] = field(default_factory=list)
+    raw: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "ChallengeConfig":
+        x402_version = int(data.get("x402Version", data.get("x402_version", 2)))
+        accepts = list(data.get("accepts", []))
+        return cls(
+            x402_version=x402_version,
+            description=data.get("description"),
+            resource=data.get("resource"),
+            accepts=accepts,
+            raw=data,
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        if self.raw:
+            return self.raw
+        payload: dict[str, Any] = {
+            "x402Version": self.x402_version,
+            "accepts": self.accepts,
+        }
+        if self.description is not None:
+            payload["description"] = self.description
+        if self.resource is not None:
+            payload["resource"] = self.resource
+        return payload
+
+
+@dataclass(slots=True)
+class SettlePaymentRequest:
+    payment_header: str
+    resource: str
+    amount: float
+    scheme: str = "exact"
+    idempotency_key: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "paymentHeader": self.payment_header,
+            "resource": self.resource,
+            "amount": self.amount,
+            "scheme": self.scheme,
+        }
+        return payload
+
+
+@dataclass(slots=True)
+class SettlementResult:
+    success: bool
+    transaction: str | None = None
+    error: str | None = None
+    raw: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "SettlementResult":
+        success = bool(data.get("success", False))
+        transaction = data.get("transaction") or data.get("transaction_hash")
+        error = data.get("error") or data.get("reason")
+        return cls(
+            success=success,
+            transaction=transaction,
+            error=error,
+            raw=data,
+        )
