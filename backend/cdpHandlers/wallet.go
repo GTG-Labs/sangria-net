@@ -1,4 +1,6 @@
-package cdp
+// TODO: Research into the different kinds of accounts: pros and cons (EOA vs Smart Account).
+// See guides-and-knowledge/cdp-account-types.md
+package cdpHandlers
 
 import (
 	"context"
@@ -11,8 +13,8 @@ import (
 )
 
 var (
-	client *openapi.ClientWithResponses
-	once   sync.Once
+	client  *openapi.ClientWithResponses
+	once    sync.Once
 	initErr error
 )
 
@@ -30,8 +32,6 @@ func GetClient() (*openapi.ClientWithResponses, error) {
 }
 
 // CreateEvmAccount creates a new EVM account (EOA) on CDP and returns the on-chain address.
-// TODO: Research into the different kinds of accounts: pros and cons (EOA vs Smart Account).
-// See guides-and-knowledge/cdp-account-types.md
 func CreateEvmAccount(ctx context.Context) (string, error) {
 	c, err := GetClient()
 	if err != nil {

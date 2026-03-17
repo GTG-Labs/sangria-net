@@ -1,4 +1,4 @@
-package handlers
+package adminHandlers
 
 import (
 	"log"
@@ -6,6 +6,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"sangrianet/backend/auth"
 	dbengine "sangrianet/backend/dbEngine"
 )
 
@@ -27,7 +28,7 @@ func CreateMerchantAPIKey(pool *pgxpool.Pool) fiber.Handler {
 		}
 
 		// Use the structured API key generation (sg_live_/sg_test_ prefix with keyID).
-		merchant, fullKey, err := CreateAPIKey(c.Context(), pool, req.UserID, req.Name, req.IsLive)
+		merchant, fullKey, err := auth.CreateAPIKey(c.Context(), pool, req.UserID, req.Name, req.IsLive)
 		if err != nil {
 			log.Printf("create merchant api key: %v", err)
 			return c.Status(500).JSON(fiber.Map{"error": "failed to create merchant"})

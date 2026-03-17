@@ -1,4 +1,4 @@
-package handlers
+package adminHandlers
 
 import (
 	"log"
@@ -6,9 +6,9 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"sangrianet/backend/cdp"
+	cdpHandlers "sangrianet/backend/cdpHandlers"
 	dbengine "sangrianet/backend/dbEngine"
-	"sangrianet/backend/x402"
+	x402Handlers "sangrianet/backend/x402Handlers"
 )
 
 // CreateWalletPool handles POST /wallets/pool.
@@ -23,19 +23,19 @@ func CreateWalletPool(pool *pgxpool.Pool) fiber.Handler {
 		}
 
 		// Validate network is supported.
-		if _, ok := x402.NetworkConfigs[req.Network]; !ok {
+		if _, ok := x402Handlers.NetworkConfigs[req.Network]; !ok {
 			return c.Status(400).JSON(fiber.Map{"error": "unsupported network"})
 		}
 
 		// Create CDP EVM account.
-		address, err := cdp.CreateEvmAccount(c.Context())
+		address, err := cdpHandlers.CreateEvmAccount(c.Context())
 		if err != nil {
 			log.Printf("create evm account: %v", err)
 			return c.Status(500).JSON(fiber.Map{"error": "failed to create wallet"})
 		}
 
 		// Fund with testnet ETH for gas.
-		if err := cdp.FundETH(c.Context(), address, req.Network); err != nil {
+		if err := cdpHandlers.FundETH(c.Context(), address, req.Network); err != nil {
 			log.Printf("fund eth: %v", err)
 			// Non-fatal — wallet is created, can be funded later.
 		}

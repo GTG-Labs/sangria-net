@@ -1,4 +1,8 @@
-package x402
+// TODO: Become our own facilitator — handle EIP-712 signature verification
+// and on-chain EIP-3009 transferWithAuthorization submission directly on
+// this server. Eliminates the external HTTP round-trip to the facilitator,
+// which should be significantly faster.
+package x402Handlers
 
 import (
 	"bytes"
@@ -11,10 +15,6 @@ import (
 	"time"
 )
 
-// TODO: Become our own facilitator — handle EIP-712 signature verification
-// and on-chain EIP-3009 transferWithAuthorization submission directly on
-// this server. Eliminates the external HTTP round-trip to the facilitator,
-// which should be significantly faster.
 var httpClient = &http.Client{Timeout: 30 * time.Second}
 
 // FacilitatorURL returns the configured facilitator URL from the

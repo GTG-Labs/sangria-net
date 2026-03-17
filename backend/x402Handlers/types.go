@@ -1,4 +1,4 @@
-package x402
+package x402Handlers
 
 // PaymentRequirements specifies the terms for an x402 payment.
 type PaymentRequirements struct {
@@ -13,11 +13,11 @@ type PaymentRequirements struct {
 
 // PaymentRequired is the 402 response returned to the client.
 type PaymentRequired struct {
-	X402Version int                    `json:"x402Version"`
-	Accepts     []PaymentRequirements  `json:"accepts"`
-	Error       string                 `json:"error,omitempty"`
-	Resource    *ResourceInfo          `json:"resource,omitempty"`
-	Extensions  map[string]any         `json:"extensions,omitempty"`
+	X402Version int                   `json:"x402Version"`
+	Accepts     []PaymentRequirements `json:"accepts"`
+	Error       string                `json:"error,omitempty"`
+	Resource    *ResourceInfo         `json:"resource,omitempty"`
+	Extensions  map[string]any        `json:"extensions,omitempty"`
 }
 
 // ResourceInfo describes the resource being accessed.
@@ -29,8 +29,8 @@ type ResourceInfo struct {
 
 // VerifyRequest is the payload sent to the facilitator /verify endpoint.
 type VerifyRequest struct {
-	X402Version int                `json:"x402Version"`
-	Payload     map[string]any     `json:"payload"`
+	X402Version  int                 `json:"x402Version"`
+	Payload      map[string]any      `json:"payload"`
 	Requirements PaymentRequirements `json:"requirements"`
 }
 
@@ -44,8 +44,8 @@ type VerifyResponse struct {
 
 // SettleRequest is the payload sent to the facilitator /settle endpoint.
 type SettleRequest struct {
-	X402Version int                `json:"x402Version"`
-	Payload     map[string]any     `json:"payload"`
+	X402Version  int                 `json:"x402Version"`
+	Payload      map[string]any      `json:"payload"`
 	Requirements PaymentRequirements `json:"requirements"`
 }
 
@@ -68,9 +68,9 @@ type NetworkConfig struct {
 // NetworkConfigs maps human-readable network names to their CAIP-2 IDs
 // and USDC contract addresses.
 var NetworkConfigs = map[string]NetworkConfig{
-	"base-sepolia": {CAIP2: "eip155:84532", USDCAddress: "0x036CbD53842c5426634e7929541eC2318f3dCF7e"},
-	"base":         {CAIP2: "eip155:8453", USDCAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"},
-	"polygon":      {CAIP2: "eip155:137", USDCAddress: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"},
-	"solana":       {CAIP2: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp", USDCAddress: ""},  // TODO: Solana USDC address
+	"base-sepolia":  {CAIP2: "eip155:84532", USDCAddress: "0x036CbD53842c5426634e7929541eC2318f3dCF7e"},
+	"base":          {CAIP2: "eip155:8453", USDCAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"},
+	"polygon":       {CAIP2: "eip155:137", USDCAddress: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"},
+	"solana":        {CAIP2: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp", USDCAddress: ""},  // TODO: Solana USDC address
 	"solana-devnet": {CAIP2: "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1", USDCAddress: ""}, // TODO: Solana devnet USDC address
 }

@@ -1,4 +1,4 @@
-package merchantPaymentHandler
+package merchantHandlers
 
 import (
 	"encoding/base64"
@@ -13,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	dbengine "sangrianet/backend/dbEngine"
-	"sangrianet/backend/x402"
+	x402Handlers "sangrianet/backend/x402Handlers"
 )
 
 const maxTimeoutSeconds = 60
@@ -40,7 +40,7 @@ func GeneratePayment(pool *pgxpool.Pool) fiber.Handler {
 		}
 
 		// Look up network config for CAIP-2 and USDC address.
-		netConfig, ok := x402.NetworkConfigs[req.Network]
+		netConfig, ok := x402Handlers.NetworkConfigs[req.Network]
 		if !ok {
 			return c.Status(400).JSON(fiber.Map{"error": "unsupported network"})
 		}
@@ -71,7 +71,7 @@ func GeneratePayment(pool *pgxpool.Pool) fiber.Handler {
 		return c.Status(200).JSON(fiber.Map{
 			"payment_id":  payment.ID,
 			"x402Version": 1,
-			"accepts": []x402.PaymentRequirements{
+			"accepts": []x402Handlers.PaymentRequirements{
 				{
 					Scheme:            "exact",
 					Network:           netConfig.CAIP2,
@@ -99,9 +99,9 @@ func SettlePayment(pool *pgxpool.Pool) fiber.Handler {
 		merchant := c.Locals("merchant_api_key").(*dbengine.Merchant)
 
 		var req struct {
-			PaymentID           string                  `json:"payment_id"`
-			PaymentPayload      string                  `json:"payment_payload"`
-			PaymentRequirements x402.PaymentRequirements `json:"payment_requirements"`
+			PaymentID           string                          `json:"payment_id"`
+			PaymentPayload      string                          `json:"payment_payload"`
+			PaymentRequirements x402Handlers.PaymentRequirements `json:"payment_requirements"`
 		}
 		if err := c.Bind().JSON(&req); err != nil {
 			return c.Status(400).JSON(fiber.Map{"error": "invalid request body"})
@@ -159,7 +159,7 @@ func SettlePayment(pool *pgxpool.Pool) fiber.Handler {
 		}
 
 		// Call facilitator /verify.
-		verifyResp, err := x402.Verify(c.Context(), payload, req.PaymentRequirements)
+		verifyResp, err := x402Handlers.Verify(c.Context(), payload, req.PaymentRequirements)
 		if err != nil {
 			log.Printf("facilitator verify error: %v", err)
 			if err := dbengine.UpdatePaymentFailed(c.Context(), pool, payment.ID); err != nil {
@@ -186,7 +186,7 @@ func SettlePayment(pool *pgxpool.Pool) fiber.Handler {
 		}
 
 		// Call facilitator /settle.
-		settleResp, err := x402.Settle(c.Context(), payload, req.PaymentRequirements)
+		settleResp, err := x402Handlers.Settle(c.Context(), payload, req.PaymentRequirements)
 		if err != nil {
 			log.Printf("facilitator settle error: %v", err)
 			if err := dbengine.UpdatePaymentFailed(c.Context(), pool, payment.ID); err != nil {

@@ -2,189 +2,21 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
-	"github.com/lestrrat-go/jwx/v2/jwk"
-	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/workos/workos-go/v4/pkg/usermanagement"
 
+	"sangrianet/backend/adminHandlers"
+	"sangrianet/backend/auth"
 	dbengine "sangrianet/backend/dbEngine"
-	handlers "sangrianet/backend/handlers"
-	merchantPaymentHandler "sangrianet/backend/merchantPaymentHandler"
+	"sangrianet/backend/merchantHandlers"
 )
-
-// WorkOSUser contains user information from validated session
-type WorkOSUser struct {
-	ID        string
-	Email     string
-	FirstName string
-	LastName  string
-}
-
-// Global JWKS cache for WorkOS JWT validation
-var jwksCache *jwk.Cache
-
-// Global database pool
-var globalPool *pgxpool.Pool
-
-// workosAuthMiddleware validates WorkOS JWT session tokens and extracts user info
-func workosAuthMiddleware(c fiber.Ctx) error {
-	// Get Authorization header containing JWT token
-	authHeader := c.Get("Authorization")
-	if authHeader == "" {
-		return c.Status(401).JSON(fiber.Map{"error": "Authorization header required"})
-	}
-
-	// Extract bearer token
-	token := strings.TrimPrefix(authHeader, "Bearer ")
-	if token == authHeader || token == "" {
-		return c.Status(401).JSON(fiber.Map{"error": "Bearer token required"})
-	}
-
-	// Validate JWT token and extract user ID
-	userID, err := verifyWorkOSToken(c.Context(), token)
-	if err != nil {
-		log.Printf("JWT validation failed: %v", err)
-		return c.Status(401).JSON(fiber.Map{"error": "Invalid or expired session token"})
-	}
-
-	// Get user info from WorkOS using the validated user ID
-	user, err := usermanagement.GetUser(c.Context(), usermanagement.GetUserOpts{
-		User: userID,
-	})
-	if err != nil {
-		log.Printf("WorkOS user lookup failed for validated user %s: %v", userID, err)
-		return c.Status(401).JSON(fiber.Map{"error": "User session not found"})
-	}
-
-	// Store validated user info in context
-	c.Locals("workos_user", WorkOSUser{
-		ID:        user.ID,
-		Email:     user.Email,
-		FirstName: user.FirstName,
-		LastName:  user.LastName,
-	})
-
-	return c.Next()
-}
-
-// apiKeyAuthMiddleware validates API keys for merchant authentication
-func apiKeyAuthMiddleware(c fiber.Ctx) error {
-	// Get API key from Authorization header or X-API-Key header
-	var apiKey string
-
-	// Check Authorization header first (Bearer token style)
-	authHeader := c.Get("Authorization")
-	if authHeader != "" {
-		if strings.HasPrefix(authHeader, "Bearer ") {
-			apiKey = strings.TrimPrefix(authHeader, "Bearer ")
-		}
-	}
-
-	// Fall back to X-API-Key header
-	if apiKey == "" {
-		apiKey = c.Get("X-API-Key")
-	}
-
-	if apiKey == "" {
-		return c.Status(401).JSON(fiber.Map{"error": "API key required"})
-	}
-
-	// Validate and authenticate the API key
-	merchantKey, err := handlers.AuthenticateAPIKey(c.Context(), globalPool, apiKey)
-	if err != nil {
-		log.Printf("API key authentication failed: %v", err)
-		return c.Status(401).JSON(fiber.Map{"error": "Invalid API key"})
-	}
-
-	// Store the authenticated merchant info in context
-	c.Locals("merchant_api_key", merchantKey)
-	c.Locals("merchant_user_id", merchantKey.UserID)
-
-	return c.Next()
-}
-
-// initJWKSCache initializes the global JWKS cache with proper security settings
-func initJWKSCache(clientID string) error {
-	// Get JWKS URL for this client
-	jwksURL, err := usermanagement.GetJWKSURL(clientID)
-	if err != nil {
-		return fmt.Errorf("failed to get JWKS URL: %w", err)
-	}
-
-	// Create HTTP client with timeout to avoid indefinite hangs
-	httpClient := &http.Client{
-		Timeout: 10 * time.Second,
-	}
-
-	// Initialize JWKS cache with security restrictions
-	jwksCache = jwk.NewCache(context.Background())
-
-	// Register the JWKS URL with the cache, using custom HTTP client and fetch whitelist
-	jwksCache.Register(jwksURL.String(),
-		jwk.WithHTTPClient(httpClient),
-		jwk.WithFetchWhitelist(jwk.WhitelistFunc(func(u string) bool {
-			// Only allow fetching the expected WorkOS JWKS URL
-			return u == jwksURL.String()
-		})))
-
-	return nil
-}
-
-// verifyWorkOSToken validates a WorkOS JWT token and extracts the user ID
-func verifyWorkOSToken(ctx context.Context, tokenStr string) (string, error) {
-	clientID := os.Getenv("WORKOS_CLIENT_ID")
-	if clientID == "" {
-		return "", fmt.Errorf("WORKOS_CLIENT_ID not configured")
-	}
-
-	// Get JWKS URL for this client
-	jwksURL, err := usermanagement.GetJWKSURL(clientID)
-	if err != nil {
-		return "", fmt.Errorf("failed to get JWKS URL: %w", err)
-	}
-
-	// Get key set from cache (this will automatically fetch/refresh as needed)
-	keySet, err := jwksCache.Get(ctx, jwksURL.String())
-	if err != nil {
-		return "", fmt.Errorf("failed to get JWKS from cache: %w", err)
-	}
-
-	// Parse and verify JWT token.
-	// WithAcceptableSkew: WorkOS may issue tokens with an `iat` a few seconds
-	// ahead of this server's clock, causing "iat not satisfied" rejections.
-	// A 5-second window accounts for normal clock drift.
-	token, err := jwt.ParseString(tokenStr, jwt.WithKeySet(keySet), jwt.WithValidate(true), jwt.WithAcceptableSkew(5*time.Second))
-	if err != nil {
-		if errors.Is(err, jwt.ErrTokenExpired()) {
-			return "", fmt.Errorf("token expired, please refresh your session")
-		}
-		return "", fmt.Errorf("failed to parse/verify token: %w", err)
-	}
-
-	// Extract user ID from 'sub' claim
-	userID, ok := token.Get("sub")
-	if !ok {
-		return "", fmt.Errorf("token missing 'sub' claim")
-	}
-
-	userIDStr, ok := userID.(string)
-	if !ok {
-		return "", fmt.Errorf("invalid 'sub' claim type")
-	}
-
-	return userIDStr, nil
-}
 
 // getallowedOrigins parses the ALLOWED_ORIGINS environment variable
 func getallowedOrigins() []string {
@@ -227,7 +59,7 @@ func main() {
 	usermanagement.SetAPIKey(workosAPIKey)
 
 	// Initialize JWKS cache
-	if err := initJWKSCache(workosClientID); err != nil {
+	if err := auth.InitJWKSCache(workosClientID); err != nil {
 		log.Fatalf("Failed to initialize JWKS cache: %v", err)
 	}
 
@@ -243,10 +75,6 @@ func main() {
 		log.Fatal(err)
 	}
 	defer pool.Close()
-
-	// Set global pool for middleware access
-	globalPool = pool
-
 	log.Println("Connected to database")
 
 	app := fiber.New()
@@ -275,9 +103,9 @@ func main() {
 		return c.SendString("Hello, Sangria!")
 	})
 
-	// POST /users — register/upsert a user on login (requires authentication)
-	app.Post("/users", workosAuthMiddleware, func(c fiber.Ctx) error {
-		user := c.Locals("workos_user").(WorkOSUser)
+	// --- User endpoints (WorkOS JWT auth) ---
+	app.Post("/users", auth.WorkosAuthMiddleware, func(c fiber.Ctx) error {
+		user := c.Locals("workos_user").(auth.WorkOSUser)
 
 		if user.ID == "" {
 			log.Printf("User missing WorkOS ID: %+v", user)
@@ -298,14 +126,14 @@ func main() {
 		return c.Status(201).JSON(u)
 	})
 
-	// API Key management endpoints
-	apiKeysGroup := app.Group("/api-keys", workosAuthMiddleware)
+	// --- API Key management (WorkOS JWT auth) ---
+	apiKeysGroup := app.Group("/api-keys", auth.WorkosAuthMiddleware)
 
 	// GET /api-keys — list user's API keys
 	apiKeysGroup.Get("/", func(c fiber.Ctx) error {
-		user := c.Locals("workos_user").(WorkOSUser)
+		user := c.Locals("workos_user").(auth.WorkOSUser)
 
-		apiKeys, err := handlers.GetAPIKeysByUserID(c.Context(), pool, user.ID)
+		apiKeys, err := auth.GetAPIKeysByUserID(c.Context(), pool, user.ID)
 		if err != nil {
 			log.Printf("Failed to get API keys for user %s: %v", user.ID, err)
 			return c.Status(500).JSON(fiber.Map{"error": "Failed to retrieve API keys"})
@@ -325,14 +153,14 @@ func main() {
 
 	// DELETE /api-keys/:id — revoke/delete API key
 	apiKeysGroup.Delete("/:id", func(c fiber.Ctx) error {
-		user := c.Locals("workos_user").(WorkOSUser)
+		user := c.Locals("workos_user").(auth.WorkOSUser)
 		keyID := c.Params("id")
 
 		if keyID == "" {
 			return c.Status(400).JSON(fiber.Map{"error": "API key ID is required"})
 		}
 
-		err := handlers.RevokeAPIKey(c.Context(), pool, keyID, user.ID)
+		err := auth.RevokeAPIKey(c.Context(), pool, keyID, user.ID)
 		if err != nil {
 			log.Printf("Failed to revoke API key %s for user %s: %v", keyID, user.ID, err)
 			return c.Status(500).JSON(fiber.Map{"error": "Failed to revoke API key"})
@@ -342,20 +170,17 @@ func main() {
 	})
 
 	// --- Merchant endpoints (API key auth) ---
-	merchantGroup := app.Group("/merchants", apiKeyAuthMiddleware)
-	merchantGroup.Get("/profile", merchantPaymentHandler.GetMerchantProfile(pool))
-	merchantGroup.Get("/balance", merchantPaymentHandler.GetMerchantBalance(pool))
-
-	// --- Admin endpoints (WorkOS JWT auth) ---
-	app.Post("/merchants", workosAuthMiddleware, handlers.CreateMerchantAPIKey(pool))
-	app.Post("/wallets/pool", workosAuthMiddleware, handlers.CreateWalletPool(pool))
+	apiKeyMiddleware := auth.APIKeyAuthMiddleware(pool)
+	merchantGroup := app.Group("/merchants", apiKeyMiddleware)
+	merchantGroup.Get("/profile", merchantHandlers.GetMerchantProfile(pool))
+	merchantGroup.Get("/balance", merchantHandlers.GetMerchantBalance(pool))
 
 	// --- Payment endpoints (API key auth) ---
-	app.Post("/payments/generate-payment", apiKeyAuthMiddleware, merchantPaymentHandler.GeneratePayment(pool))
-	app.Post("/payments/settle-payment", apiKeyAuthMiddleware, merchantPaymentHandler.SettlePayment(pool))
+	app.Post("/payments/generate-payment", apiKeyMiddleware, merchantHandlers.GeneratePayment(pool))
+	app.Post("/payments/settle-payment", apiKeyMiddleware, merchantHandlers.SettlePayment(pool))
 
 	// --- Facilitator endpoints (x402 protocol, API key auth) ---
-	facilitatorGroup := app.Group("/facilitator", apiKeyAuthMiddleware)
+	facilitatorGroup := app.Group("/facilitator", apiKeyMiddleware)
 
 	// POST /facilitator/verify — verify a payment authorization
 	facilitatorGroup.Post("/verify", func(c fiber.Ctx) error {
@@ -394,6 +219,10 @@ func main() {
 			"code":  "NOT_IMPLEMENTED",
 		})
 	})
+
+	// --- Admin endpoints (WorkOS JWT auth) ---
+	app.Post("/merchants", auth.WorkosAuthMiddleware, adminHandlers.CreateMerchantAPIKey(pool))
+	app.Post("/wallets/pool", auth.WorkosAuthMiddleware, adminHandlers.CreateWalletPool(pool))
 
 	log.Fatal(app.Listen(":8080"))
 }

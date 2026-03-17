@@ -1,4 +1,4 @@
-package merchantPaymentHandler
+package merchantHandlers
 
 import (
 	"fmt"
