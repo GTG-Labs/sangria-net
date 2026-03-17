@@ -23,7 +23,7 @@ client = SangriaMerchantClient(
 )
 
 @app.get("/premium")
-@require_sangria_payment(client, merchant_id="merchant_123", amount=0.0001)
+@require_sangria_payment(client, amount=0.0001)
 async def premium_data(request: Request):
     return {
         "ok": True,

@@ -79,6 +79,8 @@ class SettlePaymentRequest:
             "amount": self.amount,
             "scheme": self.scheme,
         }
+        if self.idempotency_key is not None:
+            payload["idempotencyKey"] = self.idempotency_key
         return payload
 
 

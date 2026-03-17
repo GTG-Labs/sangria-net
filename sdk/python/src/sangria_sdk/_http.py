@@ -34,7 +34,14 @@ class SangriaHTTPClient:
         if idempotency_key:
             headers["Idempotency-Key"] = idempotency_key
 
-        response = await self._client.post(endpoint, json=payload, headers=headers)
+        try:
+            response = await self._client.post(endpoint, json=payload, headers=headers)
+        except httpx.RequestError as exc:
+            raise APIError(
+                message=f"Sangria transport error: {exc}",
+                status_code=None,
+                payload={"error": str(exc)},
+            ) from exc
 
         if response.status_code >= 400:
             body: dict[str, Any]

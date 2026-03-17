@@ -25,7 +25,6 @@ def build_402_response(challenge: dict[str, Any]) -> JSONResponse:
 
 def require_sangria_payment(
     merchant_client: SangriaMerchantClient,
-    merchant_id: str,
     amount: float,
     scheme: str = "exact",
     description: str | None = None,
