@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import copy
 from decimal import Decimal
 from typing import Any
 
@@ -31,7 +32,7 @@ class GeneratePaymentRequest:
 
     def to_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
-            "amount": str(self.amount),
+            "amount": float(self.amount),
             "resource": self.resource,
             "scheme": self.scheme,
         }
@@ -57,12 +58,12 @@ class ChallengeConfig:
             description=data.get("description"),
             resource=data.get("resource"),
             accepts=accepts,
-            raw=data,
+            raw=copy.deepcopy(data),
         )
 
     def to_dict(self) -> dict[str, Any]:
         if self.raw:
-            return self.raw
+            return copy.deepcopy(self.raw)
         payload: dict[str, Any] = {
             "x402Version": self.x402_version,
             "accepts": self.accepts,
