@@ -58,8 +58,9 @@ export default function ArcadeButton({
     );
   }
 
+  const { type = "button", ...buttonProps } = rest as Omit<AsButton, keyof BaseProps>;
   return (
-    <button className={slotClass} {...(rest as Omit<AsButton, keyof BaseProps>)}>
+    <button type={type} className={slotClass} {...buttonProps}>
       {face}
     </button>
   );

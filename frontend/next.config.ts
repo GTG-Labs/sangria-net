@@ -5,7 +5,11 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   images: {
     remotePatterns: [
-      { hostname: "workoscdn.com" },
+      {
+        protocol: "https",
+        hostname: "workoscdn.com",
+        pathname: "/**",
+      },
     ],
   },
 };

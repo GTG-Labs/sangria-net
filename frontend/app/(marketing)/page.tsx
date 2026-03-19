@@ -18,8 +18,8 @@ export default function Home() {
 
               <p className="text-base md:text-lg text-zinc-600 dark:text-zinc-400 max-w-md mb-10 leading-relaxed">
                 sangriaNet is a drop-in SDK that integrates with your backend
-                and allows you to monetize your endpoints so AI agents can
-                call them.
+                and allows you to monetize your endpoints so agents can
+                call and pay for them.
               </p>
 
               <div className="flex flex-col sm:flex-row items-start gap-4">

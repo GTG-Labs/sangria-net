@@ -41,9 +41,6 @@ dependencies:
   next-mdx-remote:
     specifier: ^6.0.0
     version: 6.0.0(@types/react@19.2.14)(react@19.2.3)
-  postprocessing:
-    specifier: ^6.38.3
-    version: 6.38.3(three@0.183.2)
   react:
     specifier: 19.2.3
     version: 19.2.3
@@ -5542,14 +5539,6 @@ packages:
       source-map-js: 1.2.1
     dev: true
 
-  /postprocessing@6.38.3(three@0.183.2):
-    resolution: {integrity: sha512-5qCFp8j62nWL6sSVv/RKuHscQUIV+VMMgWeHLYZQEBpAk7G+r3jA3bSKON7gZjiuxdZ/F4PXj2Jc1oPh/7Eg+g==}
-    peerDependencies:
-      three: '>= 0.157.0 < 0.184.0'
-    dependencies:
-      three: 0.183.2
-    dev: false
-
   /prelude-ls@1.2.1:
     resolution: {integrity: sha512-vkcDPrRZo1QZLbn5RLGPpg/WmIQ65qoWWhcGKf/b5eplkkarX0m9z8ppCat4mlOqUsWpyNuYgO3VRyrYHSzX5g==}
     engines: {node: '>= 0.8.0'}
@@ -6229,10 +6218,6 @@ packages:
     resolution: {integrity: sha512-g9ljZiwki/LfxmQADO3dEY1CbpmXT5Hm2fJ+QaGKwSXUylMybePR7/67YW7jOrrvjEgL1Fmz5kzyAjWVWLlucg==}
     engines: {node: '>=6'}
     dev: true
-
-  /three@0.183.2:
-    resolution: {integrity: sha512-di3BsL2FEQ1PA7Hcvn4fyJOlxRRgFYBpMTcyOgkwJIaDOdJMebEFPA+t98EvjuljDx4hNulAGwF6KIjtwI5jgQ==}
-    dev: false
 
   /tinyexec@1.0.2:
     resolution: {integrity: sha512-W/KYk+NFhkmsYpuHq5JykngiOCnxeVL8v8dFnqxSD8qEEdRfXk1SDM6JzNqcERbcGYj9tMrDQBYV9cjgnunFIg==}

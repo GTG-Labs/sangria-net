@@ -46,15 +46,26 @@ export async function proxyToBackend(
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        const data = await response.json();
-        return NextResponse.json(data, { status: response.status });
+        try {
+          const data = await response.json();
+          return NextResponse.json(data, { status: response.status });
+        } catch {
+          return NextResponse.json(
+            { error: `Backend error: ${response.statusText}` },
+            { status: response.status }
+          );
+        }
       }
 
       if (options?.rawResponse) {
         return new NextResponse(null, { status: 204 });
       }
 
-      const data = await response.json();
+      const text = await response.text();
+      if (!text) {
+        return new NextResponse(null, { status: 204 });
+      }
+      const data = JSON.parse(text);
       return NextResponse.json(data);
     } catch (fetchError: any) {
       clearTimeout(timeoutId);
