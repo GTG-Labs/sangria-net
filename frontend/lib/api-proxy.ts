@@ -58,15 +58,15 @@ export async function proxyToBackend(
       }
 
       if (options?.rawResponse) {
-        return new NextResponse(null, { status: 204 });
+        return new NextResponse(null, { status: response.status });
       }
 
       const text = await response.text();
       if (!text) {
-        return new NextResponse(null, { status: 204 });
+        return new NextResponse(null, { status: response.status });
       }
       const data = JSON.parse(text);
-      return NextResponse.json(data);
+      return NextResponse.json(data, { status: response.status });
     } catch (fetchError: any) {
       clearTimeout(timeoutId);
 
