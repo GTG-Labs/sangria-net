@@ -5,5 +5,5 @@ __pycache__/
 *.pyc
 node_modules
 
-guides-and-knowledge/*
+guides-and-knowledge/
 *.egg-info/

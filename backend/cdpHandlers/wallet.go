@@ -22,10 +22,19 @@ var (
 // Requires CDP_API_KEY_ID, CDP_API_KEY_SECRET, and CDP_WALLET_SECRET env vars.
 func GetClient() (*openapi.ClientWithResponses, error) {
 	once.Do(func() {
+		apiKeyID := os.Getenv("CDP_API_KEY_ID")
+		apiKeySecret := os.Getenv("CDP_API_KEY_SECRET")
+		walletSecret := os.Getenv("CDP_WALLET_SECRET")
+
+		if apiKeyID == "" || apiKeySecret == "" || walletSecret == "" {
+			initErr = fmt.Errorf("CDP_API_KEY_ID, CDP_API_KEY_SECRET, and CDP_WALLET_SECRET environment variables are required")
+			return
+		}
+
 		client, initErr = cdpsdk.NewClient(cdpsdk.ClientOptions{
-			APIKeyID:     os.Getenv("CDP_API_KEY_ID"),
-			APIKeySecret: os.Getenv("CDP_API_KEY_SECRET"),
-			WalletSecret: os.Getenv("CDP_WALLET_SECRET"),
+			APIKeyID:     apiKeyID,
+			APIKeySecret: apiKeySecret,
+			WalletSecret: walletSecret,
 		})
 	})
 	return client, initErr
@@ -44,6 +53,9 @@ func CreateEvmAccount(ctx context.Context) (string, error) {
 	}
 	if resp.StatusCode() != 201 {
 		return "", fmt.Errorf("create evm account: unexpected status %d", resp.StatusCode())
+	}
+	if resp.JSON201 == nil {
+		return "", fmt.Errorf("create evm account: empty or malformed 201 response")
 	}
 
 	return resp.JSON201.Address, nil

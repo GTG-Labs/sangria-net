@@ -105,9 +105,8 @@ func SettlePayment(pool *pgxpool.Pool) fiber.Handler {
 		merchant := c.Locals("merchant_api_key").(*dbengine.Merchant)
 
 		var req struct {
-			PaymentID           string                          `json:"payment_id"`
-			PaymentPayload      string                          `json:"payment_payload"`
-			PaymentRequirements x402Handlers.PaymentRequirements `json:"payment_requirements"`
+			PaymentID      string `json:"payment_id"`
+			PaymentPayload string `json:"payment_payload"`
 		}
 		if err := c.Bind().JSON(&req); err != nil {
 			return c.Status(400).JSON(fiber.Map{"error": "invalid request body"})
@@ -137,20 +136,32 @@ func SettlePayment(pool *pgxpool.Pool) fiber.Handler {
 			return c.Status(400).JSON(fiber.Map{"error": "payment has expired"})
 		}
 
-		// Validate payment_requirements against payment record.
+		// Build canonical payment requirements server-side from trusted data.
+		// Never forward the client-provided req.PaymentRequirements to the facilitator —
+		// a malicious client could tamper with Asset, Network, Scheme, etc.
 		wallet, err := dbengine.GetCryptoWalletByID(c.Context(), pool, payment.CryptoWalletID)
 		if err != nil {
 			log.Printf("get crypto wallet: %v", err)
 			return c.Status(500).JSON(fiber.Map{"error": "failed to look up payment wallet"})
 		}
 
-		if req.PaymentRequirements.PayTo != wallet.Address {
-			return c.Status(400).JSON(fiber.Map{"error": "payTo address mismatch — possible fund redirection attack"})
+		netConfig, ok := x402Handlers.NetworkConfigs[string(payment.Network)]
+		if !ok {
+			return c.Status(500).JSON(fiber.Map{"error": "network config not found for payment"})
 		}
 
-		reqAmount, err := strconv.ParseInt(req.PaymentRequirements.MaxAmountRequired, 10, 64)
-		if err != nil || reqAmount != payment.Amount {
-			return c.Status(400).JSON(fiber.Map{"error": "amount mismatch"})
+		canonicalRequirements := x402Handlers.PaymentRequirements{
+			Scheme:            "exact",
+			Network:           netConfig.CAIP2,
+			MaxAmountRequired: strconv.FormatInt(payment.Amount, 10),
+			Asset:             netConfig.USDCAddress,
+			PayTo:             wallet.Address,
+			MaxTimeoutSeconds: maxTimeoutSeconds,
+			Extra: map[string]any{
+				"name":                "USDC",
+				"version":             "1",
+				"assetTransferMethod": "eip3009",
+			},
 		}
 
 		// Decode base64 payment payload.
@@ -165,7 +176,7 @@ func SettlePayment(pool *pgxpool.Pool) fiber.Handler {
 		}
 
 		// Call facilitator /verify.
-		verifyResp, err := x402Handlers.Verify(c.Context(), payload, req.PaymentRequirements)
+		verifyResp, err := x402Handlers.Verify(c.Context(), payload, canonicalRequirements)
 		if err != nil {
 			log.Printf("facilitator verify error: %v", err)
 			if err := dbengine.UpdatePaymentFailed(c.Context(), pool, payment.ID); err != nil {
@@ -192,7 +203,7 @@ func SettlePayment(pool *pgxpool.Pool) fiber.Handler {
 		}
 
 		// Call facilitator /settle.
-		settleResp, err := x402Handlers.Settle(c.Context(), payload, req.PaymentRequirements)
+		settleResp, err := x402Handlers.Settle(c.Context(), payload, canonicalRequirements)
 		if err != nil {
 			log.Printf("facilitator settle error: %v", err)
 			if err := dbengine.UpdatePaymentFailed(c.Context(), pool, payment.ID); err != nil {

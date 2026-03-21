@@ -18,14 +18,23 @@ import (
 var httpClient = &http.Client{Timeout: 30 * time.Second}
 
 // FacilitatorURL returns the configured facilitator URL from the
-// X402_FACILITATOR_URL environment variable.
-func FacilitatorURL() string {
-	return os.Getenv("X402_FACILITATOR_URL")
+// X402_FACILITATOR_URL environment variable. Returns an error if unset.
+func FacilitatorURL() (string, error) {
+	url := os.Getenv("X402_FACILITATOR_URL")
+	if url == "" {
+		return "", fmt.Errorf("X402_FACILITATOR_URL environment variable is not set")
+	}
+	return url, nil
 }
 
 // Verify calls the facilitator /verify endpoint to validate a payment
 // authorization (EIP-712 signature, balance, nonce, etc.).
 func Verify(ctx context.Context, payload map[string]any, requirements PaymentRequirements) (*VerifyResponse, error) {
+	facilitatorURL, err := FacilitatorURL()
+	if err != nil {
+		return nil, err
+	}
+
 	reqBody := VerifyRequest{
 		X402Version:  1,
 		Payload:      payload,
@@ -37,7 +46,7 @@ func Verify(ctx context.Context, payload map[string]any, requirements PaymentReq
 		return nil, fmt.Errorf("marshal verify request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, FacilitatorURL()+"/verify", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, facilitatorURL+"/verify", bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("create verify request: %w", err)
 	}
@@ -69,6 +78,11 @@ func Verify(ctx context.Context, payload map[string]any, requirements PaymentReq
 // Settle calls the facilitator /settle endpoint to submit the
 // transferWithAuthorization (EIP-3009) on-chain and move USDC.
 func Settle(ctx context.Context, payload map[string]any, requirements PaymentRequirements) (*SettleResponse, error) {
+	facilitatorURL, err := FacilitatorURL()
+	if err != nil {
+		return nil, err
+	}
+
 	reqBody := SettleRequest{
 		X402Version:  1,
 		Payload:      payload,
@@ -80,7 +94,7 @@ func Settle(ctx context.Context, payload map[string]any, requirements PaymentReq
 		return nil, fmt.Errorf("marshal settle request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, FacilitatorURL()+"/settle", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, facilitatorURL+"/settle", bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("create settle request: %w", err)
 	}
