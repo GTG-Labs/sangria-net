@@ -72,10 +72,11 @@ func SelectLRUWallet(ctx context.Context, pool *pgxpool.Pool, network Network) (
 		return CryptoWallet{}, fmt.Errorf("select lru wallet: %w", err)
 	}
 
-	_, err = tx.Exec(ctx,
-		`UPDATE crypto_wallets SET last_used_at = NOW() WHERE id = $1`,
+	err = tx.QueryRow(ctx,
+		`UPDATE crypto_wallets SET last_used_at = NOW() WHERE id = $1
+		 RETURNING last_used_at`,
 		w.ID,
-	)
+	).Scan(&w.LastUsedAt)
 	if err != nil {
 		return CryptoWallet{}, fmt.Errorf("update last_used_at: %w", err)
 	}

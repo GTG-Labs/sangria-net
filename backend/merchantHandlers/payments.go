@@ -117,24 +117,21 @@ func SettlePayment(pool *pgxpool.Pool) fiber.Handler {
 			return c.Status(400).JSON(fiber.Map{"error": "invalid request body"})
 		}
 
-		// Look up payment record.
-		payment, err := dbengine.GetPaymentByID(c.Context(), pool, req.PaymentID)
+		// Atomically claim the pending payment with a row lock.
+		// Prevents concurrent requests from both starting facilitator calls.
+		payment, release, err := dbengine.ClaimPendingPayment(c.Context(), pool, req.PaymentID)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return c.Status(404).JSON(fiber.Map{"error": "payment not found"})
+				return c.Status(404).JSON(fiber.Map{"error": "payment not found or not pending"})
 			}
-			log.Printf("get payment by id: %v", err)
-			return c.Status(500).JSON(fiber.Map{"error": "failed to look up payment"})
+			log.Printf("claim pending payment: %v", err)
+			return c.Status(500).JSON(fiber.Map{"error": "failed to claim payment"})
 		}
+		defer release()
 
 		// Verify payment belongs to this merchant.
 		if payment.MerchantID != merchant.ID {
 			return c.Status(403).JSON(fiber.Map{"error": "payment does not belong to this merchant"})
-		}
-
-		// Verify payment is pending.
-		if payment.Status != dbengine.PaymentStatusPending {
-			return c.Status(400).JSON(fiber.Map{"error": fmt.Sprintf("payment is %s, not pending", payment.Status)})
 		}
 
 		// Check expiry.

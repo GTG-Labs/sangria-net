@@ -22,8 +22,14 @@ func GetMerchantBalance(pool *pgxpool.Pool) fiber.Handler {
 			return c.Status(500).JSON(fiber.Map{"error": "failed to get balance"})
 		}
 
-		// Convert microunits to display dollars (1 USDC = 1,000,000 microunits).
-		displayBalance := fmt.Sprintf("$%.2f", float64(balance)/1_000_000)
+		// Convert microunits to display string using integer math (no float rounding).
+		// 1 USDC = 1,000,000 microunits. Preserves full 6-digit precision.
+		whole := balance / 1_000_000
+		frac := balance % 1_000_000
+		if frac < 0 {
+			frac = -frac
+		}
+		displayBalance := fmt.Sprintf("%d.%06d USDC", whole, frac)
 
 		return c.Status(200).JSON(fiber.Map{
 			"balance":         balance,

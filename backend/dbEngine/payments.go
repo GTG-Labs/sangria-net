@@ -26,6 +26,40 @@ func CreatePayment(ctx context.Context, pool *pgxpool.Pool, merchantID, cryptoWa
 	return p, err
 }
 
+// ClaimPendingPayment atomically selects and locks a pending payment using
+// SELECT ... FOR UPDATE. If the payment is not pending (already settled, failed,
+// or expired), or doesn't exist, it returns an error. This prevents concurrent
+// requests from both starting facilitator calls for the same payment.
+func ClaimPendingPayment(ctx context.Context, pool *pgxpool.Pool, id string) (Payment, func(), error) {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return Payment{}, nil, fmt.Errorf("begin transaction: %w", err)
+	}
+
+	var p Payment
+	err = tx.QueryRow(ctx,
+		`SELECT id, merchant_id, crypto_wallet_id, amount, network, status,
+		        settlement_tx_hash, payer_address, idempotency_key,
+		        expires_at, created_at, settled_at
+		 FROM payments
+		 WHERE id = $1 AND status = 'pending'
+		 FOR UPDATE SKIP LOCKED`,
+		id,
+	).Scan(
+		&p.ID, &p.MerchantID, &p.CryptoWalletID, &p.Amount, &p.Network, &p.Status,
+		&p.SettlementTxHash, &p.PayerAddress, &p.IdempotencyKey,
+		&p.ExpiresAt, &p.CreatedAt, &p.SettledAt,
+	)
+	if err != nil {
+		tx.Rollback(ctx)
+		return Payment{}, nil, err
+	}
+
+	// Return a release function that the caller must defer to release the lock.
+	release := func() { tx.Rollback(ctx) }
+	return p, release, nil
+}
+
 // GetPaymentByID returns a payment by its UUID.
 func GetPaymentByID(ctx context.Context, pool *pgxpool.Pool, id string) (Payment, error) {
 	var p Payment

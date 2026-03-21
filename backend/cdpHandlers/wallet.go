@@ -61,8 +61,8 @@ func CreateEvmAccount(ctx context.Context) (string, error) {
 	return resp.JSON201.Address, nil
 }
 
-// FundETH requests testnet ETH from the faucet for gas fees.
-func FundETH(ctx context.Context, address, network string) error {
+// requestFaucet requests testnet tokens from the CDP faucet.
+func requestFaucet(ctx context.Context, address, network, token string) error {
 	c, err := GetClient()
 	if err != nil {
 		return fmt.Errorf("get cdp client: %w", err)
@@ -71,36 +71,24 @@ func FundETH(ctx context.Context, address, network string) error {
 	resp, err := c.RequestEvmFaucetWithResponse(ctx, openapi.RequestEvmFaucetJSONRequestBody{
 		Address: address,
 		Network: openapi.RequestEvmFaucetJSONBodyNetwork(network),
-		Token:   openapi.RequestEvmFaucetJSONBodyToken("eth"),
+		Token:   openapi.RequestEvmFaucetJSONBodyToken(token),
 	})
 	if err != nil {
-		return fmt.Errorf("fund eth: %w", err)
+		return fmt.Errorf("fund %s: %w", token, err)
 	}
 	if resp.StatusCode() != 200 {
-		return fmt.Errorf("fund eth: unexpected status %d", resp.StatusCode())
+		return fmt.Errorf("fund %s: unexpected status %d", token, resp.StatusCode())
 	}
 
 	return nil
 }
 
+// FundETH requests testnet ETH from the faucet for gas fees.
+func FundETH(ctx context.Context, address, network string) error {
+	return requestFaucet(ctx, address, network, "eth")
+}
+
 // FundUSDC requests testnet USDC from the faucet.
 func FundUSDC(ctx context.Context, address, network string) error {
-	c, err := GetClient()
-	if err != nil {
-		return fmt.Errorf("get cdp client: %w", err)
-	}
-
-	resp, err := c.RequestEvmFaucetWithResponse(ctx, openapi.RequestEvmFaucetJSONRequestBody{
-		Address: address,
-		Network: openapi.RequestEvmFaucetJSONBodyNetwork(network),
-		Token:   openapi.RequestEvmFaucetJSONBodyToken("usdc"),
-	})
-	if err != nil {
-		return fmt.Errorf("fund usdc: %w", err)
-	}
-	if resp.StatusCode() != 200 {
-		return fmt.Errorf("fund usdc: unexpected status %d", resp.StatusCode())
-	}
-
-	return nil
+	return requestFaucet(ctx, address, network, "usdc")
 }
