@@ -68,8 +68,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
-    // Get request body
+    // Get request body and add user_id from authenticated user
     const body = await request.json();
+    body.user_id = user.id;
 
     // Create AbortController for timeout handling
     const controller = new AbortController();
@@ -77,7 +78,7 @@ export async function POST(request: NextRequest) {
 
     try {
       // Forward request to backend with access token
-      const response = await fetch(`${BACKEND_URL}/api-keys`, {
+      const response = await fetch(`${BACKEND_URL}/merchants`, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${accessToken}`,

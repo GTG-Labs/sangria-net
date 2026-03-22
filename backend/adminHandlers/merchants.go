@@ -28,6 +28,12 @@ func CreateMerchantAPIKey(pool *pgxpool.Pool) fiber.Handler {
 			return c.Status(400).JSON(fiber.Map{"error": "name and user_id are required"})
 		}
 
+		// Ensure the user exists in the database first
+		if _, err := dbengine.UpsertUser(c.Context(), pool, "Admin Created", req.UserID); err != nil {
+			log.Printf("upsert user: %v", err)
+			return c.Status(500).JSON(fiber.Map{"error": "failed to create user"})
+		}
+
 		// Ensure the user has a USDC LIABILITY account before creating the API key,
 		// so we don't end up with an active key but no liability account.
 		if _, err := dbengine.EnsureUSDCLiabilityAccount(c.Context(), pool, req.UserID); err != nil {

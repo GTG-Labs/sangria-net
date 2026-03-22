@@ -4,13 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"time"
 
+	"github.com/gofiber/fiber/v3"
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/workos/workos-go/v4/pkg/usermanagement"
+
+	dbengine "sangrianet/backend/dbEngine"
 )
 
 // Global JWKS cache, URL, and issuer for WorkOS JWT validation
@@ -88,6 +94,10 @@ func VerifyWorkOSToken(ctx context.Context, tokenStr string) (string, error) {
 		if errors.Is(err, jwt.ErrTokenExpired()) {
 			return "", fmt.Errorf("token expired, please refresh your session")
 		}
+		// Debug: log actual issuer vs expected for troubleshooting
+		if actualIssuer, ok := token.Get("iss"); ok {
+			log.Printf("JWT issuer mismatch - expected: %s, actual: %s", expectedIssuer, actualIssuer)
+		}
 		return "", fmt.Errorf("token claim validation failed: %w", err)
 	}
 
@@ -103,4 +113,29 @@ func VerifyWorkOSToken(ctx context.Context, tokenStr string) (string, error) {
 	}
 
 	return userIDStr, nil
+}
+
+// CreateUser handles POST /users endpoint
+func CreateUser(pool *pgxpool.Pool) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		user := c.Locals("workos_user").(WorkOSUser)
+
+		if user.ID == "" {
+			log.Printf("User missing WorkOS ID: %+v", user)
+			return c.Status(500).JSON(fiber.Map{"error": "Invalid user session"})
+		}
+
+		owner := user.Email
+		if user.FirstName != "" && user.LastName != "" {
+			owner = fmt.Sprintf("%s %s", user.FirstName, user.LastName)
+		}
+
+		u, err := dbengine.UpsertUser(c.Context(), pool, owner, user.ID)
+		if err != nil {
+			log.Printf("upsert user error: %v", err)
+			return c.Status(500).JSON(fiber.Map{"error": "failed to create user"})
+		}
+
+		return c.Status(201).JSON(u)
+	}
 }
