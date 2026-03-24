@@ -32,21 +32,41 @@ A FastAPI application that demonstrates a paid endpoint using the x402 protocol.
 
 ```python
 from fastapi import FastAPI
-from fastapi_x402 import pay
+from x402.http import FacilitatorConfig, HTTPFacilitatorClient, PaymentOption
+from x402.http.middleware.fastapi import PaymentMiddlewareASGI
+from x402.http.types import RouteConfig
+from x402.mechanisms.evm.exact import ExactEvmServerScheme
+from x402.server import x402ResourceServer
 
 app = FastAPI()
 
 MERCHANT_ADDRESS = "0xF44c...fd39"
+
+facilitator = HTTPFacilitatorClient(
+    FacilitatorConfig(url="https://x402.org/facilitator")
+)
+server = x402ResourceServer(facilitator)
+server.register("eip155:84532", ExactEvmServerScheme())
+
+routes = {
+    "GET /premium": RouteConfig(
+        accepts=[PaymentOption(
+            scheme="exact",
+            pay_to=MERCHANT_ADDRESS,
+            price="$0.0001",
+            network="eip155:84532",
+        )],
+        mime_type="application/json",
+        description="Premium endpoint",
+    ),
+}
+app.add_middleware(PaymentMiddlewareASGI, routes=routes, server=server)
 
 @app.get("/")
 async def root():
     return {"status": "ok"}
 
 @app.get("/premium")
-@pay(
-    amount_required=0.0001,  # $0.0001 USDC
-    pay_to=MERCHANT_ADDRESS,
-)
 async def premium_endpoint():
     return {
         "message": "You accessed the premium endpoint!",
@@ -54,7 +74,7 @@ async def premium_endpoint():
     }
 ```
 
-The `@pay` decorator from `fastapi-x402` handles:
+The `PaymentMiddlewareASGI` from `x402` handles:
 
 - Returning 402 responses with payment requirements
 - Verifying signed payment authorizations
@@ -105,13 +125,13 @@ class TestnetWallet:
 
 ## Key Dependencies
 
-| Package        | Purpose                                                                    |
-| -------------- | -------------------------------------------------------------------------- |
-| `cdp-sdk`      | Coinbase Developer Platform SDK — wallet creation, funding, balance checks |
-| `x402`         | Client-side x402 protocol — signs USDC payments for 402 responses          |
-| `fastapi-x402` | Server-side x402 middleware — adds `@pay` decorator to protect endpoints   |
-| `uvicorn`      | ASGI server to run FastAPI                                                 |
-| `fastapi`      | Modern Python web framework                                                |
+| Package          | Purpose                                                                    |
+| ---------------- | -------------------------------------------------------------------------- |
+| `cdp-sdk`        | Coinbase Developer Platform SDK — wallet creation, funding, balance checks |
+| `x402[httpx]`    | Client-side x402 protocol — signs USDC payments for 402 responses          |
+| `x402[fastapi]`  | Server-side x402 middleware — `PaymentMiddlewareASGI` to protect endpoints |
+| `uvicorn`        | ASGI server to run FastAPI                                                 |
+| `fastapi`        | Modern Python web framework                                                |
 
 ## Payment Flow Architecture
 
@@ -120,10 +140,10 @@ class TestnetWallet:
 1. **Client makes request**: `main.py` sends GET request to `/premium`
 2. **Server requires payment**: FastAPI middleware returns 402 with payment details
 3. **Client signs authorization**: x402 client library creates ERC-3009 signature
-4. **Client retries with payment**: Request includes `X-PAYMENT` header
+4. **Client retries with payment**: Request includes `PAYMENT-SIGNATURE` header
 5. **Server verifies**: Calls Coinbase facilitator to verify signature and balance
 6. **Server settles**: Facilitator submits transaction to Base Sepolia
-7. **Server responds**: Returns content + transaction hash in `X-PAYMENT-RESPONSE` header
+7. **Server responds**: Returns content + transaction hash in `PAYMENT-RESPONSE` header
 
 ## Wallet Management
 

@@ -264,15 +264,27 @@ export default function Home() {
               </div>
               <pre className="p-5 text-sm font-mono leading-relaxed overflow-x-auto">
                 <code>{`from fastapi import FastAPI
-from fastapi_x402 import pay
+from x402.http import FacilitatorConfig, HTTPFacilitatorClient, PaymentOption
+from x402.http.middleware.fastapi import PaymentMiddlewareASGI
+from x402.http.types import RouteConfig
+from x402.mechanisms.evm.exact import ExactEvmServerScheme
+from x402.server import x402ResourceServer
 
 app = FastAPI()
+facilitator = HTTPFacilitatorClient(
+    FacilitatorConfig(url="https://x402.org/facilitator"))
+server = x402ResourceServer(facilitator)
+server.register("eip155:84532", ExactEvmServerScheme())
+
+routes = {"GET /premium": RouteConfig(
+    accepts=[PaymentOption(scheme="exact",
+        pay_to="0xF44c...fd39", price="$0.0001",
+        network="eip155:84532")],
+    mime_type="application/json")}
+app.add_middleware(
+    PaymentMiddlewareASGI, routes=routes, server=server)
 
 @app.get("/premium")
-@pay(
-    amount_required=0.0001,  # $0.0001 USDC
-    pay_to="0xF44c...fd39",
-)
 async def premium_endpoint():
     return {
         "message": "You accessed the premium endpoint!",
