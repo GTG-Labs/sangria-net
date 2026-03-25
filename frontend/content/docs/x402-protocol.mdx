@@ -74,19 +74,29 @@ When you hit a paywalled endpoint without paying:
 
 ```json
 {
-  "maxAmountRequired": "0.10",
-  "resource": "/api/data",
-  "description": "Access requires payment",
-  "payTo": "0xABC...DEF",
-  "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
-  "network": "eip155:84532"
+  "x402Version": 2,
+  "accepts": [
+    {
+      "scheme": "exact",
+      "network": "eip155:84532",
+      "amount": "100000",
+      "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+      "payTo": "0xABC...DEF",
+      "maxTimeoutSeconds": 300,
+      "extra": { "name": "USDC", "version": "2" }
+    }
+  ],
+  "resource": { "url": "/api/data", "description": "Access requires payment" }
 }
 ```
 
-- **maxAmountRequired** — The price (in USDC, so $0.10)
+- **x402Version** — Always `2` for the v2 protocol
+- **accepts** — Array of payment options the server will accept
+- **scheme** — `"exact"` means the client pays a fixed amount
+- **amount** — The price in USDC base units (6 decimals), so `"100000"` = $0.10
 - **payTo** — The seller's wallet address (where the money goes)
-- **asset** — The token contract address (USDC's address on that chain)
-- **network** — Which blockchain to pay on
+- **asset** — The token contract address (USDC on Base Sepolia)
+- **network** — Which blockchain to pay on, in CAIP-2 format
 
 ## ERC-3009: TransferWithAuthorization
 

@@ -263,51 +263,34 @@ export default function Architecture() {
         <h2>3. Component Breakdown</h2>
 
         <h3>Sangria SDK (Client Layer)</h3>
-        <p>A Python client library extending HTTPX with x402 payment capabilities.</p>
+        <p>Merchant-facing SDKs in TypeScript and Python. Both share the same backend-call pattern: on a missing <code>PAYMENT-SIGNATURE</code> header, they call <code>POST /v1/generate-payment</code> on the Sangria backend and return a <code>402</code>; on a valid header, they call <code>POST /v1/settle-payment</code> and pass the request through on success.</p>
         <ul>
-          <li><code>sangria.get()</code>, <code>sangria.post()</code>, etc. behave like normal HTTP calls</li>
-          <li>
-            When an endpoint returns <code>402 Payment Required</code>, the SDK automatically:
-            <ol>
-              <li>Reads payment terms from the response headers</li>
-              <li>Verifies the user has sufficient Sangria Credits</li>
-              <li>For Sangria-credit flows (Scenario 1), requests a backend-generated <strong>ERC-3009 TransferWithAuthorization</strong> signed server-side by the <strong>Treasury Wallet</strong> via secure orchestration/key custody (not client-side keys)</li>
-              <li>Retries the request with the signed payment in the <code>PAYMENT-SIGNATURE</code> header</li>
-            </ol>
-          </li>
+          <li><strong>TypeScript SDK</strong> — framework adapters for Express, Fastify, and Hono. Reads <code>PAYMENT-SIGNATURE</code> from incoming headers, calls the backend with <code>Authorization: Bearer &lt;apiKey&gt;</code>.</li>
+          <li><strong>Python SDK</strong> — a <code>@require_sangria_payment</code> FastAPI decorator. Returns <code>402</code> with a base64-encoded <code>PAYMENT-REQUIRED</code> header; on settlement success, attaches <code>SettlementResult</code> to <code>request.state.sangria_verification</code>.</li>
           <li>Supports both <code>exact</code> (fixed price) and <code>upto</code> (variable price) schemes</li>
-          <li>Future: external language SDKs in Java, C#, Swift</li>
+          <li>Future: SDKs in additional languages</li>
         </ul>
-        <p><strong>Key file:</strong> <code>playground/main.py</code></p>
+        <p><strong>Key files:</strong> <code>sdk/sdk-typescript/src/</code>, <code>sdk/python/src/sangria_sdk/</code></p>
 
         <h3>Sangria Backend (Orchestration Layer)</h3>
-        <p>A Go-based service using <code>dbEngine</code> for server-side business logic.</p>
+        <p>A <strong>Go / Fiber v3</strong> API server on port <code>8080</code> with two authentication models: <strong>WorkOS JWT</strong> for user-facing session routes, and <strong>API keys</strong> (bcrypt-hashed, prefixed <code>sg_live_</code> / <code>sg_test_</code>) for merchant SDK calls.</p>
         <ul>
-          <li><strong>Accept Payment Requests</strong> — Validates incoming <code>PAYMENT-SIGNATURE</code> headers</li>
-          <li><strong>Verify &amp; Settle via Facilitator</strong> — Calls Coinbase&apos;s facilitator API</li>
-          <li><strong>Treasury Wallet Management</strong> — Manages merchant receiving wallets via CDP</li>
-          <li><strong>Transaction Mutexes</strong> — Prevents double-processing of concurrent payments</li>
-          <li><strong>Internal Ledger</strong> — Tracks Sangria Credits per user account</li>
-          <li><strong>Payment Caching</strong> — 300-second cache for expensive operations</li>
+          <li><strong>API Key Management</strong> — create, list, and revoke keys (max 10 per user), backed by PostgreSQL</li>
+          <li><strong>Payment Routes</strong> — <code>/v1/generate-payment</code> returns an x402 v2 challenge; <code>/v1/settle-payment</code> verifies and settles (currently stubbed)</li>
+          <li><strong>Merchant Profile</strong> — <code>/merchant/profile</code> returns user + key metadata for API-key-authenticated requests</li>
+          <li><strong>Facilitator Endpoints</strong> — <code>/facilitator/verify</code> and <code>/facilitator/settle</code> are defined but return 501 (planned)</li>
+          <li><strong>Internal Ledger</strong> — double-entry credit accounting via <code>dbEngine.InsertTransaction</code></li>
         </ul>
-        <p><strong>Key files:</strong> <code>backend/main.go</code>, <code>backend/dbEngine/</code></p>
-
-        <h3>x402 Merchant Server</h3>
-        <p>A FastAPI application demonstrating x402-protected endpoints.</p>
-        <pre><code>{`GET  /          → Free health check
-GET  /premium   → $0.0001 USDC per request (exact scheme)
-GET  /variable  → $0.0001–$0.0005 random price (exact scheme)
-POST /run       → Variable cost based on work performed (upto scheme)`}</code></pre>
-        <p><strong>Key file:</strong> <code>playground/merchant_server/app.py</code></p>
+        <p><strong>Key files:</strong> <code>backend/main.go</code>, <code>backend/handlers/</code>, <code>backend/merchantPaymentHandler/</code>, <code>backend/dbEngine/</code></p>
 
         <h3>Database (Persistence Layer)</h3>
-        <p>PostgreSQL managed via <strong>Drizzle ORM</strong>, storing:</p>
+        <p>PostgreSQL managed via <strong>Drizzle ORM</strong> (schema source of truth in <code>dbSchema/</code>), accessed from Go via <strong>pgx v5</strong>. Stores:</p>
         <ul>
-          <li><strong>Users</strong> — Buyer accounts, wallet associations, credit balances</li>
-          <li><strong>Merchants</strong> — Profiles, API keys, treasury wallet addresses</li>
-          <li><strong>Transactions</strong> — Payment records, settlement receipts, tx hashes, audit log</li>
+          <li><strong>Users</strong> — accounts keyed by WorkOS ID, credit balances</li>
+          <li><strong>Merchants</strong> — profiles, API keys (bcrypt hashes), treasury wallet addresses</li>
+          <li><strong>Transactions</strong> — double-entry ledger records, settlement receipts, audit log</li>
         </ul>
-        <p><strong>Key files:</strong> <code>dbSchema/schema.ts</code>, <code>dbSchema/drizzle.config.ts</code></p>
+        <p><strong>Key files:</strong> <code>dbSchema/schema.ts</code>, <code>backend/dbEngine/models.go</code></p>
 
         <h3>Facilitator (Infrastructure Layer)</h3>
         <p>Coinbase&apos;s hosted service that:</p>
@@ -476,23 +459,15 @@ POST /run       → Variable cost based on work performed (upto scheme)`}</code>
           <tbody>
             <tr>
               <td>Network (Production)</td>
-              <td>Base Mainnet</td>
+              <td>Base Mainnet (<code>eip155:8453</code>)</td>
             </tr>
             <tr>
               <td>Network (Development)</td>
-              <td>Base Sepolia (testnet)</td>
+              <td>Base Sepolia (<code>eip155:84532</code>)</td>
             </tr>
             <tr>
               <td>USDC Contract (Sepolia)</td>
               <td><code>0x036CbD53842c5426634e7929541eC2318f3dCF7e</code></td>
-            </tr>
-            <tr>
-              <td>Playground Merchant Wallet</td>
-              <td><code>0xF44cc4b82470Eb3D1fDAc83b8b7226d7cD07fd39</code></td>
-            </tr>
-            <tr>
-              <td>Playground Buyer Wallet</td>
-              <td><code>0x0b7b1E88e321C3f326776e35C042bb3d035Be649</code></td>
             </tr>
             <tr>
               <td>Settlement Time</td>

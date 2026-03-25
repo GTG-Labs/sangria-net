@@ -181,7 +181,7 @@ export default function Home() {
                 Developer Friendly
               </h3>
               <p className="text-zinc-600 dark:text-zinc-400 text-sm leading-relaxed">
-                Simple decorator-based API for servers. Client library handles
+                Middleware-based API for servers. Client library handles
                 402 negotiation transparently.
               </p>
             </div>
@@ -227,15 +227,30 @@ export default function Home() {
                 FOR DEVELOPERS
               </p>
               <h2 className="text-3xl md:text-4xl italic font-normal text-gray-900 dark:text-white mb-6">
-                Add a paid endpoint in 3 lines
+                Add a paid endpoint in minutes
               </h2>
               <p className="text-zinc-600 dark:text-zinc-400 leading-relaxed mb-8">
-                Use the{" "}
+                Create an{" "}
                 <code className="px-2 py-0.5 rounded bg-zinc-100 dark:bg-white/5 text-sangria-500 font-mono text-sm">
-                  @pay
+                  HTTPFacilitatorClient
                 </code>{" "}
-                decorator to protect any FastAPI endpoint. The x402 middleware
-                handles payment verification automatically.
+                and{" "}
+                <code className="px-2 py-0.5 rounded bg-zinc-100 dark:bg-white/5 text-sangria-500 font-mono text-sm">
+                  x402ResourceServer
+                </code>
+                , define a{" "}
+                <code className="px-2 py-0.5 rounded bg-zinc-100 dark:bg-white/5 text-sangria-500 font-mono text-sm">
+                  routes
+                </code>{" "}
+                mapping, then attach{" "}
+                <code className="px-2 py-0.5 rounded bg-zinc-100 dark:bg-white/5 text-sangria-500 font-mono text-sm">
+                  PaymentMiddlewareASGI
+                </code>{" "}
+                via{" "}
+                <code className="px-2 py-0.5 rounded bg-zinc-100 dark:bg-white/5 text-sangria-500 font-mono text-sm">
+                  app.add_middleware
+                </code>
+                . Payment verification and settlement are handled automatically.
               </p>
               <div className="flex flex-wrap gap-3">
                 <span className="px-3 py-1 rounded-full bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-white/10 text-xs text-zinc-600 dark:text-zinc-400 font-mono">
