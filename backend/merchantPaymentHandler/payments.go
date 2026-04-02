@@ -25,7 +25,7 @@ func RegisterRoutes(app *fiber.App) {
 		amountBaseUnits := fmt.Sprintf("%.0f", body.Amount*1_000_000)
 
 		return c.JSON(fiber.Map{
-			"x402Version": 1,
+			"x402Version": 2,
 			"description": body.Description,
 			"resource":    body.Resource,
 			"accepts": []fiber.Map{{
