@@ -28,14 +28,9 @@ class SangriaHTTPClient:
         self,
         endpoint: str,
         payload: dict[str, Any],
-        idempotency_key: str | None = None,
     ) -> dict[str, Any]:
-        headers: dict[str, str] = {}
-        if idempotency_key:
-            headers["Idempotency-Key"] = idempotency_key
-
         try:
-            response = await self._client.post(endpoint, json=payload, headers=headers)
+            response = await self._client.post(endpoint, json=payload)
         except httpx.RequestError as exc:
             raise APIError(
                 message=f"Sangria transport error: {exc}",

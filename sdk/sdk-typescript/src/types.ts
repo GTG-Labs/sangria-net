@@ -3,12 +3,6 @@ export interface SangriaNetConfig {
   baseUrl?: string;
 }
 
-/** Internal cache entry for tracking payment_id between generate and settle */
-export interface PaymentCacheEntry {
-  paymentId: string;
-  expiresAt: number;
-}
-
 export interface FixedPriceOptions {
   price: number;
   description?: string;
