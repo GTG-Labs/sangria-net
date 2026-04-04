@@ -57,6 +57,7 @@ export class SangriaNet {
       })) as {
         success: boolean;
         transaction?: string;
+        error_reason?: string;
         error_message?: string;
       };
 
@@ -64,7 +65,10 @@ export class SangriaNet {
         return {
           action: "respond",
           status: 402,
-          body: { error: result.error_message ?? "Payment failed" },
+          body: {
+            error: result.error_message ?? "Payment failed",
+            error_reason: result.error_reason,
+          },
         };
       }
 
