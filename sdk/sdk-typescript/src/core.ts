@@ -3,6 +3,7 @@ import type {
   FixedPriceOptions,
   PaymentContext,
   PaymentResult,
+  X402ChallengePayload,
 } from "./types.js";
 
 const DEFAULT_BASE_URL = "http://localhost:8080";
@@ -20,7 +21,7 @@ export class SangriaNet {
     this.baseUrl = (config.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
   }
 
-  validateFixedPriceOptions(options: FixedPriceOptions): void {
+  private validateFixedPriceOptions(options: FixedPriceOptions): void {
     if (!Number.isFinite(options.price) || options.price <= 0) {
       throw new Error(
         "SangriaNet: price must be a finite number greater than 0",
@@ -36,12 +37,12 @@ export class SangriaNet {
 
     if (!ctx.paymentHeader) {
       try {
-        const terms = await this.post("/v1/generate-payment", {
+        const challenge = await this.post("/v1/generate-payment", {
           amount: options.price,
           resource: ctx.resourceUrl,
           description: options.description,
-        });
-        return { action: "respond", status: 402, body: terms };
+        }) as X402ChallengePayload;
+        return { action: "respond", status: 402, body: challenge };
       } catch {
         return {
           action: "respond",

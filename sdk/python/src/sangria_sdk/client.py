@@ -3,11 +3,11 @@ from __future__ import annotations
 from ._http import SangriaHTTPClient
 from .errors import SettlementFailedError
 from .models import (
-    ChallengeConfig,
     GeneratePaymentRequest,
     SettlePaymentRequest,
     SettlementResult,
 )
+from typing import Any
 
 
 class SangriaMerchantClient:
@@ -27,9 +27,8 @@ class SangriaMerchantClient:
         self.generate_endpoint = generate_endpoint
         self.settle_endpoint = settle_endpoint
 
-    async def generate_payment(self, req: GeneratePaymentRequest) -> ChallengeConfig:
-        data = await self._http.post_json(self.generate_endpoint, req.to_dict())
-        return ChallengeConfig.from_dict(data)
+    async def generate_payment(self, req: GeneratePaymentRequest) -> dict[str, Any]:
+        return await self._http.post_json(self.generate_endpoint, req.to_dict())
 
     async def settle_payment(self, payment_payload: str) -> SettlementResult:
         req = SettlePaymentRequest(payment_payload=payment_payload)

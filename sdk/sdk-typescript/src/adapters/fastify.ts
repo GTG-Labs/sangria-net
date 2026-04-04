@@ -4,7 +4,6 @@ import type {
   FastifyReply,
   preHandlerAsyncHookHandler,
 } from "fastify";
-import fp from "fastify-plugin";
 import type { SangriaRequestData, FixedPriceOptions } from "../types.js";
 import { SangriaNet } from "../core.js";
 
@@ -19,20 +18,15 @@ declare module "fastify" {
 }
 
 /** Register this plugin before using fixedPrice() */
-export const sangrianetPlugin = fp(
-  async (fastify: FastifyInstance) => {
-    fastify.decorateRequest("sangrianet", undefined);
-  },
-  { name: "sangrianet" }
-);
+export async function sangrianetPlugin(fastify: FastifyInstance) {
+  fastify.decorateRequest("sangrianet", undefined);
+}
 
 export function fixedPrice(
   sangrianet: SangriaNet,
   options: FixedPriceOptions,
   config?: FastifyConfig
 ): preHandlerAsyncHookHandler {
-  sangrianet.validateFixedPriceOptions(options);
-
   return async (request: FastifyRequest, reply: FastifyReply) => {
     if (config?.bypassPaymentIf?.(request)) {
       request.sangrianet = { paid: false, amount: 0 };

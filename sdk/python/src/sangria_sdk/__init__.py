@@ -1,17 +1,25 @@
 from .client import SangriaMerchantClient
+from .errors import (
+    APIError,
+    PaymentRequiredError,
+    SangriaSDKError,
+    SettlementFailedError,
+)
 from .models import (
-    ChallengeConfig,
+    X402ChallengePayload,
     GeneratePaymentRequest,
-    MerchantContext,
     SettlePaymentRequest,
     SettlementResult,
 )
 
 __all__ = [
-    "ChallengeConfig",
+    "APIError",
     "GeneratePaymentRequest",
-    "MerchantContext",
+    "PaymentRequiredError",
     "SangriaMerchantClient",
+    "SangriaSDKError",
+    "SettlementFailedError",
     "SettlePaymentRequest",
     "SettlementResult",
+    "X402ChallengePayload",
 ]

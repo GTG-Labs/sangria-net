@@ -19,8 +19,6 @@ export function fixedPrice(
   options: FixedPriceOptions,
   config?: ExpressConfig
 ) {
-  sangrianet.validateFixedPriceOptions(options);
-
   return async (req: Request, res: Response, next: NextFunction) => {
     if (config?.bypassPaymentIf?.(req)) {
       req.sangrianet = { paid: false, amount: 0 };

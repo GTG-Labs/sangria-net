@@ -74,7 +74,7 @@ def require_sangria_payment(
                     )
                 except APIError as exc:
                     return build_error_response(exc)
-                return build_402_response(challenge.to_dict())
+                return build_402_response(challenge)
 
             try:
                 verification = await merchant_client.settle_payment(

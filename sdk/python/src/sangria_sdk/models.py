@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-import copy
 from decimal import Decimal
 from typing import Any
 
@@ -10,14 +9,6 @@ def _coerce_decimal(value: Decimal | int | float | str) -> Decimal:
     if isinstance(value, Decimal):
         return value
     return Decimal(str(value))
-
-
-@dataclass(slots=True)
-class MerchantContext:
-    merchant_id: str
-    resource: str
-    method: str = "GET"
-    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -41,38 +32,7 @@ class GeneratePaymentRequest:
         return payload
 
 
-@dataclass(slots=True)
-class ChallengeConfig:
-    x402_version: int = 2
-    description: str | None = None
-    resource: str | None = None
-    accepts: list[dict[str, Any]] = field(default_factory=list)
-    raw: dict[str, Any] = field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "ChallengeConfig":
-        x402_version = int(data.get("x402Version", data.get("x402_version", 2)))
-        accepts = list(data.get("accepts", []))
-        return cls(
-            x402_version=x402_version,
-            description=data.get("description"),
-            resource=data.get("resource"),
-            accepts=accepts,
-            raw=copy.deepcopy(data),
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        if self.raw:
-            return copy.deepcopy(self.raw)
-        payload: dict[str, Any] = {
-            "x402Version": self.x402_version,
-            "accepts": self.accepts,
-        }
-        if self.description is not None:
-            payload["description"] = self.description
-        if self.resource is not None:
-            payload["resource"] = self.resource
-        return payload
+X402ChallengePayload = dict[str, Any]
 
 
 @dataclass(slots=True)
@@ -111,5 +71,5 @@ class SettlementResult:
             payer=data.get("payer"),
             error_reason=data.get("error_reason"),
             error_message=data.get("error_message"),
-            raw=data,
+            raw=dict(data),
         )

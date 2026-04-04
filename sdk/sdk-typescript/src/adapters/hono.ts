@@ -26,8 +26,6 @@ export function fixedPrice(
   options: FixedPriceOptions,
   config?: HonoConfig
 ): MiddlewareHandler<SangriaNetEnv> {
-  sangrianet.validateFixedPriceOptions(options);
-
   return async (c, next) => {
     if (config?.bypassPaymentIf?.(c)) {
       c.set("sangrianet", { paid: false, amount: 0 });
