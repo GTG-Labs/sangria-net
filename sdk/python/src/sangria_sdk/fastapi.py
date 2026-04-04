@@ -11,8 +11,8 @@ from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from .client import SangriaMerchantClient
-from .errors import APIError, SettlementFailedError
-from .models import GeneratePaymentRequest, SettlePaymentRequest
+from .errors import APIError, SangriaSDKError, SettlementFailedError
+from .models import GeneratePaymentRequest
 
 
 def build_402_response(challenge: dict[str, Any]) -> JSONResponse:
@@ -40,7 +40,6 @@ def build_error_response(exc: Exception) -> JSONResponse:
 def require_sangria_payment(
     merchant_client: SangriaMerchantClient,
     amount: Decimal,
-    scheme: str = "exact",
     description: str | None = None,
     resource_resolver: Callable[[Request], str] | None = None,
 ) -> Callable[[Callable[..., Awaitable[Any]]], Callable[..., Awaitable[Any]]]:
@@ -67,7 +66,6 @@ def require_sangria_payment(
                         GeneratePaymentRequest(
                             amount=normalized_amount,
                             resource=resource,
-                            scheme=scheme,
                             description=description,
                         )
                     )
@@ -75,18 +73,26 @@ def require_sangria_payment(
                     return build_error_response(exc)
                 return build_402_response(challenge.to_dict())
 
-            settle_req = SettlePaymentRequest(
-                payment_header=payment_signature,
-                resource=resource,
-                amount=normalized_amount,
-                scheme=scheme,
-                idempotency_key=request.headers.get("Idempotency-Key"),
-            )
-
             try:
-                verification = await merchant_client.settle_payment(settle_req)
+                verification = await merchant_client.settle_payment(
+                    payment_payload=payment_signature,
+                    resource=resource,
+                )
             except (SettlementFailedError, APIError) as exc:
                 return build_error_response(exc)
+            except SangriaSDKError:
+                # Cache miss (server restart, TTL expiry) — re-generate challenge
+                try:
+                    challenge = await merchant_client.generate_payment(
+                        GeneratePaymentRequest(
+                            amount=normalized_amount,
+                            resource=resource,
+                            description=description,
+                        )
+                    )
+                except APIError as exc:
+                    return build_error_response(exc)
+                return build_402_response(challenge.to_dict())
             request.state.sangria_verification = verification
             return await func(*args, **kwargs)
 

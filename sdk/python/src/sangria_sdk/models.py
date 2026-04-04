@@ -24,7 +24,6 @@ class MerchantContext:
 class GeneratePaymentRequest:
     amount: Decimal
     resource: str
-    scheme: str = "exact"
     description: str | None = None
 
     def __post_init__(self) -> None:
@@ -34,7 +33,6 @@ class GeneratePaymentRequest:
         payload: dict[str, Any] = {
             "amount": float(self.amount),
             "resource": self.resource,
-            "scheme": self.scheme,
         }
         if self.description:
             payload["description"] = self.description
@@ -43,6 +41,7 @@ class GeneratePaymentRequest:
 
 @dataclass(slots=True)
 class ChallengeConfig:
+    payment_id: str | None = None
     x402_version: int = 2
     description: str | None = None
     resource: str | None = None
@@ -54,6 +53,7 @@ class ChallengeConfig:
         x402_version = int(data.get("x402Version", data.get("x402_version", 2)))
         accepts = list(data.get("accepts", []))
         return cls(
+            payment_id=data.get("payment_id"),
             x402_version=x402_version,
             description=data.get("description"),
             resource=data.get("resource"),
@@ -68,6 +68,8 @@ class ChallengeConfig:
             "x402Version": self.x402_version,
             "accepts": self.accepts,
         }
+        if self.payment_id is not None:
+            payload["payment_id"] = self.payment_id
         if self.description is not None:
             payload["description"] = self.description
         if self.resource is not None:
@@ -77,32 +79,25 @@ class ChallengeConfig:
 
 @dataclass(slots=True)
 class SettlePaymentRequest:
-    payment_header: str
-    resource: str
-    amount: Decimal
-    scheme: str = "exact"
-    idempotency_key: str | None = None
-
-    def __post_init__(self) -> None:
-        self.amount = _coerce_decimal(self.amount)
+    payment_id: str
+    payment_payload: str
 
     def to_dict(self) -> dict[str, Any]:
-        payload: dict[str, Any] = {
-            "paymentHeader": self.payment_header,
-            "resource": self.resource,
-            "amount": str(self.amount),
-            "scheme": self.scheme,
+        return {
+            "payment_id": self.payment_id,
+            "payment_payload": self.payment_payload,
         }
-        if self.idempotency_key is not None:
-            payload["idempotencyKey"] = self.idempotency_key
-        return payload
 
 
 @dataclass(slots=True)
 class SettlementResult:
     success: bool
+    payment_id: str | None = None
     transaction: str | None = None
-    error: str | None = None
+    network: str | None = None
+    payer: str | None = None
+    error_reason: str | None = None
+    error_message: str | None = None
     raw: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -116,11 +111,13 @@ class SettlementResult:
             success = raw_success != 0
         else:
             success = False
-        transaction = data.get("transaction") or data.get("transaction_hash")
-        error = data.get("error") or data.get("reason")
         return cls(
             success=success,
-            transaction=transaction,
-            error=error,
+            payment_id=data.get("payment_id"),
+            transaction=data.get("transaction"),
+            network=data.get("network"),
+            payer=data.get("payer"),
+            error_reason=data.get("error_reason"),
+            error_message=data.get("error_message"),
             raw=data,
         )
