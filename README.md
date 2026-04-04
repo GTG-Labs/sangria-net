@@ -47,7 +47,7 @@ from sangria_sdk import SangriaMerchantClient
 from sangria_sdk.adapters.fastapi import require_sangria_payment
 
 app = FastAPI()
-client = SangriaMerchantClient(api_key="sk_live_...")
+client = SangriaMerchantClient(api_key=os.environ["SANGRIA_SECRET_KEY"])
 
 @app.get("/premium")
 @require_sangria_payment(client, amount=0.01, description="Premium content")
