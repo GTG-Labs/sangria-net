@@ -27,8 +27,7 @@ class FixedPriceOptions:
 
 @dataclass(slots=True)
 class PaymentResponse:
-    """A respond-to-client result: return this as an HTTP response."""
-    action: str  # "respond"
+    """Return this as an HTTP response — payment not yet completed."""
     status_code: int
     body: dict[str, Any]
     headers: dict[str, str] = field(default_factory=dict)
@@ -36,8 +35,7 @@ class PaymentResponse:
 
 @dataclass(slots=True)
 class PaymentProceeded:
-    """A proceed result: payment succeeded, run the handler."""
-    action: str  # "proceed"
+    """Payment succeeded — run the handler."""
     paid: bool
     amount: float
     transaction: str | None = None

@@ -36,31 +36,52 @@ export class SangriaNet {
     this.validateFixedPriceOptions(options);
 
     if (!ctx.paymentHeader) {
-      try {
-        const challenge = await this.post("/v1/generate-payment", {
-          amount: options.price,
-          resource: ctx.resourceUrl,
-          description: options.description,
-        }) as X402ChallengePayload;
-        const encoded = btoa(JSON.stringify(challenge));
-        return {
-          action: "respond",
-          status: 402,
-          body: challenge,
-          headers: { "PAYMENT-REQUIRED": encoded },
-        };
-      } catch {
-        return {
-          action: "respond",
-          status: 500,
-          body: { error: "Payment service unavailable" },
-        };
-      }
+      return this.generatePayment(ctx, options);
+    } else {
+      return this.settlePayment(ctx.paymentHeader, options);
     }
+  }
 
+  // if we dont have a payment header, it means that we need to hit the generate-payment endpoint on our backend,
+  // and send the client a 402 response with details on how to pay us
+  private async generatePayment(
+    ctx: PaymentContext,
+    options: FixedPriceOptions,
+  ): Promise<PaymentResult> {
     try {
-      const result = (await this.post("/v1/settle-payment", {
-        payment_payload: ctx.paymentHeader,
+      const x402_responsePayload = await this.postToSangriaBackend("/v1/generate-payment", {
+        amount: options.price,
+        resource: ctx.resourceUrl,
+        description: options.description,
+      }) as X402ChallengePayload;
+
+      // you gotta encode the payload before sending it back (part of the spec)
+      const encoded = btoa(JSON.stringify(x402_responsePayload));
+
+      return {
+        action: "respond",
+        status: 402,
+        body: x402_responsePayload,
+        headers: { "PAYMENT-REQUIRED": encoded },
+      };
+    } catch {
+      //TODO: instead of doing this, raise an error so the merchant handles it.
+      return {
+        action: "respond",
+        status: 500,
+        body: { error: "Payment service unavailable" },
+      };
+    }
+  }
+
+  // there was a payment header so we try to settle the payment
+  private async settlePayment(
+    paymentHeader: string,
+    options: FixedPriceOptions,
+  ): Promise<PaymentResult> {
+    try {
+      const result = (await this.postToSangriaBackend("/v1/settle-payment", {
+        payment_payload: paymentHeader,
       })) as {
         success: boolean;
         transaction?: string;
@@ -96,7 +117,7 @@ export class SangriaNet {
     }
   }
 
-  private async post(path: string, body: Record<string, unknown>) {
+  private async postToSangriaBackend(path: string, body: Record<string, unknown>) {
     const res = await fetch(`${this.baseUrl}${path}`, {
       method: "POST",
       headers: {
