@@ -28,6 +28,8 @@ class GeneratePaymentRequest:
 
     def __post_init__(self) -> None:
         self.amount = _coerce_decimal(self.amount)
+        if self.amount <= 0 or self.amount > 9_000_000_000_000:
+            raise ValueError("amount must be positive and within a valid range")
 
     def to_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
