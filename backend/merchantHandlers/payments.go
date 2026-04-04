@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"strconv"
 	"time"
 
@@ -27,26 +28,24 @@ func GeneratePayment(pool *pgxpool.Pool) fiber.Handler {
 		merchant := c.Locals("merchant_api_key").(*dbengine.Merchant)
 
 		var req struct {
-			Amount      int64  `json:"amount"`
-			Currency    string `json:"currency"`
-			Network     string `json:"network"`
-			Description string `json:"description"`
-			Resource    string `json:"resource"`
+			Amount      float64 `json:"amount"`
+			Description string  `json:"description"`
+			Resource    string  `json:"resource"`
 		}
 		if err := c.Bind().JSON(&req); err != nil {
 			return c.Status(400).JSON(fiber.Map{"error": "invalid request body"})
 		}
 
-		if req.Amount <= 0 {
+		// Convert dollar amount to microunits (USDC has 6 decimals).
+		amountMicro := int64(math.Round(req.Amount * 1e6))
+		if amountMicro <= 0 {
 			return c.Status(400).JSON(fiber.Map{"error": "amount must be positive"})
 		}
 
-		if req.Currency != "USDC" {
-			return c.Status(400).JSON(fiber.Map{"error": "only USDC is supported"})
-		}
+		// Hardcoded: USDC on Base Sepolia (change to "base" for mainnet).
+		const network = "base-sepolia"
 
-		// Look up network config for CAIP-2 and USDC address.
-		netConfig, ok := x402Handlers.NetworkConfigs[req.Network]
+		netConfig, ok := x402Handlers.NetworkConfigs[network]
 		if !ok {
 			return c.Status(400).JSON(fiber.Map{"error": "unsupported network"})
 		}
@@ -55,7 +54,7 @@ func GeneratePayment(pool *pgxpool.Pool) fiber.Handler {
 		}
 
 		// Pick LRU wallet on the requested network.
-		wallet, err := dbengine.SelectLRUWallet(c.Context(), pool, dbengine.Network(req.Network))
+		wallet, err := dbengine.SelectLRUWallet(c.Context(), pool, dbengine.Network(network))
 		if err != nil {
 			log.Printf("select lru wallet: %v", err)
 			return c.Status(500).JSON(fiber.Map{"error": "no wallets available for this network"})
@@ -68,7 +67,7 @@ func GeneratePayment(pool *pgxpool.Pool) fiber.Handler {
 		payment, err := dbengine.CreatePayment(
 			c.Context(), pool,
 			merchant.ID, wallet.ID,
-			req.Amount, dbengine.Network(req.Network),
+			amountMicro, dbengine.Network(network),
 			idempotencyKey, expiresAt,
 		)
 		if err != nil {
@@ -79,12 +78,12 @@ func GeneratePayment(pool *pgxpool.Pool) fiber.Handler {
 		// Build PaymentRequired response.
 		return c.Status(200).JSON(fiber.Map{
 			"payment_id":  payment.ID,
-			"x402Version": 1,
+			"x402Version": 2,
 			"accepts": []x402Handlers.PaymentRequirements{
 				{
 					Scheme:            "exact",
 					Network:           netConfig.CAIP2,
-					MaxAmountRequired: strconv.FormatInt(req.Amount, 10),
+					MaxAmountRequired: strconv.FormatInt(amountMicro, 10),
 					Asset:             netConfig.USDCAddress,
 					PayTo:             wallet.Address,
 					MaxTimeoutSeconds: maxTimeoutSeconds,

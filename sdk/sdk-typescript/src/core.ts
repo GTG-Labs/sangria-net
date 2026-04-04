@@ -3,13 +3,17 @@ import type {
   FixedPriceOptions,
   PaymentContext,
   PaymentResult,
+  PaymentCacheEntry,
 } from "./types.js";
 
 const DEFAULT_BASE_URL = "http://localhost:8080";
+const CACHE_TTL_MS = 60_000; // 60 seconds, matches backend maxTimeoutSeconds
+const CACHE_MAX_SIZE = 1000;
 
 export class SangriaNet {
   private apiKey: string;
   private baseUrl: string;
+  private paymentCache: Map<string, PaymentCacheEntry> = new Map();
 
   constructor(config: SangriaNetConfig) {
     if (!config.apiKey) {
@@ -28,18 +32,26 @@ export class SangriaNet {
 
   async handleFixedPrice(
     ctx: PaymentContext,
-    options: FixedPriceOptions,
+    options: FixedPriceOptions
   ): Promise<PaymentResult> {
     this.validateFixedPriceOptions(options);
 
     if (!ctx.paymentHeader) {
       try {
-        const terms = await this.post("/v1/generate-payment", {
+        const terms = (await this.post("/v1/generate-payment", {
           amount: options.price,
           resource: ctx.resourceUrl,
-          scheme: "exact",
           description: options.description,
-        });
+        })) as {
+          payment_id?: string;
+          [key: string]: unknown;
+        };
+
+        // Cache payment_id for the settle call
+        if (terms.payment_id) {
+          this.setCachedPaymentId(ctx.resourceUrl, terms.payment_id);
+        }
+
         return { action: "respond", status: 402, body: terms };
       } catch {
         return {
@@ -50,21 +62,35 @@ export class SangriaNet {
       }
     }
 
+    // Settle: look up cached payment_id and forward the payment signature
+    const paymentId = this.getCachedPaymentId(ctx.resourceUrl);
+    if (!paymentId) {
+      return {
+        action: "respond",
+        status: 402,
+        body: { error: "Payment session expired, please retry" },
+      };
+    }
+
     try {
       const result = (await this.post("/v1/settle-payment", {
-        paymentHeader: ctx.paymentHeader,
-        resource: ctx.resourceUrl,
-        amount: options.price,
-        scheme: "exact",
-      })) as { success: boolean; transaction?: string; error?: string };
+        payment_id: paymentId,
+        payment_payload: ctx.paymentHeader,
+      })) as {
+        success: boolean;
+        transaction?: string;
+        error_message?: string;
+      };
 
       if (!result.success) {
         return {
           action: "respond",
           status: 402,
-          body: { error: result.error ?? "Payment failed" },
+          body: { error: result.error_message ?? "Payment failed" },
         };
       }
+
+      this.paymentCache.delete(ctx.resourceUrl);
 
       return {
         action: "proceed",
@@ -81,6 +107,30 @@ export class SangriaNet {
         body: { error: "Payment settlement failed" },
       };
     }
+  }
+
+  private getCachedPaymentId(resourceUrl: string): string | undefined {
+    const entry = this.paymentCache.get(resourceUrl);
+    if (!entry) return undefined;
+    if (Date.now() > entry.expiresAt) {
+      this.paymentCache.delete(resourceUrl);
+      return undefined;
+    }
+    return entry.paymentId;
+  }
+
+  private setCachedPaymentId(resourceUrl: string, paymentId: string): void {
+    // Lazy cleanup when cache grows too large
+    if (this.paymentCache.size > CACHE_MAX_SIZE) {
+      const now = Date.now();
+      for (const [key, val] of this.paymentCache) {
+        if (now > val.expiresAt) this.paymentCache.delete(key);
+      }
+    }
+    this.paymentCache.set(resourceUrl, {
+      paymentId,
+      expiresAt: Date.now() + CACHE_TTL_MS,
+    });
   }
 
   private async post(path: string, body: Record<string, unknown>) {
