@@ -81,11 +81,11 @@ export default app;
 
 ## Bypass Payments
 
-All adapters support a `bypassPaymentIf` option to skip payment for certain requests:
+All adapters support a `bypassPaymentIf` option to skip payment for certain requests. This is useful if you want to let API key users access your endpoints for free while charging anonymous or agent-based callers via x402:
 
 ```typescript
 fixedPrice(sangria, { price: 0.01 }, {
-  bypassPaymentIf: (req) => req.headers["x-internal"] === "true",
+  bypassPaymentIf: (req) => !!req.headers["x-api-key"],
 });
 ```
 

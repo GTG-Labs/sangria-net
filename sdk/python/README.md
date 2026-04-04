@@ -33,14 +33,14 @@ async def premium(request: Request):
 
 ## Bypass Payments
 
-Skip payment for certain requests:
+Skip payment for certain requests. This is useful if you want to let API key users access your endpoints for free while charging anonymous or agent-based callers via x402:
 
 ```python
 @app.get("/premium")
 @require_sangria_payment(
     client,
     amount=Decimal("0.01"),
-    bypass_if=lambda req: req.headers.get("x-internal") == "true",
+    bypass_if=lambda req: req.headers.get("x-api-key") is not None,
 )
 async def premium(request: Request):
     return {"data": "premium content"}
