@@ -67,10 +67,12 @@ func setupRoutes(app *fiber.App, pool *pgxpool.Pool) {
 	app.Post("/v1/generate-payment", apiKeyMiddleware, merchantHandlers.GeneratePayment(pool))
 	app.Post("/v1/settle-payment", apiKeyMiddleware, merchantHandlers.SettlePayment(pool))
 
+	// Create merchant API key — any authenticated user can do this from the dashboard.
+	app.Post("/merchants", auth.WorkosAuthMiddleware, adminHandlers.CreateMerchantAPIKey(pool))
+
 	// === ADMIN ENDPOINTS === (WorkOS JWT + admin API key + admin role)
 	// Double-gated: requires a valid WorkOS JWT, the X-Admin-Key header
 	// matching ADMIN_API_KEY env var, AND role = "admin" in the database.
 	adminMiddleware := auth.RequireAdmin(pool)
-	app.Post("/merchants", auth.WorkosAuthMiddleware, adminMiddleware, adminHandlers.CreateMerchantAPIKey(pool))
 	app.Post("/wallets/pool", auth.WorkosAuthMiddleware, adminMiddleware, adminHandlers.CreateWalletPool(pool))
 }
