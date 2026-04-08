@@ -15,33 +15,31 @@ fi
 # Install dependencies
 echo "📦 Installing dependencies..."
 go mod download
-go mod tidy
 
 # Run different test suites
 echo "🧪 Running unit tests..."
-go test ./tests/unit/... -v -race -cover
+go test ../tests/backend/unit/... -v -race -coverprofile=coverage.out
 
 echo "🔌 Running integration tests..."
-go test ./tests/integration/... -v -timeout=60s
+go test ../tests/backend/integration/... -v -timeout=60s
 
 echo "🔒 Running security tests..."
-go test ./tests/security/... -v -timeout=30s
+go test ../tests/backend/security/... -v -timeout=30s
 
 echo "⚡ Running performance tests..."
-go test ./tests/performance/... -v -timeout=120s -short=false
+go test ../tests/backend/performance/... -v -timeout=120s -short=false
 
 echo "🌪️  Running chaos tests (if enabled)..."
 if [ "$CHAOS_TESTING" = "true" ]; then
-    go test ./tests/chaos/... -v -timeout=300s
+    go test ../tests/backend/chaos/... -v -timeout=300s
 else
     echo "Skipping chaos tests (set CHAOS_TESTING=true to enable)"
 fi
 
 echo "📊 Running benchmarks..."
-go test ./tests/performance/... -bench=. -benchmem
+go test ../tests/backend/performance/... -bench=. -benchmem
 
 echo "📝 Generating test coverage report..."
-go test ./... -coverprofile=coverage.out
 go tool cover -html=coverage.out -o coverage.html
 
 echo "✅ All backend tests completed!"

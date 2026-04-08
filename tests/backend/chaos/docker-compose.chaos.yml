@@ -33,6 +33,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    restart: always
     networks:
       - chaos-net
 
@@ -61,6 +62,7 @@ services:
     image: alpine
     command: |
       sh -c '
+        apk add --no-cache procps
         while true; do
           sleep $$((RANDOM % 120 + 30))  # Random 30-150 seconds
           echo "Killing database..."
@@ -68,7 +70,7 @@ services:
           sleep 10
         done
       '
-    network_mode: "service:postgres"
+    pid: "container:postgres"
     depends_on:
       - postgres
 
@@ -94,19 +96,20 @@ services:
 
   # Memory pressure simulator
   memory-chaos:
-    image: alpine
+    image: polinux/stress-ng:latest
     command: |
       sh -c '
         while true; do
           sleep $$((RANDOM % 300 + 120))  # Random 2-7 minutes
           echo "Creating memory pressure..."
-          dd if=/dev/zero of=/tmp/memload bs=1M count=512 2>/dev/null &
-          sleep 30
+          stress-ng --vm 1 --vm-bytes 80% --timeout 30s
           echo "Releasing memory pressure..."
-          rm -f /tmp/memload
-          killall dd 2>/dev/null || true
+          sleep 10
         done
       '
+    pid: "container:sangria-backend"
+    depends_on:
+      - sangria-backend
     networks:
       - chaos-net
 

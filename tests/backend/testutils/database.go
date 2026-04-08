@@ -21,7 +21,7 @@ type TestDatabase struct {
 }
 
 // SetupTestDatabase creates a PostgreSQL test container and returns a connection pool
-func SetupTestDatabase(t *testing.T) *TestDatabase {
+func SetupTestDatabase(t testing.TB) *TestDatabase {
 	t.Helper()
 
 	ctx := context.Background()
@@ -67,7 +67,7 @@ func SetupTestDatabase(t *testing.T) *TestDatabase {
 }
 
 // Cleanup closes the database connection and terminates the container
-func (td *TestDatabase) Cleanup(t *testing.T) {
+func (td *TestDatabase) Cleanup(t testing.TB) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -84,7 +84,7 @@ func (td *TestDatabase) Cleanup(t *testing.T) {
 }
 
 // CreateTestSchema creates the necessary database schema for tests
-func (td *TestDatabase) CreateTestSchema(t *testing.T) {
+func (td *TestDatabase) CreateTestSchema(t testing.TB) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -197,7 +197,7 @@ func (td *TestDatabase) InsertTestUser(t *testing.T, workosID, owner string) {
 }
 
 // SetupTestWalletAndAccount creates a test crypto wallet with associated account for payment tests
-func (td *TestDatabase) SetupTestWalletAndAccount(t *testing.T) {
+func (td *TestDatabase) SetupTestWalletAndAccount(t testing.TB) {
 	t.Helper()
 
 	ctx := context.Background()

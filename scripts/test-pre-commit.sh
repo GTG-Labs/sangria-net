@@ -2,7 +2,8 @@
 # Pre-Commit Testing Script
 # Use this before committing code
 
-set -e
+# Don't exit on error - we want to collect all test failures
+# set -e
 
 echo "🔍 Pre-Commit Tests - Comprehensive Validation"
 echo "=============================================="
@@ -63,40 +64,37 @@ run_comprehensive_tests() {
     # Backend tests
     if [[ $TEST_BACKEND == true ]]; then
         echo -e "${BLUE}🔧 Testing Backend...${NC}"
-        if cd backend && ./test.sh; then
+        if (cd backend && ./test.sh); then
             echo -e "${GREEN}✅ Backend tests passed${NC}"
         else
             failed_tests+=("Backend")
         fi
-        cd ..
     fi
 
     # TypeScript SDK tests
     if [[ $TEST_TS_SDK == true ]]; then
         echo -e "${BLUE}📦 Testing TypeScript SDK...${NC}"
-        if cd sdk/sdk-typescript && ./test.sh; then
+        if (cd sdk/sdk-typescript && ./test.sh); then
             echo -e "${GREEN}✅ TypeScript SDK tests passed${NC}"
         else
             failed_tests+=("TypeScript SDK")
         fi
-        cd ../..
     fi
 
     # Python SDK tests
     if [[ $TEST_PY_SDK == true ]]; then
         echo -e "${BLUE}🐍 Testing Python SDK...${NC}"
-        if cd sdk/python && ./test.sh; then
+        if (cd sdk/python && ./test.sh); then
             echo -e "${GREEN}✅ Python SDK tests passed${NC}"
         else
             failed_tests+=("Python SDK")
         fi
-        cd ../..
     fi
 
     # Integration tests (always run if any component changed)
     if [[ $TEST_BACKEND == true ]] || [[ $TEST_TS_SDK == true ]] || [[ $TEST_PY_SDK == true ]]; then
         echo -e "${BLUE}🔗 Testing Cross-Component Integration...${NC}"
-        if go test ./tests/e2e/... -v -timeout=300s; then
+        if (cd . && go test ./tests/e2e/... -v -timeout=300s); then
             echo -e "${GREEN}✅ Integration tests passed${NC}"
         else
             failed_tests+=("Integration")
@@ -121,7 +119,7 @@ generate_summary() {
     echo ""
     echo "📊 Test Summary"
     echo "==============="
-    echo "Backend Coverage: $(cd backend && go tool cover -func=coverage.out | tail -1 | awk '{print $3}' || echo 'N/A')"
+    echo "Backend Coverage: $((cd backend && go tool cover -func=coverage.out | tail -1 | awk '{print $3}') 2>/dev/null || echo 'N/A')"
     echo "TypeScript Coverage: Available in sdk/sdk-typescript/coverage/"
     echo "Python Coverage: Available in sdk/python/htmlcov/"
     echo ""

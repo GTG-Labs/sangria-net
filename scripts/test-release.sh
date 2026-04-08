@@ -2,7 +2,7 @@
 # Release Testing Script
 # Use this before major releases - includes chaos testing
 
-set -e
+set -euo pipefail
 
 echo "🚀 Release Testing - Full Validation with Chaos"
 echo "================================================"
@@ -34,6 +34,68 @@ error() {
 
 warn() {
     echo -e "${YELLOW}⚠️ $1${NC}"
+}
+
+# Wait for services to be healthy
+wait_for_services() {
+    local timeout=${1:-300}  # Default 5 minute timeout
+    local start_time=$(date +%s)
+    local compose_file="docker-compose.test.yml"
+
+    log "Waiting for services to become healthy (timeout: ${timeout}s)..."
+
+    while true; do
+        local current_time=$(date +%s)
+        local elapsed=$((current_time - start_time))
+
+        if [[ $elapsed -ge $timeout ]]; then
+            error "Timeout waiting for services to become healthy after ${timeout}s"
+            return 1
+        fi
+
+        # Check main test services
+        local unhealthy_services=()
+
+        # Get service health status using docker compose ps with health filter
+        if command -v docker-compose &> /dev/null; then
+            local compose_cmd="docker-compose"
+        else
+            local compose_cmd="docker compose"
+        fi
+
+        # Check each service with health check
+        for service in postgres-test redis mock-facilitator sangria-backend; do
+            local status=$(${compose_cmd} -f ${compose_file} ps -q ${service} | xargs -I {} docker inspect --format='{{.State.Health.Status}}' {} 2>/dev/null || echo "starting")
+
+            if [[ "$status" != "healthy" ]]; then
+                unhealthy_services+=("$service:$status")
+            fi
+        done
+
+        # Check chaos services if enabled
+        if [[ $ENABLE_CHAOS == true ]]; then
+            local chaos_compose_file="backend/tests/chaos/docker-compose.chaos.yml"
+            for service in postgres; do
+                local status=$(${compose_cmd} -f ${chaos_compose_file} ps -q ${service} | xargs -I {} docker inspect --format='{{.State.Health.Status}}' {} 2>/dev/null || echo "starting")
+
+                if [[ "$status" != "healthy" ]]; then
+                    unhealthy_services+=("chaos-$service:$status")
+                fi
+            done
+        fi
+
+        if [[ ${#unhealthy_services[@]} -eq 0 ]]; then
+            success "All services are healthy (${elapsed}s)"
+            return 0
+        fi
+
+        # Progress indicator every 15 seconds
+        if [[ $((elapsed % 15)) -eq 0 ]] && [[ $elapsed -gt 0 ]]; then
+            log "Still waiting... unhealthy: ${unhealthy_services[*]} (${elapsed}s elapsed)"
+        fi
+
+        sleep 2
+    done
 }
 
 # Pre-flight checks
@@ -84,8 +146,11 @@ setup_release_environment() {
         cd ../../..
     fi
 
-    log "Waiting for all services to be ready..."
-    sleep 45
+    # Wait for all services to be healthy instead of fixed sleep
+    if ! wait_for_services 300; then
+        error "Services failed to become healthy within timeout"
+        exit 1
+    fi
 
     success "Release environment ready"
 }
@@ -150,38 +215,35 @@ run_all_tests() {
 }
 
 run_unit_tests() {
-    cd backend && go test ./tests/unit/... -v -race -cover && cd .. &&
-    cd sdk/sdk-typescript && pnpm run test tests/unit/ && cd ../.. &&
-    cd sdk/python && source venv/bin/activate && pytest tests/unit/ -v && cd ../..
+    (cd backend && go test ./tests/unit/... -v -race -cover) &&
+    (cd sdk/sdk-typescript && pnpm run test tests/unit/) &&
+    (cd sdk/python && source venv/bin/activate && pytest tests/unit/ -v)
 }
 
 run_integration_tests() {
-    cd backend && go test ./tests/integration/... -v -timeout=120s && cd .. &&
-    cd sdk/sdk-typescript && pnpm run test tests/integration/ && cd ../.. &&
-    cd sdk/python && source venv/bin/activate && pytest tests/integration/ -v && cd ../.. &&
+    (cd backend && go test ./tests/integration/... -v -timeout=120s) &&
+    (cd sdk/sdk-typescript && pnpm run test tests/integration/) &&
+    (cd sdk/python && source venv/bin/activate && pytest tests/integration/ -v) &&
     go test ./tests/e2e/... -v -timeout=300s
 }
 
 run_security_tests() {
-    cd backend &&
-    gosec -fmt json -out gosec-report.json ./... &&
+    (cd backend &&
+    gosec -fmt sarif -out gosec-report.sarif ./... &&
     staticcheck ./... &&
-    go test ./tests/security/... -v &&
-    cd ..
+    go test ./tests/security/... -v)
 }
 
 run_performance_tests() {
-    cd backend &&
+    (cd backend &&
     go test ./tests/performance/... -v -timeout=300s &&
-    go test ./tests/performance/... -bench=. -benchmem | tee benchmark-results.txt &&
-    cd ..
+    go test ./tests/performance/... -bench=. -benchmem | tee benchmark-results.txt)
 }
 
 run_chaos_tests() {
     export CHAOS_TESTING=true
-    cd backend &&
-    go test ./tests/chaos/... -v -timeout=900s &&
-    cd ..
+    (cd backend &&
+    go test ./tests/chaos/... -v -timeout=900s)
 }
 
 # Generate comprehensive release report
@@ -209,7 +271,7 @@ generate_release_report() {
 | TypeScript SDK | ✅ PASS | [Report](../sdk/sdk-typescript/coverage/) | Framework adapters |
 | Python SDK | ✅ PASS | [Report](../sdk/python/htmlcov/) | FastAPI integration |
 | Integration | ✅ PASS | Cross-component | End-to-end flows |
-| Security | $([ -f backend/gosec-report.json ] && echo '✅ PASS' || echo '⏭️ SKIP') | [Report](../backend/gosec-report.json) | Vulnerability scan |
+| Security | $([ -f backend/gosec-report.sarif ] && echo '✅ PASS' || echo '⏭️ SKIP') | [Report](../backend/gosec-report.sarif) | Vulnerability scan |
 | Performance | $([ -f backend/benchmark-results.txt ] && echo '✅ PASS' || echo '⏭️ SKIP') | [Report](../backend/benchmark-results.txt) | Load & benchmarks |
 | Chaos | $([[ $ENABLE_CHAOS == true ]] && echo '✅ PASS' || echo '⏭️ SKIP') | Resilience testing | Failure injection |
 
@@ -219,7 +281,7 @@ $([ -f backend/benchmark-results.txt ] && echo '```' && tail -10 backend/benchma
 
 ## Security Findings
 
-$([ -f backend/gosec-report.json ] && echo 'Security scan completed. Review gosec-report.json for details.' || echo 'Security scan not run')
+$([ -f backend/gosec-report.sarif ] && echo 'Security scan completed. Review gosec-report.sarif for details.' || echo 'Security scan not run')
 
 ## Recommendations
 

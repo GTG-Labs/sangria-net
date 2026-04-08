@@ -38,6 +38,56 @@ warn() {
     echo -e "${YELLOW}⚠️  $1${NC}"
 }
 
+# Write test status to file
+write_test_status() {
+    local component="$1"
+    local status="$2"
+    echo "$status" > "$SCRIPT_DIR/test-results/${component}.status"
+}
+
+# Read test status from file with default
+read_test_status() {
+    local component="$1"
+    local default="${2:-NOT RUN}"
+    if [ -f "$SCRIPT_DIR/test-results/${component}.status" ]; then
+        cat "$SCRIPT_DIR/test-results/${component}.status"
+    else
+        echo "$default"
+    fi
+}
+
+# Wait for services to be healthy
+wait_for_services() {
+    local timeout=${1:-120}  # Default 2 minutes timeout
+    local interval=5
+    local elapsed=0
+
+    log "Waiting for services to be healthy (timeout: ${timeout}s)..."
+
+    while [ $elapsed -lt $timeout ]; do
+        # Check if all containers are healthy
+        local unhealthy_count=$(docker-compose -f "$SCRIPT_DIR/docker-compose.test.yml" ps --format json 2>/dev/null | \
+                              jq -r '.[] | select(.Health != "healthy" and .Health != "")' 2>/dev/null | wc -l || echo "0")
+
+        if [ "$unhealthy_count" -eq 0 ]; then
+            # Double-check by hitting the backend health endpoint directly
+            if curl -s -f http://localhost:8080/health >/dev/null 2>&1; then
+                success "All services are healthy!"
+                return 0
+            fi
+        fi
+
+        log "Services still starting... (${elapsed}s elapsed)"
+        sleep $interval
+        elapsed=$((elapsed + interval))
+    done
+
+    error "Services failed to become healthy within ${timeout}s"
+    # Show status for debugging
+    docker-compose -f "$SCRIPT_DIR/docker-compose.test.yml" ps
+    return 1
+}
+
 run_test_suite() {
     local name="$1"
     local command="$2"
@@ -76,6 +126,8 @@ setup_environment() {
 run_sdk_tests() {
     if [ "$SKIP_SDK_TESTS" = "true" ]; then
         warn "Skipping SDK tests (SKIP_SDK_TESTS=true)"
+        write_test_status "sdk_ts" "SKIPPED"
+        write_test_status "sdk_py" "SKIPPED"
         return 0
     fi
 
@@ -84,15 +136,19 @@ run_sdk_tests() {
     # TypeScript SDK tests
     if run_test_suite "TypeScript SDK Tests" "cd '$SCRIPT_DIR/sdk/sdk-typescript' && ./test.sh"; then
         success "TypeScript SDK tests passed"
+        write_test_status "sdk_ts" "PASSED"
     else
         failed_tests+=("TypeScript SDK")
+        write_test_status "sdk_ts" "FAILED"
     fi
 
     # Python SDK tests
     if run_test_suite "Python SDK Tests" "cd '$SCRIPT_DIR/sdk/python' && ./test.sh"; then
         success "Python SDK tests passed"
+        write_test_status "sdk_py" "PASSED"
     else
         failed_tests+=("Python SDK")
+        write_test_status "sdk_py" "FAILED"
     fi
 
     if [ ${#failed_tests[@]} -eq 0 ]; then
@@ -107,14 +163,26 @@ run_sdk_tests() {
 run_backend_tests() {
     if [ "$SKIP_BACKEND_TESTS" = "true" ]; then
         warn "Skipping backend tests (SKIP_BACKEND_TESTS=true)"
+        write_test_status "backend_unit" "SKIPPED"
+        write_test_status "backend_integration" "SKIPPED"
+        write_test_status "security" "SKIPPED"
+        write_test_status "performance" "SKIPPED"
         return 0
     fi
 
     if run_test_suite "Backend Go Tests" "cd '$SCRIPT_DIR/backend' && ./test.sh"; then
         success "Backend tests passed"
+        write_test_status "backend_unit" "PASSED"
+        write_test_status "backend_integration" "PASSED"
+        write_test_status "security" "PASSED"
+        write_test_status "performance" "PASSED"
         return 0
     else
         error "Backend tests failed"
+        write_test_status "backend_unit" "FAILED"
+        write_test_status "backend_integration" "FAILED"
+        write_test_status "security" "FAILED"
+        write_test_status "performance" "FAILED"
         return 1
     fi
 }
@@ -129,14 +197,16 @@ run_integration_tests() {
 
     # Start test infrastructure
     log "Starting test services..."
-    docker-compose -f docker-compose.test.yml up -d || {
+    docker-compose -f "$SCRIPT_DIR/docker-compose.test.yml" up -d || {
         error "Failed to start test infrastructure"
         return 1
     }
 
     # Wait for services to be ready
-    log "Waiting for services to be ready..."
-    sleep 30
+    if ! wait_for_services 120; then
+        error "Failed to start test infrastructure"
+        return 1
+    fi
 
     # Run integration tests
     local integration_failed=false
@@ -147,7 +217,7 @@ run_integration_tests() {
 
     # Cleanup
     log "Cleaning up test infrastructure..."
-    docker-compose -f docker-compose.test.yml down -v
+    docker-compose -f "$SCRIPT_DIR/docker-compose.test.yml" down -v
 
     if [ "$integration_failed" = "true" ]; then
         error "Integration tests failed"
@@ -161,6 +231,7 @@ run_integration_tests() {
 run_chaos_tests() {
     if [ "$SKIP_CHAOS_TESTS" = "true" ]; then
         warn "Skipping chaos tests (SKIP_CHAOS_TESTS=true)"
+        write_test_status "chaos" "SKIPPED"
         return 0
     fi
 
@@ -169,11 +240,13 @@ run_chaos_tests() {
 
     export CHAOS_TESTING=true
 
-    if run_test_suite "Chaos Engineering Tests" "cd '$SCRIPT_DIR/backend' && go test ./tests/chaos/... -v -timeout=900s"; then
+    if run_test_suite "Chaos Engineering Tests" "cd '$SCRIPT_DIR' && go test ./tests/backend/chaos/... -v -timeout=900s"; then
         success "Chaos tests passed - system is resilient!"
+        write_test_status "chaos" "PASSED"
         return 0
     else
         error "Chaos tests revealed stability issues"
+        write_test_status "chaos" "FAILED"
         return 1
     fi
 }
@@ -183,6 +256,33 @@ generate_test_report() {
     local total_duration=$((end_time - TEST_START_TIME))
 
     log "Generating comprehensive test report..."
+
+    # Read status from files
+    local sdk_ts_status=$(read_test_status "sdk_ts")
+    local sdk_py_status=$(read_test_status "sdk_py")
+    local backend_unit_status=$(read_test_status "backend_unit")
+    local backend_integration_status=$(read_test_status "backend_integration")
+    local security_status=$(read_test_status "security")
+    local performance_status=$(read_test_status "performance")
+    local chaos_status=$(read_test_status "chaos")
+
+    # Generate recommendations based on test results
+    local test_recommendations=""
+    if [[ "$sdk_ts_status" == "FAILED" ]] || [[ "$sdk_py_status" == "FAILED" ]]; then
+        test_recommendations+="- Fix SDK test failures before release\n"
+    fi
+    if [[ "$backend_unit_status" == "FAILED" ]] || [[ "$backend_integration_status" == "FAILED" ]]; then
+        test_recommendations+="- Address backend test issues\n"
+    fi
+    if [[ "$security_status" == "FAILED" ]]; then
+        test_recommendations+="- Critical: Fix security issues before deployment\n"
+    fi
+    if [[ "$chaos_status" == "FAILED" ]]; then
+        test_recommendations+="- Improve system resilience based on chaos test findings\n"
+    fi
+    if [[ -z "$test_recommendations" ]]; then
+        test_recommendations="All tests passed! System is ready for deployment."
+    fi
 
     cat > "$SCRIPT_DIR/test-results/summary.md" << EOF
 # Test Execution Summary

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
-	"math"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -126,44 +125,87 @@ func TestGeneratePayment(t *testing.T) {
 }
 
 func TestGeneratePaymentAmountConversion(t *testing.T) {
+	// Setup test database
+	testDB := testutils.SetupTestDatabase(t)
+	defer testDB.Cleanup(t)
+	testDB.CreateTestSchema(t)
+	testDB.SetupTestWalletAndAccount(t)
+
+	// Setup Fiber app
+	app := fiber.New()
+	app.Post("/v1/generate-payment", merchantHandlers.GeneratePayment(testDB.Pool))
+
 	tests := []struct {
 		name           string
 		inputAmount    float64
-		expectedMicro  int64
+		expectedMicro  string // Amount field in response is string
 		shouldSucceed  bool
 	}{
 		{
 			name:          "Small amount",
 			inputAmount:   0.01,
-			expectedMicro: 10000, // 0.01 * 1e6
+			expectedMicro: "10000", // 0.01 * 1e6
 			shouldSucceed: true,
 		},
 		{
 			name:          "One dollar",
 			inputAmount:   1.0,
-			expectedMicro: 1000000, // 1.0 * 1e6
+			expectedMicro: "1000000", // 1.0 * 1e6
 			shouldSucceed: true,
 		},
 		{
 			name:          "Large amount",
 			inputAmount:   1000000.0,
-			expectedMicro: 1000000000000, // 1M * 1e6
+			expectedMicro: "1000000000000", // 1M * 1e6
 			shouldSucceed: true,
 		},
 		{
 			name:          "Precision test",
 			inputAmount:   0.123456,
-			expectedMicro: 123456, // Should preserve 6 decimal places
+			expectedMicro: "123456", // Should preserve 6 decimal places
 			shouldSucceed: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// This tests the internal logic for amount conversion
-			// In the actual handler, this is done with: int64(math.Round(req.Amount * 1e6))
-			actualMicro := int64(math.Round(tt.inputAmount * 1e6))
-			assert.Equal(t, tt.expectedMicro, actualMicro)
+			// Test the actual handler conversion logic
+			requestBody := map[string]interface{}{
+				"amount":      tt.inputAmount,
+				"description": "Test conversion",
+				"resource":    "https://example.com/test",
+			}
+
+			body, err := json.Marshal(requestBody)
+			require.NoError(t, err)
+
+			req := httptest.NewRequest(http.MethodPost, "/v1/generate-payment", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, err := app.Test(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			// Verify response status
+			assert.Equal(t, 200, resp.StatusCode)
+
+			// Parse response and verify the converted amount
+			var response map[string]interface{}
+			err = json.NewDecoder(resp.Body).Decode(&response)
+			require.NoError(t, err)
+
+			// Extract the amount from accepts[0].amount
+			accepts, exists := response["accepts"].([]interface{})
+			require.True(t, exists, "Expected accepts field in response")
+			require.Greater(t, len(accepts), 0, "Expected at least one payment requirement")
+
+			paymentReq, ok := accepts[0].(map[string]interface{})
+			require.True(t, ok, "Expected payment requirement to be an object")
+
+			actualAmount, exists := paymentReq["amount"].(string)
+			require.True(t, exists, "Expected amount field in payment requirement")
+
+			assert.Equal(t, tt.expectedMicro, actualAmount)
 		})
 	}
 }
@@ -301,6 +343,9 @@ func TestSettlePayment(t *testing.T) {
 
 				// Set environment variable for facilitator URL
 				t.Setenv("X402_FACILITATOR_URL", mockServer.URL)
+			} else {
+				// For timeout tests, set X402_FACILITATOR_URL to a guaranteed-unreachable address
+				t.Setenv("X402_FACILITATOR_URL", "http://127.0.0.1:1") // Port 1 is reserved and unreachable
 			}
 
 			// Create request body

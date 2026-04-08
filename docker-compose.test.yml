@@ -34,7 +34,7 @@ services:
   mock-facilitator:
     image: python:3.11-alpine
     ports:
-      - "8080:8080"
+      - "8082:8082"
     environment:
       - PORT=8080
     working_dir: /app

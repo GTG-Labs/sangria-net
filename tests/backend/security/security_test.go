@@ -195,7 +195,11 @@ func TestInputValidationSecurity(t *testing.T) {
 				// For payment generation, XSS content is passed through as description data
 				// This is acceptable since it's just data storage, not HTML rendering
 				// The actual XSS prevention should happen at the frontend/rendering level
-				t.Logf("Response contains: %s", respContent[:200])
+				previewLen := 200
+				if len(respContent) < previewLen {
+					previewLen = len(respContent)
+				}
+				t.Logf("Response contains: %s", respContent[:previewLen])
 				resp.Body.Close()
 			})
 		}

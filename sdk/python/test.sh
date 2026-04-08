@@ -22,11 +22,11 @@ pip install -e ".[test,fastapi]"
 
 # Run unit tests
 echo "🧪 Running unit tests..."
-pytest tests/unit/ -v
+pytest ../../tests/sdk/python/unit/ -v
 
 # Run integration tests
 echo "🔌 Running integration tests..."
-pytest tests/integration/ -v
+pytest ../../tests/sdk/python/integration/ -v
 
 # Run all tests with coverage
 echo "📊 Running all tests with coverage..."

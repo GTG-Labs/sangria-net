@@ -2,7 +2,7 @@ package performance
 
 import (
 	"bytes"
-	"encoding/json"
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -29,6 +29,7 @@ func TestPerformanceAndLoad(t *testing.T) {
 	testDB := testutils.SetupTestDatabase(t)
 	defer testDB.Cleanup(t)
 	testDB.CreateTestSchema(t)
+	testDB.SetupTestWalletAndAccount(t) // Seed wallet for "base" network so GeneratePayment can succeed
 
 	app := fiber.New()
 	app.Post("/v1/generate-payment", merchantHandlers.GeneratePayment(testDB.Pool))
@@ -99,10 +100,7 @@ func testConcurrentRequestHandling(t *testing.T, app *fiber.App) {
 		totalLatency int64
 	)
 
-	server := httptest.NewServer(app)
-	defer server.Close()
-
-	client := &http.Client{Timeout: 10 * time.Second}
+	// No need for httptest.NewServer with Fiber - use app.Test() directly
 
 	start := time.Now()
 	var wg sync.WaitGroup
@@ -121,15 +119,10 @@ func testConcurrentRequestHandling(t *testing.T, app *fiber.App) {
 					"description": "concurrent test"
 				}`, workerID, j)
 
-				req, err := http.NewRequest(http.MethodPost, server.URL+"/v1/generate-payment", strings.NewReader(body))
-				if err != nil {
-					atomic.AddInt64(&errorCount, 1)
-					continue
-				}
-
+				req := httptest.NewRequest(http.MethodPost, "/v1/generate-payment", strings.NewReader(body))
 				req.Header.Set("Content-Type", "application/json")
 
-				resp, err := client.Do(req)
+				resp, err := app.Test(req)
 				if err != nil {
 					atomic.AddInt64(&errorCount, 1)
 					continue
@@ -186,10 +179,7 @@ func testMemoryUsageUnderLoad(t *testing.T, app *fiber.App) {
 	var initialStats, finalStats runtime.MemStats
 	runtime.ReadMemStats(&initialStats)
 
-	server := httptest.NewServer(app)
-	defer server.Close()
-
-	client := &http.Client{Timeout: 5 * time.Second}
+	// No need for httptest.NewServer with Fiber - use app.Test() directly
 
 	// Generate load
 	const requests = 1000
@@ -200,14 +190,10 @@ func testMemoryUsageUnderLoad(t *testing.T, app *fiber.App) {
 			"description": "memory test"
 		}`, i)
 
-		req, err := http.NewRequest(http.MethodPost, server.URL+"/v1/generate-payment", strings.NewReader(body))
-		if err != nil {
-			continue
-		}
-
+		req := httptest.NewRequest(http.MethodPost, "/v1/generate-payment", strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 
-		resp, err := client.Do(req)
+		resp, err := app.Test(req)
 		if err != nil {
 			continue
 		}
@@ -217,7 +203,13 @@ func testMemoryUsageUnderLoad(t *testing.T, app *fiber.App) {
 	runtime.GC() // Force garbage collection
 	runtime.ReadMemStats(&finalStats)
 
-	memoryIncrease := finalStats.Alloc - initialStats.Alloc
+	// Guard against uint64 underflow when computing memory increase
+	var memoryIncrease uint64
+	if finalStats.Alloc >= initialStats.Alloc {
+		memoryIncrease = finalStats.Alloc - initialStats.Alloc
+	} else {
+		memoryIncrease = 0
+	}
 	t.Logf("Memory increase after %d requests: %d bytes (%.2f MB)",
 		requests, memoryIncrease, float64(memoryIncrease)/1024/1024)
 
@@ -233,10 +225,7 @@ func testDatabaseConnectionPooling(t *testing.T, app *fiber.App, testDB *testuti
 		requests    = 10
 	)
 
-	server := httptest.NewServer(app)
-	defer server.Close()
-
-	client := &http.Client{Timeout: 5 * time.Second}
+	// No need for httptest.NewServer with Fiber - use app.Test() directly
 
 	var wg sync.WaitGroup
 	var connectionErrors int64
@@ -253,15 +242,10 @@ func testDatabaseConnectionPooling(t *testing.T, app *fiber.App, testDB *testuti
 					"description": "connection pool test"
 				}`, workerID, j)
 
-				req, err := http.NewRequest(http.MethodPost, server.URL+"/v1/generate-payment", strings.NewReader(body))
-				if err != nil {
-					atomic.AddInt64(&connectionErrors, 1)
-					continue
-				}
-
+				req := httptest.NewRequest(http.MethodPost, "/v1/generate-payment", strings.NewReader(body))
 				req.Header.Set("Content-Type", "application/json")
 
-				resp, err := client.Do(req)
+				resp, err := app.Test(req)
 				if err != nil {
 					if strings.Contains(err.Error(), "connection") {
 						atomic.AddInt64(&connectionErrors, 1)
@@ -304,10 +288,7 @@ func testThroughputMeasurement(t *testing.T, app *fiber.App) {
 }
 
 func measureThroughput(t *testing.T, app *fiber.App, duration time.Duration) {
-	server := httptest.NewServer(app)
-	defer server.Close()
-
-	client := &http.Client{Timeout: 5 * time.Second}
+	// No need for httptest.NewServer with Fiber - use app.Test() directly
 
 	var (
 		requestCount int64
@@ -315,7 +296,8 @@ func measureThroughput(t *testing.T, app *fiber.App, duration time.Duration) {
 	)
 
 	start := time.Now()
-	stop := time.After(duration)
+	ctx, cancel := context.WithTimeout(context.Background(), duration)
+	defer cancel()
 
 	const workers = 10
 	var wg sync.WaitGroup
@@ -328,7 +310,7 @@ func measureThroughput(t *testing.T, app *fiber.App, duration time.Duration) {
 			requestID := 0
 			for {
 				select {
-				case <-stop:
+				case <-ctx.Done():
 					return
 				default:
 					body := fmt.Sprintf(`{
@@ -337,15 +319,10 @@ func measureThroughput(t *testing.T, app *fiber.App, duration time.Duration) {
 						"description": "throughput test"
 					}`, workerID, requestID)
 
-					req, err := http.NewRequest(http.MethodPost, server.URL+"/v1/generate-payment", strings.NewReader(body))
-					if err != nil {
-						atomic.AddInt64(&errorCount, 1)
-						continue
-					}
-
+					req := httptest.NewRequest(http.MethodPost, "/v1/generate-payment", strings.NewReader(body))
 					req.Header.Set("Content-Type", "application/json")
 
-					resp, err := client.Do(req)
+					resp, err := app.Test(req)
 					if err != nil {
 						atomic.AddInt64(&errorCount, 1)
 						continue
@@ -381,10 +358,7 @@ func testResourceCleanup(t *testing.T, app *fiber.App) {
 	runtime.GC()
 	runtime.ReadMemStats(&initialStats)
 
-	server := httptest.NewServer(app)
-	defer server.Close()
-
-	client := &http.Client{Timeout: 5 * time.Second}
+	// No need for httptest.NewServer with Fiber - use app.Test() directly
 
 	// Create and complete many requests
 	for i := 0; i < 500; i++ {
@@ -394,14 +368,10 @@ func testResourceCleanup(t *testing.T, app *fiber.App) {
 			"description": "resource cleanup test"
 		}`, i)
 
-		req, err := http.NewRequest(http.MethodPost, server.URL+"/v1/generate-payment", strings.NewReader(body))
-		if err != nil {
-			continue
-		}
-
+		req := httptest.NewRequest(http.MethodPost, "/v1/generate-payment", strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 
-		resp, err := client.Do(req)
+		resp, err := app.Test(req)
 		if err != nil {
 			continue
 		}
@@ -431,31 +401,4 @@ func testResourceCleanup(t *testing.T, app *fiber.App) {
 	// Assert resource cleanup
 	goroutineLeak := finalGoroutines - initialGoroutines
 	assert.Less(t, goroutineLeak, 10, "Should not leak more than 10 goroutines")
-}
-
-func BenchmarkPaymentGeneration(b *testing.B) {
-	testDB := testutils.SetupTestDatabase(&testing.T{})
-	defer testDB.Cleanup(&testing.T{})
-	testDB.CreateTestSchema(&testing.T{})
-
-	app := fiber.New()
-	app.Post("/v1/generate-payment", merchantHandlers.GeneratePayment(testDB.Pool))
-
-	body := `{"amount": 0.01, "resource": "benchmark-test", "description": "benchmark test"}`
-
-	b.ResetTimer()
-	b.ReportAllocs()
-
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			req := httptest.NewRequest(http.MethodPost, "/v1/generate-payment", strings.NewReader(body))
-			req.Header.Set("Content-Type", "application/json")
-
-			resp, err := app.Test(req)
-			if err != nil {
-				b.Fatal(err)
-			}
-			resp.Body.Close()
-		}
-	})
 }

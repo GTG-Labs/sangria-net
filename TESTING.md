@@ -2,7 +2,31 @@
 
 **Technical documentation for the complete testing infrastructure, architecture, and implementation details.**
 
-> 📖 **For quick daily usage**: See [QUICK_TESTING_GUIDE.md](QUICK_TESTING_GUIDE.md)
+## Quick Start
+
+**Fast Development Tests** (2-3 minutes):
+```bash
+./scripts/test-dev.sh
+```
+
+**Manual Component Testing**:
+```bash
+# Backend Go tests
+cd backend && go test ../tests/backend/unit/... -v
+
+# TypeScript SDK tests
+cd sdk/sdk-typescript && pnpm exec vitest run ../../tests/sdk/typescript/
+
+# Python SDK tests
+cd sdk/python && pytest ../../tests/sdk/python/ -v
+```
+
+**Comprehensive Pre-Commit** (8-12 minutes):
+```bash
+./scripts/test-pre-commit.sh
+```
+
+> 📖 **For quick daily usage**: Use commands above
 > 📋 **For implementation details**: Continue reading below
 
 ---
@@ -32,11 +56,12 @@ Standard Tests (Lower Priority)
 
 | Component | Language | Test Framework | Test Location | Focus Areas |
 |-----------|----------|---------------|---------------|-------------|
-| **Backend API** | Go | `testing` + `testify` | `backend/tests/` | Payment orchestration, DB ops |
-| **TypeScript SDK** | TypeScript | `vitest` | `sdk/sdk-typescript/tests/` | Framework adapters, HTTP client |
-| **Python SDK** | Python | `pytest` | `sdk/python/tests/` | FastAPI integration, async patterns |
-| **Integration** | Multi-lang | Custom harness | `playground/e2e_test/` | Cross-component flows |
-| **Chaos** | Docker + Scripts | `toxiproxy` + `stress` | Scripts + containers | Failure injection |
+| **Backend API** | Go | `testing` + `testify` | `tests/backend/` | Payment orchestration, DB ops |
+| **TypeScript SDK** | TypeScript | `vitest` | `tests/sdk/typescript/` | Framework adapters, HTTP client |
+| **Python SDK** | Python | `pytest` | `tests/sdk/python/` | FastAPI integration, async patterns |
+| **End-to-End Tests** | Mixed | Custom harness | `tests/e2e/` | Cross-component flows |
+| **Shared Test Infrastructure** | Mixed | Custom | `tests/helpers/` | Fixtures, mocks, utilities |
+| **Chaos Tests** | Docker + Scripts | `toxiproxy` + `stress` | `tests/backend/chaos/` | Failure injection |
 
 ---
 
@@ -123,9 +148,9 @@ fi
 
 #### **Backend Unit Tests (Go)**
 ```bash
-# Location: backend/tests/unit/
+# Location: tests/backend/unit/
 # Framework: Go testing + testify
-# Execution: go test -race -cover ./...
+# Execution: cd backend && go test ../tests/backend/unit/... -v
 
 # Example test structure:
 func TestPaymentGeneration(t *testing.T) {
@@ -156,9 +181,9 @@ func TestPaymentGeneration(t *testing.T) {
 
 #### **TypeScript SDK Unit Tests (Vitest)**
 ```typescript
-// Location: sdk/sdk-typescript/tests/unit/
+// Location: tests/sdk/typescript/unit/
 // Framework: Vitest + supertest
-// Execution: npm run test
+// Execution: cd sdk/sdk-typescript && pnpm exec vitest run ../../tests/sdk/typescript/unit/
 
 // Example test structure:
 describe('SangriaNet Core', () => {
@@ -189,9 +214,9 @@ describe('SangriaNet Core', () => {
 
 #### **Python SDK Unit Tests (pytest)**
 ```python
-# Location: sdk/python/tests/unit/
+# Location: tests/sdk/python/unit/
 # Framework: pytest + respx
-# Execution: pytest tests/unit/
+# Execution: cd sdk/python && pytest ../../tests/sdk/python/unit/
 
 import pytest
 import respx
@@ -224,7 +249,7 @@ class TestSangriaMerchantClient:
 
 #### **SDK-to-Backend Integration**
 ```typescript
-// Location: sdk/sdk-typescript/tests/integration/
+// Location: tests/sdk/typescript/integration/
 // Tests cross-service communication with real backend
 
 describe('SDK-Backend Integration', () => {
@@ -268,6 +293,7 @@ describe('SDK-Backend Integration', () => {
 
 #### **Database Connection Chaos**
 ```bash
+# Located in: tests/backend/chaos/
 # test-release.sh chaos implementation
 
 # Setup database proxy for failure injection
@@ -305,7 +331,7 @@ done
 
 #### **Concurrent Payment Stress Testing**
 ```go
-// backend/tests/chaos/concurrent_payments_test.go
+// tests/backend/chaos/concurrent_payments_test.go
 func TestConcurrentPaymentStress(t *testing.T) {
     const (
         walletCount = 100
@@ -405,7 +431,7 @@ describe('EIP-712 Security Validation', () => {
 
 ### **API Security Testing**
 ```go
-// backend/tests/security/api_security_test.go
+// tests/backend/security/api_security_test.go
 func TestAPISecurityValidation(t *testing.T) {
     tests := []struct {
         name           string
@@ -460,7 +486,7 @@ func TestAPISecurityValidation(t *testing.T) {
 
 ### **Load Testing Implementation**
 ```javascript
-// backend/tests/performance/payment_load_test.js (K6)
+// tests/backend/performance/payment_load_test.js (K6)
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 
@@ -525,7 +551,7 @@ export default function() {
 
 ### **Go Benchmarking**
 ```go
-// backend/tests/performance/payment_bench_test.go
+// tests/backend/performance/payment_bench_test.go
 func BenchmarkPaymentGeneration(b *testing.B) {
     // Setup test database and dependencies
     db := setupTestDB(b)
@@ -682,23 +708,65 @@ jobs:
 
 ## Test Data Management
 
-### **Fixture Organization**
+### **Shared Test Infrastructure**
+
+#### **Centralized Test Directory Structure**
 ```
-tests/
-├── fixtures/
-│   ├── payments.json          # Test payment data
-│   ├── wallets.json           # Test wallet configurations
-│   ├── api-keys.json          # Test API key fixtures
-│   └── eip712-signatures.json # Pre-computed signatures
-├── mocks/
-│   ├── facilitator-responses/ # Mock CDP facilitator data
-│   ├── database-states/       # Database state snapshots
-│   └── network-scenarios/     # Network failure scenarios
-└── helpers/
-    ├── test-setup.go          # Test environment setup
-    ├── assertions.ts          # Custom test assertions
-    └── factories.py           # Test data factories
+tests/                         # All tests in one place (NEW!)
+├── backend/                   # Go backend tests
+│   ├── unit/                  # Backend unit tests
+│   ├── integration/           # Backend integration tests
+│   ├── security/              # Security-specific tests
+│   ├── performance/           # Performance benchmarks
+│   ├── chaos/                 # Chaos engineering tests
+│   └── testutils/             # Go test utilities
+├── sdk/                       # SDK tests
+│   ├── python/                # Python SDK tests
+│   │   ├── unit/              # Python unit tests
+│   │   └── integration/       # Python integration tests
+│   └── typescript/            # TypeScript SDK tests
+│       ├── unit/              # TypeScript unit tests
+│       └── integration/       # TypeScript integration tests
+├── e2e/                       # End-to-end integration tests
+├── helpers/                   # Shared test utilities
+│   ├── test-setup.go          # Go test environment setup
+│   ├── assertions.ts          # TypeScript custom assertions
+│   └── factories.py           # Python test data factories
+├── fixtures/                  # Static test data
+│   ├── payments.json          # Payment test cases
+│   ├── wallets.json           # Wallet configurations
+│   ├── api-keys.json          # API key test data
+│   └── eip712-signatures.json # EIP-712 signature examples
+└── mocks/                     # Mock responses
+    ├── facilitator-responses/ # Mock CDP facilitator responses
+    ├── database-states/       # Database snapshot data
+    └── network-scenarios/     # Network failure scenarios
 ```
+
+#### **Shared Test Infrastructure Usage**
+
+**Fixtures**: Static test data used across all components
+```bash
+# Load payment test cases from centralized location
+tests/fixtures/payments.json    # Valid/invalid payment scenarios
+tests/fixtures/wallets.json     # Test wallet configurations
+tests/fixtures/api-keys.json    # API key test data
+tests/fixtures/eip712-signatures.json # EIP-712 signature examples
+```
+
+**Helpers**: Reusable test utilities
+```bash
+tests/helpers/test-setup.go     # Database setup for Go tests
+tests/helpers/assertions.ts     # Custom assertions for TS tests
+tests/helpers/factories.py      # Test data generators for Python
+```
+
+**Benefits of Centralized Structure:**
+- Single source of truth for all tests
+- Easier to find and maintain test files
+- Better organization and consistency
+- Simplified CI/CD pipeline configuration
+- Reduced duplication of test utilities
 
 ### **Test Data Factories**
 ```python
@@ -772,26 +840,32 @@ export SKIP_MEMORY_TESTS=true
 
 #### **Go Test Debugging**
 ```bash
-# Run with verbose output
-go test -v ./backend/tests/...
+# Run all backend tests
+cd backend && go test ./tests/... -v
 
-# Run specific test with race detection
-go test -race -run TestPaymentGeneration ./backend/tests/unit/
+# Run specific test category with race detection
+cd backend && go test -race -short ./tests/unit -v
+
+# Run performance benchmarks
+cd backend && go test -bench=. ./tests/performance -v
 
 # Generate CPU profile for performance debugging
-go test -cpuprofile=cpu.prof -bench=. ./backend/tests/performance/
+cd backend && go test -cpuprofile=cpu.prof -bench=. ./tests/performance/
 ```
 
 #### **TypeScript Test Debugging**
 ```bash
 # Run with debug output
-npm run test -- --reporter=verbose
+cd sdk/sdk-typescript && pnpm exec vitest run --reporter=verbose
 
 # Run specific test file
-npm run test -- tests/unit/core.test.ts
+cd sdk/sdk-typescript && pnpm exec vitest run tests/unit/core.test.ts
+
+# Run tests in watch mode for development
+cd sdk/sdk-typescript && pnpm exec vitest
 
 # Debug with Node.js inspector
-npm run test -- --inspect-brk tests/unit/core.test.ts
+cd sdk/sdk-typescript && pnpm exec vitest run --inspect-brk tests/unit/core.test.ts
 ```
 
 #### **Python Test Debugging**

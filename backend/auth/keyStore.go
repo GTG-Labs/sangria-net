@@ -193,13 +193,20 @@ func authenticateNewFormatKey(ctx context.Context, pool *pgxpool.Pool, providedK
 }
 
 // authenticateLegacyKey handles simple API keys for testing (from merchant_keys table)
+// Note: plaintext api_key storage is legacy/test-only - production should use hashed keys
 func authenticateLegacyKey(ctx context.Context, pool *pgxpool.Pool, providedKey string) (*dbengine.Merchant, error) {
-	// Query merchant_keys table for legacy format
+	// Hash the provided key to compare against stored hashes
+	hashedProvidedKey, err := HashAPIKey(providedKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to hash provided key: %w", err)
+	}
+
+	// Query merchant_keys table for legacy format - select both plaintext and hash columns
 	rows, err := pool.Query(ctx,
-		`SELECT mk.user_id, mk.api_key, mk.name, mk.created_at
+		`SELECT mk.user_id, mk.api_key, mk.api_key_hash, mk.name, mk.created_at
 		 FROM merchant_keys mk
 		 WHERE mk.api_key = $1 OR mk.api_key_hash = $2`,
-		providedKey, fmt.Sprintf("hash_%s", providedKey))
+		providedKey, hashedProvidedKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query merchant_keys for authentication: %w", err)
 	}
@@ -208,14 +215,14 @@ func authenticateLegacyKey(ctx context.Context, pool *pgxpool.Pool, providedKey 
 	for rows.Next() {
 		var merchant dbengine.Merchant
 		err := rows.Scan(
-			&merchant.UserID, &merchant.APIKey, &merchant.Name, &merchant.CreatedAt,
+			&merchant.UserID, &merchant.APIKey, &merchant.APIKeyHash, &merchant.Name, &merchant.CreatedAt,
 		)
 		if err != nil {
-			continue
+			return nil, fmt.Errorf("failed to scan merchant row: %w", err)
 		}
 
-		// For legacy keys, we accept either direct match or hash match
-		if merchant.APIKey == providedKey || fmt.Sprintf("hash_%s", providedKey) == merchant.APIKey {
+		// For legacy keys, check both plaintext match (legacy/test) and proper hash verification
+		if merchant.APIKey == providedKey || VerifyAPIKey(providedKey, merchant.APIKeyHash) {
 			// Set some default values for compatibility
 			merchant.ID = "legacy-merchant-id"
 			merchant.KeyID = "legacy"

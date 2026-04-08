@@ -30,6 +30,17 @@ warn() {
     echo -e "${YELLOW}⚠️ $1${NC}"
 }
 
+# Detect Docker Compose command - prefer v2 plugin
+detect_docker_compose() {
+    if docker compose version &> /dev/null; then
+        DOCKER_COMPOSE_CMD="docker compose"
+    elif command -v docker-compose &> /dev/null; then
+        DOCKER_COMPOSE_CMD="docker-compose"
+    else
+        DOCKER_COMPOSE_CMD=""
+    fi
+}
+
 # Check and install prerequisites
 check_prerequisites() {
     log "Checking prerequisites..."
@@ -44,12 +55,13 @@ check_prerequisites() {
         echo "  → Docker: $(docker --version)"
     fi
 
-    # Check Docker Compose
-    if ! command -v docker-compose &> /dev/null; then
+    # Check Docker Compose (v2 plugin or standalone)
+    detect_docker_compose
+    if [ -z "$DOCKER_COMPOSE_CMD" ]; then
         missing+=("Docker Compose")
         echo "  → Docker Compose: Not installed"
     else
-        echo "  → Docker Compose: $(docker-compose --version)"
+        echo "  → Docker Compose: $($DOCKER_COMPOSE_CMD --version) [using: $DOCKER_COMPOSE_CMD]"
     fi
 
     # Check Go
@@ -80,9 +92,10 @@ check_prerequisites() {
     if ! command -v python3 &> /dev/null && ! command -v python &> /dev/null; then
         missing+=("Python")
         echo "  → Python: Not installed"
+        PYTHON_CMD=""
     else
-        local python_cmd=$(command -v python3 || command -v python)
-        echo "  → Python: $($python_cmd --version)"
+        PYTHON_CMD=$(command -v python3 || command -v python)
+        echo "  → Python: $($PYTHON_CMD --version) [using: $PYTHON_CMD]"
     fi
 
     if [ ${#missing[@]} -gt 0 ]; then
@@ -97,7 +110,8 @@ check_prerequisites() {
                     echo "🐳 Docker: https://www.docker.com/products/docker-desktop/"
                     ;;
                 "Docker Compose")
-                    echo "🔗 Docker Compose: Included with Docker Desktop"
+                    echo "🔗 Docker Compose: Included with Docker Desktop (v2 plugin)"
+                    echo "   Or install standalone: https://docs.docker.com/compose/install/"
                     ;;
                 "Go")
                     echo "🐹 Go: https://golang.org/dl/"
@@ -156,7 +170,7 @@ setup_dependencies() {
 
     # Create virtual environment if it doesn't exist
     if [ ! -d "venv" ]; then
-        python3 -m venv venv
+        "$PYTHON_CMD" -m venv venv
     fi
 
     # Activate and install dependencies
@@ -205,7 +219,7 @@ test_docker_setup() {
 
     # Test Docker Compose with a simple service
     echo "🐳 Testing Docker Compose..."
-    docker-compose -f docker-compose.test.yml config &> /dev/null
+    $DOCKER_COMPOSE_CMD -f docker-compose.test.yml config &> /dev/null
 
     # Test pulling required images
     echo "📥 Pulling required Docker images..."
@@ -248,7 +262,7 @@ run_smoke_test() {
     echo "🔧 Testing Python SDK import..."
     cd sdk/python
     source venv/bin/activate
-    if python -c "import sangria_sdk; print('Python SDK imports successfully')"; then
+    if "$PYTHON_CMD" -c "import sangria_sdk; print('Python SDK imports successfully')"; then
         echo "  → Python SDK imports successfully"
     else
         error "Python SDK import failed"
@@ -266,7 +280,7 @@ create_aliases() {
 
     log "Creating helpful aliases..."
 
-    cat > "$alias_file" << 'EOF'
+    cat > "$alias_file" << EOF
 # Sangria.NET Testing Aliases
 # Add this to your shell profile (.bashrc, .zshrc, etc.)
 
@@ -285,9 +299,9 @@ alias st-ts='cd sdk/sdk-typescript && ./test.sh && cd ../..'
 alias st-py='cd sdk/python && ./test.sh && cd ../..'
 
 # Quick Docker commands
-alias st-up='docker-compose -f docker-compose.test.yml up -d'
-alias st-down='docker-compose -f docker-compose.test.yml down -v'
-alias st-logs='docker-compose -f docker-compose.test.yml logs -f'
+alias st-up='$DOCKER_COMPOSE_CMD -f docker-compose.test.yml up -d'
+alias st-down='$DOCKER_COMPOSE_CMD -f docker-compose.test.yml down -v'
+alias st-logs='$DOCKER_COMPOSE_CMD -f docker-compose.test.yml logs -f'
 
 # Coverage reports
 alias st-coverage='open backend/coverage.html && open sdk/sdk-typescript/coverage/index.html && open sdk/python/htmlcov/index.html'
@@ -325,8 +339,8 @@ show_usage_instructions() {
     echo "   open sdk/python/htmlcov/index.html"
     echo ""
     echo "🐳 Docker Commands:"
-    echo "   docker-compose -f docker-compose.test.yml up -d    # Start services"
-    echo "   docker-compose -f docker-compose.test.yml down -v  # Stop services"
+    echo "   $DOCKER_COMPOSE_CMD -f docker-compose.test.yml up -d    # Start services"
+    echo "   $DOCKER_COMPOSE_CMD -f docker-compose.test.yml down -v  # Stop services"
     echo ""
     echo "📚 Documentation:"
     echo "   Read TESTING.md for detailed information"

@@ -84,6 +84,18 @@ func testDatabaseFailureResilience(t *testing.T, baseURL string) {
 func testFacilitatorFailureResilience(t *testing.T, baseURL string) {
 	client := &http.Client{Timeout: 15 * time.Second}
 
+	// Test normal operation first
+	err := makePaymentRequest(client, baseURL)
+	require.NoError(t, err, "Baseline payment request should succeed")
+
+	// Inject facilitator failure
+	err = injectFacilitatorFailure()
+	if err != nil {
+		t.Logf("Failed to inject facilitator failure: %v", err)
+		return
+	}
+	defer healFacilitatorFailure()
+
 	// Test with facilitator failures
 	failureCount := 0
 	successCount := 0
@@ -100,12 +112,25 @@ func testFacilitatorFailureResilience(t *testing.T, baseURL string) {
 
 	t.Logf("Facilitator failure test: %d successes, %d failures", successCount, failureCount)
 
-	// System should handle some failures gracefully
-	assert.Greater(t, successCount, 0, "Some payments should succeed despite facilitator issues")
+	// During facilitator failures, most requests should fail
+	assert.Greater(t, failureCount, 0, "Some payments should fail due to facilitator issues")
 
-	// Failure rate should be reasonable (not 100% failures)
+	// Failure rate should be high when facilitator is down
 	failureRate := float64(failureCount) / float64(failureCount + successCount)
-	assert.Less(t, failureRate, 0.8, "Failure rate should be less than 80%")
+	assert.Greater(t, failureRate, 0.5, "Failure rate should be greater than 50% when facilitator is down")
+
+	// Heal facilitator failure and test recovery
+	err = healFacilitatorFailure()
+	if err != nil {
+		t.Logf("Failed to heal facilitator failure: %v", err)
+	}
+
+	// Wait for recovery
+	time.Sleep(5 * time.Second)
+
+	// System should recover after healing
+	err = makePaymentRequest(client, baseURL)
+	assert.NoError(t, err, "System should recover after facilitator healing")
 }
 
 func testNetworkPartitionResilience(t *testing.T, baseURL string) {
@@ -117,6 +142,7 @@ func testNetworkPartitionResilience(t *testing.T, baseURL string) {
 		t.Logf("Failed to inject network partition: %v", err)
 		return
 	}
+	defer healNetworkPartition()
 
 	// Wait for partition to take effect
 	time.Sleep(2 * time.Second)
@@ -125,8 +151,7 @@ func testNetworkPartitionResilience(t *testing.T, baseURL string) {
 	err = makePaymentRequest(client, baseURL)
 	t.Logf("Payment during network partition: %v", err)
 
-	// Heal partition
-	healNetworkPartition()
+	// Wait before healing (defer will handle the cleanup)
 	time.Sleep(2 * time.Second)
 
 	// System should recover
@@ -283,6 +308,54 @@ func healNetworkPartition() error {
 
 	req, err := http.NewRequest(http.MethodDelete,
 		"http://localhost:8474/proxies/facilitator/toxics/network_partition", nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	return nil
+}
+
+func injectFacilitatorFailure() error {
+	client := &http.Client{Timeout: 5 * time.Second}
+
+	// Create toxic for facilitator connection to simulate failures
+	req, err := http.NewRequest(http.MethodPost,
+		"http://localhost:8474/proxies/facilitator/toxics",
+		strings.NewReader(`{
+			"name": "facilitator_down",
+			"type": "down",
+			"attributes": {}
+		}`))
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("Failed to inject facilitator failure: HTTP %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
+func healFacilitatorFailure() error {
+	client := &http.Client{Timeout: 5 * time.Second}
+
+	req, err := http.NewRequest(http.MethodDelete,
+		"http://localhost:8474/proxies/facilitator/toxics/facilitator_down", nil)
 	if err != nil {
 		return err
 	}
