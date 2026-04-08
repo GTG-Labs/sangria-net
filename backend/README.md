@@ -108,7 +108,6 @@ backend/
 │   ├── merchants.go               # Merchant DB operations
 │   ├── cards.go                   # Card DB operations
 │   ├── cryptoWallets.go           # Wallet pool operations (LRU)
-│   ├── payments.go                # Payment operations
 │   ├── transaction.go             # Double-entry ledger (InsertTransaction, validateZeroNet)
 │   ├── users.go                   # User CRUD
 │   └── queries.go                 # Generic ledger queries

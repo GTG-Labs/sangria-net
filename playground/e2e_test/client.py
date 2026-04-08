@@ -3,7 +3,7 @@ Test client that pays for resources using the x402 SDK.
 
 Usage:
   cd playground
-  uv run python -m sangria.client --buyer-address 0x...
+  MERCHANT_URL=http://localhost:4004 uv run python -m e2e_test.client --buyer-address 0x...
 """
 
 import argparse

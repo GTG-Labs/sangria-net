@@ -57,13 +57,13 @@ cd playground/merchant-fastapi
 SANGRIA_URL=http://localhost:8080 SANGRIA_SECRET_KEY="sg_test_xxx" uv run python src/main.py
 
 # Express (Node.js)
-cd playground/merchant-express && MERCHANT_API_KEY="sg_test_xxx" npm start
+cd playground/merchant-express && SANGRIA_SECRET_KEY="sg_test_xxx" bun dev
 
 # Fastify (Node.js)
-cd playground/merchant-fastify && MERCHANT_API_KEY="sg_test_xxx" npm start
+cd playground/merchant-fastify && SANGRIA_SECRET_KEY="sg_test_xxx" bun dev
 
 # Hono (Node.js)
-cd playground/merchant-hono && MERCHANT_API_KEY="sg_test_xxx" npm start
+cd playground/merchant-hono && SANGRIA_SECRET_KEY="sg_test_xxx" bun dev
 ```
 
 ### 2. Run the test client
