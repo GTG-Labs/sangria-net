@@ -21,7 +21,7 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from wallet import get_cdp_client
 
-MERCHANT_URL = "https://9a6.tinyfi.sh"
+MERCHANT_URL = os.getenv("MERCHANT_URL", "http://localhost:4004")
 
 async def main(buyer_address: str):
     print(f"Setting up x402 client for buyer: {buyer_address}")
