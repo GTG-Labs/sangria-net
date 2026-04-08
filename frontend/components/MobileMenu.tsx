@@ -18,12 +18,17 @@ export default function MobileMenu({ signInUrl, isLoggedIn }: MobileMenuProps) {
         onClick={() => setOpen(!open)}
         className="p-2 text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white transition-colors"
         aria-label={open ? "Close menu" : "Open menu"}
+        aria-expanded={open}
+        aria-controls="mobile-nav"
       >
         {open ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
       </button>
 
       {open && (
-        <div className="absolute top-16 left-0 right-0 z-50 border-b border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-950 shadow-lg">
+        <div
+          id="mobile-nav"
+          className="absolute top-16 left-0 right-0 z-50 border-b border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-950 shadow-lg"
+        >
           <nav className="flex flex-col px-6 py-4 gap-1">
             <Link
               href="/docs"
