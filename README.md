@@ -118,8 +118,49 @@ sequenceDiagram
 
 ---
 
+## Testing
+
+Sangria.NET includes comprehensive automated testing across all components. We use a script-based approach for consistency between local development and CI/CD.
+
+### **Quick Commands**
+
+```bash
+# One-time setup
+./scripts/test-setup.sh
+
+# Daily development (2-3 min)
+./scripts/test-dev.sh
+
+# Before committing (8-12 min)
+./scripts/test-pre-commit.sh
+
+# Before releases (20-30 min, includes chaos testing)
+./scripts/test-release.sh
+```
+
+### **What's Tested**
+
+- ✅ **Payment flows** across all framework adapters
+- ✅ **Database consistency** with real PostgreSQL (TestContainers)
+- ✅ **Security vulnerabilities** (gosec, staticcheck, npm audit)
+- ✅ **Performance benchmarks** and load testing
+- ✅ **Chaos engineering** (network failures, database crashes)
+- ✅ **Cross-platform compatibility** (multiple Go/Node/Python versions)
+
+### **CI/CD Integration**
+
+- **Pull Requests**: Runs `test-pre-commit.sh` (comprehensive validation)
+- **Main Branch**: Runs `test-release.sh` (includes chaos tests)
+- **Cross-Platform**: Tests Go 1.21-1.23, Node 18-22, Python 3.10-3.12
+
+For detailed testing information, see [QUICK_TESTING_GUIDE.md](QUICK_TESTING_GUIDE.md).
+
+---
+
 ## Documentation
 
+- [Quick Testing Guide](QUICK_TESTING_GUIDE.md) — simple 5-minute setup and daily workflow
+- [Detailed Testing Guide](TESTING.md) — comprehensive testing workflow and troubleshooting
 - [TypeScript SDK](sdk/sdk-typescript/README.md) — full API, all framework adapters, bypass config
 - [Python SDK](sdk/python/README.md) — FastAPI adapter, API contract
 - [Playground](playground/README.md) — run example merchants and test payments locally

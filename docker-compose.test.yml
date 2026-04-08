@@ -1,0 +1,89 @@
+# Complete test environment for cross-SDK end-to-end testing
+services:
+  # PostgreSQL database for testing
+  postgres-test:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: sangria_test
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+    ports:
+      - "5433:5432"  # Use different port to avoid conflicts
+    tmpfs:
+      - /var/lib/postgresql/data  # In-memory for faster tests
+    command: postgres -c fsync=off -c synchronous_commit=off -c full_page_writes=off
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test -d sangria_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Redis for caching (if needed)
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"  # Use different port to avoid conflicts
+    command: redis-server --appendonly no --save ""  # Disable persistence for faster tests
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Mock facilitator for X402 testing (Python Flask)
+  mock-facilitator:
+    image: python:3.11-alpine
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+    working_dir: /app
+    volumes:
+      - ./scripts/mock-facilitator.py:/app/mock-facilitator.py
+    command: >
+      sh -c "
+        pip install flask requests &&
+        python mock-facilitator.py
+      "
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Sangria backend service
+  sangria-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_URL=postgres://test:test@postgres-test:5432/sangria_test
+      - REDIS_URL=redis://redis:6379
+      - X402_FACILITATOR_URL=http://mock-facilitator:8080
+      - PORT=8080
+      - GO_ENV=test
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mock-facilitator:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Toxiproxy for chaos testing
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.5.0
+    ports:
+      - "8474:8474"  # API port
+      - "5432:5432"  # Postgres proxy
+      - "6379:6379"  # Redis proxy
+      - "8081:8081"  # Mock facilitator proxy
+    command: -host=0.0.0.0
+

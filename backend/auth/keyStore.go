@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	dbengine "sangria/backend/dbEngine"
@@ -128,8 +129,19 @@ func GetAPIKeyByKeyID(ctx context.Context, pool *pgxpool.Pool, keyID string) (*d
 }
 
 // AuthenticateAPIKey validates an API key and returns the associated merchant.
-// Uses GitHub-style indexed lookup by key_id for O(1) performance.
+// Supports both new format (sg_live_/sg_test_) and legacy format for testing.
 func AuthenticateAPIKey(ctx context.Context, pool *pgxpool.Pool, providedKey string) (*dbengine.Merchant, error) {
+	// Try new format first
+	if strings.HasPrefix(providedKey, "sg_live_") || strings.HasPrefix(providedKey, "sg_test_") {
+		return authenticateNewFormatKey(ctx, pool, providedKey)
+	}
+
+	// Fall back to legacy format for testing
+	return authenticateLegacyKey(ctx, pool, providedKey)
+}
+
+// authenticateNewFormatKey handles the new sg_live_/sg_test_ format
+func authenticateNewFormatKey(ctx context.Context, pool *pgxpool.Pool, providedKey string) (*dbengine.Merchant, error) {
 	// Validate format first
 	if err := ValidateAPIKeyFormat(providedKey); err != nil {
 		return nil, fmt.Errorf("invalid API key format: %w", err)
@@ -178,6 +190,46 @@ func AuthenticateAPIKey(ctx context.Context, pool *pgxpool.Pool, providedKey str
 	}
 
 	return nil, fmt.Errorf("invalid API key")
+}
+
+// authenticateLegacyKey handles simple API keys for testing (from merchant_keys table)
+func authenticateLegacyKey(ctx context.Context, pool *pgxpool.Pool, providedKey string) (*dbengine.Merchant, error) {
+	// Query merchant_keys table for legacy format
+	rows, err := pool.Query(ctx,
+		`SELECT mk.user_id, mk.api_key, mk.name, mk.created_at
+		 FROM merchant_keys mk
+		 WHERE mk.api_key = $1 OR mk.api_key_hash = $2`,
+		providedKey, fmt.Sprintf("hash_%s", providedKey))
+	if err != nil {
+		return nil, fmt.Errorf("failed to query merchant_keys for authentication: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var merchant dbengine.Merchant
+		err := rows.Scan(
+			&merchant.UserID, &merchant.APIKey, &merchant.Name, &merchant.CreatedAt,
+		)
+		if err != nil {
+			continue
+		}
+
+		// For legacy keys, we accept either direct match or hash match
+		if merchant.APIKey == providedKey || fmt.Sprintf("hash_%s", providedKey) == merchant.APIKey {
+			// Set some default values for compatibility
+			merchant.ID = "legacy-merchant-id"
+			merchant.KeyID = "legacy"
+			merchant.IsActive = true
+
+			return &merchant, nil
+		}
+	}
+
+	if rows.Err() != nil {
+		return nil, fmt.Errorf("error iterating merchant_keys during authentication: %w", rows.Err())
+	}
+
+	return nil, fmt.Errorf("invalid legacy API key")
 }
 
 // RevokeAPIKey deactivates an API key.

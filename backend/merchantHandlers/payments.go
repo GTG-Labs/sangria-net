@@ -102,6 +102,11 @@ func SettlePayment(pool *pgxpool.Pool) fiber.Handler {
 			return c.Status(400).JSON(fiber.Map{"error": "invalid request body"})
 		}
 
+		// Check for required fields
+		if req.PaymentPayload == "" {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid payment_payload JSON"})
+		}
+
 		// Decode base64 payment payload.
 		payloadBytes, err := base64.StdEncoding.DecodeString(req.PaymentPayload)
 		if err != nil {

@@ -1,0 +1,67 @@
+# GoLangCI-Lint configuration for backend
+run:
+  timeout: 5m
+  issues-exit-code: 1
+  tests: true
+
+output:
+  format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
+
+linters-settings:
+  golint:
+    min-confidence: 0.8
+  gofmt:
+    simplify: true
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - performance
+      - style
+    disabled-checks:
+      - unnamedResult
+  gosec:
+    excludes:
+      - G404 # Use of weak random number generator (math/rand)
+  goconst:
+    min-len: 2
+    min-occurrences: 2
+
+linters:
+  disable-all: true
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - typecheck
+    - unused
+    - gofmt
+    - goimports
+    - golint
+    - gosec
+    - misspell
+    - unconvert
+    - goconst
+    - gocyclo
+    - gocritic
+    - prealloc
+    - unparam
+    - nakedret
+
+issues:
+  exclude-rules:
+    # Exclude some linters from running on tests files
+    - path: _test\.go
+      linters:
+        - gosec
+        - unparam
+        - goconst
+    # Exclude gosec from test directories
+    - path: tests/
+      linters:
+        - gosec
+  max-issues-per-linter: 0
+  max-same-issues: 0

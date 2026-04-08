@@ -1,0 +1,150 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main, dev ]
+
+jobs:
+  # Fast tests for PRs and feature branches
+  fast-tests:
+    name: Fast Tests (Pre-Commit)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref != 'refs/heads/main')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.23'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Setup testing environment
+        run: ./scripts/test-setup.sh
+
+      - name: Run pre-commit tests
+        run: ./scripts/test-pre-commit.sh
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          files: ./backend/coverage.out,./sdk/sdk-typescript/coverage/lcov.info
+          flags: fast-tests
+          name: fast-tests-coverage
+
+  # Full tests for main branch (includes chaos)
+  full-tests:
+    name: Full Tests (Release Validation)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.23'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Setup testing environment
+        run: ./scripts/test-setup.sh
+
+      - name: Run full release tests
+        run: ./scripts/test-release.sh
+
+      - name: Upload comprehensive coverage
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          files: ./backend/coverage.out,./sdk/sdk-typescript/coverage/lcov.info
+          flags: full-tests
+          name: full-tests-coverage
+
+      - name: Upload security scan results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: backend/gosec-report.json
+
+      - name: Upload test artifacts
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: release-test-results
+          path: |
+            test-results/
+            backend/benchmark-results.txt
+            backend/coverage.html
+            sdk/sdk-typescript/coverage/
+            sdk/python/htmlcov/
+
+  # Multi-platform compatibility
+  compatibility:
+    name: Cross-Platform Compatibility
+    runs-on: ${{ matrix.os }}
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        go-version: [1.21, 1.22, 1.23]
+        node-version: [18, 20, 22]
+        python-version: ['3.10', '3.11', '3.12']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Setup and run quick compatibility tests
+        run: |
+          ./scripts/test-setup.sh
+          ./scripts/test-dev.sh

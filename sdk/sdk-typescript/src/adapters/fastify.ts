@@ -40,7 +40,7 @@ export function fixedPrice(
         paymentHeader: Array.isArray(request.headers["payment-signature"])
           ? request.headers["payment-signature"][0]
           : request.headers["payment-signature"],
-        resourceUrl: `${request.protocol}://${request.hostname}${request.url}`,
+        resourceUrl: `${request.protocol}://${request.headers.host || request.hostname}${request.url}`,
       },
       options
     );

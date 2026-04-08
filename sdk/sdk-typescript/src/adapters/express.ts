@@ -34,7 +34,7 @@ export function fixedPrice(
         paymentHeader: Array.isArray(req.headers["payment-signature"])
           ? req.headers["payment-signature"][0]
           : req.headers["payment-signature"],
-        resourceUrl: `${req.protocol}://${req.hostname}${req.originalUrl}`,
+        resourceUrl: `${req.protocol}://${req.get('host')}${req.originalUrl}`,
       },
       options
     );
