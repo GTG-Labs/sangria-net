@@ -37,7 +37,11 @@ func FundTreasury(pool *pgxpool.Pool) fiber.Handler {
 		}
 
 		// Convert dollars to microunits.
-		amountMicro := int64(math.Round(req.Amount * 1e6))
+		rounded := math.Round(req.Amount * 1e6)
+		if rounded <= 0 || rounded > float64(math.MaxInt64) {
+			return c.Status(400).JSON(fiber.Map{"error": "amount out of range"})
+		}
+		amountMicro := int64(rounded)
 
 		// Look up system accounts.
 		merchantPool, err := dbengine.GetSystemAccount(c.Context(), pool, dbengine.SystemAccountUSDMerchantPool, dbengine.USD)

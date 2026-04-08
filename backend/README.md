@@ -100,7 +100,8 @@ backend/
 │   └── profile.go                 # GetMerchantProfile
 ├── adminHandlers/
 │   ├── merchants.go               # CreateMerchantAPIKey
-│   └── wallets.go                 # CreateWalletPool
+│   ├── wallets.go                 # CreateWalletPool
+│   └── treasury.go               # FundTreasury
 ├── dbEngine/
 │   ├── models.go                  # All Go types + enums
 │   ├── engine.go                  # DB connection pool

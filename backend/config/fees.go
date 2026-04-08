@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"strconv"
 )
@@ -47,7 +48,7 @@ func LoadPlatformFees() error {
 		return fmt.Errorf("PLATFORM_FEE_PERCENT must be between 0 and 100, got %f", percent)
 	}
 	// Convert percent to basis points: 0.5% → 50bp, 2.9% → 290bp
-	rateBP := int64(percent * 100)
+	rateBP := int64(math.Round(percent * 100))
 
 	minStr := os.Getenv("PLATFORM_FEE_MIN_MICROUNITS")
 	if minStr == "" {
