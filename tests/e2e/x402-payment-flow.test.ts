@@ -16,6 +16,9 @@ describe('X402 Payment Flow E2E', () => {
     // Start our own server instead of relying on global setup
     mockServer = new MockSangriaServer(8081, { latency: 0, errorRate: 0 })
     await mockServer.start()
+
+    // Give the server a moment to fully initialize
+    await new Promise(resolve => setTimeout(resolve, 500))
   })
 
   afterAll(async () => {

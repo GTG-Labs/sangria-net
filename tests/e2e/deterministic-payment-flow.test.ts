@@ -20,6 +20,9 @@ describe('Deterministic X402 Payment Flow', () => {
       rateLimitThreshold: null // No rate limiting for deterministic tests
     })
     await mockServer.start()
+
+    // Give the server a moment to fully initialize
+    await new Promise(resolve => setTimeout(resolve, 500))
   })
 
   afterAll(async () => {
