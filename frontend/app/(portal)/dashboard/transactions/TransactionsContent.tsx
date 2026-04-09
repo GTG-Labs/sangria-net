@@ -9,7 +9,6 @@ interface Transaction {
   created_at: string;
   amount: number; // microunits
   currency: string;
-  network: string;
   type: string;
 }
 
@@ -94,13 +93,9 @@ export default function TransactionsContent() {
     return `${whole}.${frac.toString().padStart(6, "0")} ${currency}`;
   };
 
-  const getBlockExplorerUrl = (hash: string, network: string) => {
-    const explorers: Record<string, string> = {
-      base: `https://basescan.org/tx/${hash}`,
-      "base-sepolia": `https://sepolia.basescan.org/tx/${hash}`,
-      polygon: `https://polygonscan.com/tx/${hash}`,
-    };
-    return explorers[network] || `https://basescan.org/tx/${hash}`;
+  const getBlockExplorerUrl = (hash: string) => {
+    // All payments currently go through Base network
+    return `https://basescan.org/tx/${hash}`;
   };
 
   const formatDate = (dateString: string) => {
@@ -182,9 +177,6 @@ export default function TransactionsContent() {
                     Amount
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Network
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Transaction
                   </th>
                 </tr>
@@ -203,26 +195,10 @@ export default function TransactionsContent() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">
                       +{formatAmount(tx.amount, tx.currency)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <span className="inline-flex items-center gap-1">
-                        {tx.network ? (
-                          <>
-                            <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                            {tx.network.charAt(0).toUpperCase() +
-                              tx.network.slice(1)}
-                          </>
-                        ) : (
-                          "—"
-                        )}
-                      </span>
-                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                       {tx.idempotency_key.startsWith("0x") ? (
                         <a
-                          href={getBlockExplorerUrl(
-                            tx.idempotency_key,
-                            tx.network,
-                          )}
+                          href={getBlockExplorerUrl(tx.idempotency_key)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="inline-flex items-center gap-1 text-sangria-600 hover:text-sangria-800 transition-colors"

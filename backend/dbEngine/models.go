@@ -121,7 +121,6 @@ type UserTransaction struct {
 	CreatedAt      time.Time `json:"created_at"`
 	Amount         int64     `json:"amount"`
 	Currency       Currency  `json:"currency"`
-	Network        string    `json:"network"`
 	Type           string    `json:"type"`
 }
 

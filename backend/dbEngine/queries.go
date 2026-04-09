@@ -81,12 +81,10 @@ func GetUserTransactions(ctx context.Context, pool *pgxpool.Pool, userID string)
 			t.idempotency_key,
 			t.created_at,
 			le.amount,
-			le.currency,
-			COALESCE(cw.network::text, '') as network
+			le.currency
 		FROM transactions t
 		JOIN ledger_entries le ON le.transaction_id = t.id
 		JOIN accounts a ON a.id = le.account_id
-		LEFT JOIN crypto_wallets cw ON cw.account_id = a.id
 		WHERE a.user_id = $1
 		  AND a.type = 'LIABILITY'
 		  AND le.direction = 'CREDIT'
@@ -109,7 +107,6 @@ func GetUserTransactions(ctx context.Context, pool *pgxpool.Pool, userID string)
 			&tx.CreatedAt,
 			&tx.Amount,
 			&tx.Currency,
-			&tx.Network,
 		)
 		if err != nil {
 			return nil, err
@@ -158,12 +155,10 @@ func GetUserTransactionsPaginated(
 			t.idempotency_key,
 			t.created_at,
 			le.amount,
-			le.currency,
-			COALESCE(cw.network::text, '') as network
+			le.currency
 		FROM transactions t
 		JOIN ledger_entries le ON le.transaction_id = t.id
 		JOIN accounts a ON a.id = le.account_id
-		LEFT JOIN crypto_wallets cw ON cw.account_id = a.id
 		%s%s
 		ORDER BY t.created_at DESC
 		LIMIT $%d
@@ -201,7 +196,6 @@ func GetUserTransactionsPaginated(
 			&tx.CreatedAt,
 			&tx.Amount,
 			&tx.Currency,
-			&tx.Network,
 		)
 		if err != nil {
 			return nil, nil, 0, err
