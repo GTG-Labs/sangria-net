@@ -30,7 +30,10 @@
     "test-server": "tsx --watch test-server/server.ts",
     "test-server:express": "tsx --watch test-server/server.ts",
     "test-server:hono": "tsx --watch test-server/server-hono.ts",
-    "test-server:fastify": "tsx --watch test-server/server-fastify.ts"
+    "test-server:fastify": "tsx --watch test-server/server-fastify.ts",
+    "lint": "eslint . --ext .ts,.tsx",
+    "lint:fix": "eslint . --ext .ts,.tsx --fix",
+    "type-check": "tsc --noEmit"
   },
   "keywords": [
     "x402",
@@ -69,6 +72,9 @@
     "express": "^4.21.0",
     "fastify": "^5.0.0",
     "hono": "^4.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
     "tsx": "^4.21.0",
     "typescript": "^5.7.0"
   },
