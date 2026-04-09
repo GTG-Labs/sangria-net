@@ -19,7 +19,7 @@ import { fixedPrice } from "@sangria/core/express";
 
 const app = express();
 const sangria = new Sangria({
-  apiKey: process.env.SANGRIA_API_KEY,
+  apiKey: process.env.SANGRIA_SECRET_KEY,
   baseUrl: "https://api.sangria.net",
 });
 
@@ -44,7 +44,7 @@ import { Sangria } from "@sangria/core";
 import { sangriaPlugin, fixedPrice } from "@sangria/core/fastify";
 
 const app = Fastify();
-const sangria = new Sangria({ apiKey: process.env.SANGRIA_API_KEY });
+const sangria = new Sangria({ apiKey: process.env.SANGRIA_SECRET_KEY });
 
 await app.register(sangriaPlugin);
 
@@ -68,7 +68,7 @@ import { Sangria } from "@sangria/core";
 import { fixedPrice, getSangria } from "@sangria/core/hono";
 
 const app = new Hono();
-const sangria = new Sangria({ apiKey: process.env.SANGRIA_API_KEY });
+const sangria = new Sangria({ apiKey: process.env.SANGRIA_SECRET_KEY });
 
 app.get("/premium", fixedPrice(sangria, { price: 0.01 }), (c) => {
   const payment = getSangria(c);
