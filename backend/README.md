@@ -51,6 +51,8 @@ The server starts on `http://localhost:8080`.
 | GET | `/api-keys` | WorkOS JWT | List user's API keys |
 | DELETE | `/api-keys/:id` | WorkOS JWT | Revoke an API key |
 | POST | `/merchants` | WorkOS JWT | Create a merchant API key + USD liability account |
+| POST | `/withdrawals` | WorkOS JWT | Request a merchant withdrawal (requires merchant_id) |
+| GET | `/withdrawals` | WorkOS JWT | List withdrawals for a merchant (requires ?merchant_id=) |
 
 ### Merchant endpoints (API key)
 
@@ -67,6 +69,10 @@ The server starts on `http://localhost:8080`.
 |---|---|---|---|
 | POST | `/wallets/pool` | Admin | Create a CDP wallet in the pool |
 | POST | `/admin/treasury/fund` | Admin | Record a USD treasury deposit (bookkeeping only) |
+| POST | `/admin/withdrawals/:id/approve` | Admin | Approve a pending withdrawal |
+| POST | `/admin/withdrawals/:id/reject` | Admin | Reject and reverse a pending withdrawal |
+| POST | `/admin/withdrawals/:id/complete` | Admin | Mark withdrawal as completed after bank transfer |
+| GET | `/admin/withdrawals` | Admin | List withdrawals (filterable by ?status=) |
 
 ### API key format
 
@@ -86,7 +92,8 @@ backend/
 ├── main.go                        # Route wiring + server startup
 ├── config/
 │   ├── server.go                  # Environment loading, WorkOS setup, DB connection
-│   └── fees.go                    # Platform fee config + calculation
+│   ├── fees.go                    # Platform fee config + calculation
+│   └── withdrawals.go             # Withdrawal config (auto-approve, min amount, fee)
 ├── auth/
 │   ├── middleware.go              # WorkosAuthMiddleware, APIKeyAuthMiddleware, RequireAdmin
 │   ├── workos.go                  # JWKS cache, JWT validation, CreateUser handler
@@ -97,11 +104,13 @@ backend/
 ├── merchantHandlers/
 │   ├── payments.go                # GeneratePayment, SettlePayment
 │   ├── balance.go                 # GetMerchantBalance
-│   └── profile.go                 # GetMerchantProfile
+│   ├── profile.go                 # GetMerchantProfile
+│   └── withdrawals.go             # RequestWithdrawal, ListWithdrawals
 ├── adminHandlers/
 │   ├── merchants.go               # CreateMerchantAPIKey
 │   ├── wallets.go                 # CreateWalletPool
-│   └── treasury.go               # FundTreasury
+│   ├── treasury.go               # FundTreasury
+│   └── withdrawals.go             # ApproveWithdrawal, RejectWithdrawal, CompleteWithdrawal
 ├── dbEngine/
 │   ├── models.go                  # All Go types + enums
 │   ├── engine.go                  # DB connection pool
@@ -110,6 +119,7 @@ backend/
 │   ├── merchants.go               # Merchant DB operations
 │   ├── cards.go                   # Card DB operations
 │   ├── cryptoWallets.go           # Wallet pool operations (LRU)
+│   ├── withdrawals.go             # CreateWithdrawal, Approve/Reject/Complete/FailWithdrawal
 │   ├── transaction.go             # Double-entry ledger (InsertTransaction, validateZeroNet)
 │   ├── users.go                   # User CRUD
 │   └── queries.go                 # Generic ledger queries
