@@ -363,11 +363,21 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
 
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install TypeScript SDK dependencies
+        working-directory: sdk/sdk-typescript
+        run: pnpm install
 
       - name: Audit TypeScript dependencies
         working-directory: sdk/sdk-typescript
