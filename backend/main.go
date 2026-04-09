@@ -43,6 +43,7 @@ func setupRoutes(app *fiber.App, pool *pgxpool.Pool) {
 
 	// User endpoints (WorkOS JWT auth)
 	app.Post("/users", auth.WorkosAuthMiddleware, auth.CreateUser(pool))
+	app.Get("/transactions", auth.WorkosAuthMiddleware, auth.ListUserTransactions(pool))
 
 	// API Key management (WorkOS JWT auth)
 	apiKeysGroup := app.Group("/api-keys", auth.WorkosAuthMiddleware)
