@@ -57,7 +57,7 @@ jobs:
           source venv/bin/activate
           black --check .
           flake8 .
-          mypy sangria_sdk/
+          mypy src/sangria_sdk/
 
   # Run TypeScript tests
   test-typescript:
@@ -122,7 +122,7 @@ jobs:
           source venv/bin/activate
           black --check .
           flake8 .
-          mypy sangria_sdk/
+          mypy src/sangria_sdk/
 
       - name: Run Python unit tests
         working-directory: sdk/python
