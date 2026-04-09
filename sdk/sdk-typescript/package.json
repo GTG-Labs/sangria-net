@@ -26,6 +26,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
+    "test": "echo 'No unit tests yet - SDK tests run from project root'",
     "test-server": "tsx --watch test-server/server.ts",
     "test-server:express": "tsx --watch test-server/server.ts",
     "test-server:hono": "tsx --watch test-server/server-hono.ts",

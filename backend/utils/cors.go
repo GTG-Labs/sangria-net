@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 // GetAllowedOrigins parses the ALLOWED_ORIGINS environment variable

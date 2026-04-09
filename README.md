@@ -120,47 +120,50 @@ sequenceDiagram
 
 ## Testing
 
-Sangria.NET includes comprehensive automated testing across all components. We use a script-based approach for consistency between local development and CI/CD.
+Sangria.NET includes comprehensive SDK-focused testing with no Docker dependencies. All tests use MockSangriaServer for fast, reliable execution.
 
 ### **Quick Commands**
 
 ```bash
-# One-time setup
-./scripts/test-setup.sh
+# First cd into tests directory
+cd tests
 
-# Daily development (2-3 min)
-./scripts/test-dev.sh
+# Daily development (30 seconds)
+pnpm test:unit
 
-# Before committing (8-12 min)
-./scripts/test-pre-commit.sh
+# Integration tests (1-2 min)
+pnpm test:integration
 
-# Before releases (20-30 min, includes chaos testing)
-./scripts/test-release.sh
+# End-to-end tests (2-3 min)
+pnpm test:e2e
+
+# All tests (3-5 min)
+pnpm test:all
 ```
 
 ### **What's Tested**
 
-- ✅ **Payment flows** across all framework adapters
-- ✅ **Database consistency** with real PostgreSQL (TestContainers)
-- ✅ **Security vulnerabilities** (gosec, staticcheck, npm audit)
-- ✅ **Performance benchmarks** and load testing
-- ✅ **Chaos engineering** (network failures, database crashes)
-- ✅ **Cross-platform compatibility** (multiple Go/Node/Python versions)
+- ✅ **Complete x402 payment flows** with realistic scenarios
+- ✅ **Framework adapters** (Express, Fastify, Hono, FastAPI, Django, Flask)
+- ✅ **SDK functionality** across TypeScript and Python
+- ✅ **Error handling** (insufficient funds, invalid signatures, expired payments)
+- ✅ **Cross-platform compatibility** (Node 18-22, Python 3.9-3.12)
+- ✅ **Security validation** (API keys, payment headers, rate limiting)
 
 ### **CI/CD Integration**
 
-- **Pull Requests**: Runs `test-pre-commit.sh` (comprehensive validation)
-- **Main Branch**: Runs `test-release.sh` (includes chaos tests)
-- **Cross-Platform**: Tests Go 1.21-1.23, Node 18-22, Python 3.10-3.12
+- **Pull Requests**: Unit + Integration tests with coverage validation
+- **Main Branch**: Full test suite including E2E and security tests
+- **Matrix Testing**: Multiple OS, Node.js, and Python versions
+- **Coverage Thresholds**: Unit 95%, Integration 90%, Overall 92%
 
-For detailed testing information, see [QUICK_TESTING_GUIDE.md](QUICK_TESTING_GUIDE.md).
+All tests use MockSangriaServer - no Docker required!
 
 ---
 
 ## Documentation
 
-- [Quick Testing Guide](QUICK_TESTING_GUIDE.md) — simple 5-minute setup and daily workflow
-- [Detailed Testing Guide](TESTING.md) — comprehensive testing workflow and troubleshooting
+- [Comprehensive Testing Guide](tests/TESTING.md) — complete testing infrastructure and workflow
 - [TypeScript SDK](sdk/sdk-typescript/README.md) — full API, all framework adapters, bypass config
 - [Python SDK](sdk/python/README.md) — FastAPI adapter, API contract
 - [Playground](playground/README.md) — run example merchants and test payments locally
