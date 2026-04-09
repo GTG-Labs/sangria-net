@@ -98,7 +98,6 @@ type Merchant struct {
 	ID         string     `json:"id"`
 	UserID     string     `json:"user_id"`
 	APIKey     string     `json:"api_key"`
-	APIKeyHash string     `json:"api_key_hash"`
 	KeyID      string     `json:"key_id"`
 	Name       string     `json:"name"`
 	IsActive   bool       `json:"is_active"`

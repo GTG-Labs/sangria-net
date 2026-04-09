@@ -24,6 +24,7 @@ def require_sangria_payment(
 ) -> Callable[[Callable[..., Awaitable[Any]]], Callable[..., Awaitable[Any]]]:
     # Validate amount immediately when decorator is applied
     import math
+
     if not isinstance(amount, (int, float)) or not math.isfinite(amount) or amount <= 0:
         raise ValueError("price must be a finite number greater than 0")
 
@@ -38,7 +39,9 @@ def require_sangria_payment(
                         break
 
             if request is None:
-                raise HTTPException(status_code=500, detail="FastAPI request not available")
+                raise HTTPException(
+                    status_code=500, detail="FastAPI request not available"
+                )
 
             if bypass_if and bypass_if(request):
                 return await func(*args, **kwargs)

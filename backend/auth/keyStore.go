@@ -203,7 +203,7 @@ func authenticateLegacyKey(ctx context.Context, pool *pgxpool.Pool, providedKey 
 
 	// Query merchant_keys table for legacy format - select both plaintext and hash columns
 	rows, err := pool.Query(ctx,
-		`SELECT mk.user_id, mk.api_key, mk.api_key_hash, mk.name, mk.created_at
+		`SELECT mk.id, mk.user_id, mk.api_key, mk.api_key_hash, mk.name, mk.created_at
 		 FROM merchant_keys mk
 		 WHERE mk.api_key = $1 OR mk.api_key_hash = $2`,
 		providedKey, hashedProvidedKey)
@@ -214,18 +214,20 @@ func authenticateLegacyKey(ctx context.Context, pool *pgxpool.Pool, providedKey 
 
 	for rows.Next() {
 		var merchant dbengine.Merchant
+		var apiKeyHash string
 		err := rows.Scan(
-			&merchant.UserID, &merchant.APIKey, &merchant.APIKeyHash, &merchant.Name, &merchant.CreatedAt,
+			&merchant.ID, &merchant.UserID, &merchant.APIKey, &apiKeyHash, &merchant.Name, &merchant.CreatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan merchant row: %w", err)
 		}
 
 		// For legacy keys, check both plaintext match (legacy/test) and proper hash verification
-		if merchant.APIKey == providedKey || VerifyAPIKey(providedKey, merchant.APIKeyHash) {
-			// Set some default values for compatibility
-			merchant.ID = "legacy-merchant-id"
-			merchant.KeyID = "legacy"
+		if merchant.APIKey == providedKey || VerifyAPIKey(providedKey, apiKeyHash) {
+			// Preserve the merchant.ID loaded from DB, only set default values for missing fields
+			if merchant.KeyID == "" {
+				merchant.KeyID = "legacy"
+			}
 			merchant.IsActive = true
 
 			return &merchant, nil
