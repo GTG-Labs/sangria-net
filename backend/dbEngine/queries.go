@@ -72,9 +72,9 @@ func GetLedgerEntriesByTransaction(ctx context.Context, pool *pgxpool.Pool, txID
 	return entries, rows.Err()
 }
 
-// GetUserTransactions returns all transactions for a specific user.
-// Only returns transactions where the user received payment (CREDIT to LIABILITY account).
-func GetUserTransactions(ctx context.Context, pool *pgxpool.Pool, userID string) ([]UserTransaction, error) {
+// GetMerchantTransactions returns all transactions for a specific merchant.
+// Only returns transactions where the merchant received payment (CREDIT to LIABILITY account).
+func GetMerchantTransactions(ctx context.Context, pool *pgxpool.Pool, userID string) ([]MerchantTransaction, error) {
 	query := `
 		SELECT
 			t.id,
@@ -98,9 +98,9 @@ func GetUserTransactions(ctx context.Context, pool *pgxpool.Pool, userID string)
 	}
 	defer rows.Close()
 
-	var transactions []UserTransaction
+	var transactions []MerchantTransaction
 	for rows.Next() {
-		var tx UserTransaction
+		var tx MerchantTransaction
 		err := rows.Scan(
 			&tx.ID,
 			&tx.IdempotencyKey,
@@ -117,22 +117,22 @@ func GetUserTransactions(ctx context.Context, pool *pgxpool.Pool, userID string)
 	}
 
 	if transactions == nil {
-		transactions = []UserTransaction{}
+		transactions = []MerchantTransaction{}
 	}
 
 	return transactions, rows.Err()
 }
 
-// GetUserTransactionsPaginated returns paginated transactions for a user with total count.
+// GetMerchantTransactionsPaginated returns paginated transactions for a merchant with total count.
 // Uses created_at as cursor for stable, performant pagination.
 // Also returns total count of all transactions (requires additional COUNT query).
-func GetUserTransactionsPaginated(
+func GetMerchantTransactionsPaginated(
 	ctx context.Context,
 	pool *pgxpool.Pool,
 	userID string,
 	limit int,
 	cursor *time.Time,
-) ([]UserTransaction, *time.Time, int, error) {
+) ([]MerchantTransaction, *time.Time, int, error) {
 	// Build WHERE clause with cursor condition
 	baseWhere := `
 		WHERE a.user_id = $1
@@ -187,9 +187,9 @@ func GetUserTransactionsPaginated(
 	}
 	defer rows.Close()
 
-	var transactions []UserTransaction
+	var transactions []MerchantTransaction
 	for rows.Next() {
-		var tx UserTransaction
+		var tx MerchantTransaction
 		err := rows.Scan(
 			&tx.ID,
 			&tx.IdempotencyKey,
@@ -210,7 +210,7 @@ func GetUserTransactionsPaginated(
 
 	// Handle empty results
 	if len(transactions) == 0 {
-		return []UserTransaction{}, nil, total, nil
+		return []MerchantTransaction{}, nil, total, nil
 	}
 
 	// Determine next cursor

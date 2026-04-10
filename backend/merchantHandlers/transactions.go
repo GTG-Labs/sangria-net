@@ -11,9 +11,9 @@ import (
 	"sangrianet/backend/utils"
 )
 
-// GetUserTransactions handles GET /transactions with cursor-based pagination
+// GetMerchantTransactions handles GET /transactions with cursor-based pagination
 // Query params: ?limit=20&cursor=base64_encoded_timestamp
-func GetUserTransactions(pool *pgxpool.Pool) fiber.Handler {
+func GetMerchantTransactions(pool *pgxpool.Pool) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		user := c.Locals("workos_user").(auth.WorkOSUser)
 
@@ -29,7 +29,7 @@ func GetUserTransactions(pool *pgxpool.Pool) fiber.Handler {
 		}
 
 		// Fetch paginated transactions with total count
-		transactions, nextCursor, total, err := dbengine.GetUserTransactionsPaginated(
+		transactions, nextCursor, total, err := dbengine.GetMerchantTransactionsPaginated(
 			c.Context(), pool, user.ID, limit, cursor,
 		)
 		if err != nil {

@@ -114,8 +114,8 @@ type CryptoWallet struct {
 	CreatedAt  time.Time `json:"created_at"`
 }
 
-// UserTransaction represents a transaction with enriched data for API responses.
-type UserTransaction struct {
+// MerchantTransaction represents a transaction with enriched data for API responses.
+type MerchantTransaction struct {
 	ID             string    `json:"id"`
 	IdempotencyKey string    `json:"idempotency_key"`
 	CreatedAt      time.Time `json:"created_at"`
@@ -135,7 +135,7 @@ type PaginationMeta struct {
 
 // TransactionsResponse wraps transaction data with pagination metadata
 type TransactionsResponse struct {
-	Data       []UserTransaction `json:"data"`
+	Data       []MerchantTransaction `json:"data"`
 	Pagination PaginationMeta    `json:"pagination"`
 }
 

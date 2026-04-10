@@ -93,6 +93,11 @@ export default function TransactionsContent() {
     return `${whole}.${frac.toString().padStart(6, "0")} ${currency}`;
   };
 
+  const truncateKey = (key: string) => {
+    if (key.length <= 20) return key;
+    return `${key.slice(0, 10)}...${key.slice(-8)}`;
+  };
+
   const getBlockExplorerUrl = (hash: string) => {
     // All payments currently go through Base network
     return `https://basescan.org/tx/${hash}`;
@@ -204,15 +209,13 @@ export default function TransactionsContent() {
                           className="inline-flex items-center gap-1 text-sangria-600 hover:text-sangria-800 transition-colors"
                         >
                           <span className="font-mono text-xs">
-                            {tx.idempotency_key.slice(0, 10)}...
-                            {tx.idempotency_key.slice(-8)}
+                            {truncateKey(tx.idempotency_key)}
                           </span>
                           <ExternalLink className="w-3 h-3" />
                         </a>
                       ) : (
                         <span className="font-mono text-xs text-gray-500">
-                          {tx.idempotency_key.slice(0, 10)}...
-                          {tx.idempotency_key.slice(-8)}
+                          {truncateKey(tx.idempotency_key)}
                         </span>
                       )}
                     </td>
