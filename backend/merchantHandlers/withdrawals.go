@@ -8,9 +8,9 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"sangrianet/backend/auth"
-	"sangrianet/backend/config"
-	dbengine "sangrianet/backend/dbEngine"
+	"sangria/backend/auth"
+	"sangria/backend/config"
+	dbengine "sangria/backend/dbEngine"
 )
 
 // RequestWithdrawal handles POST /withdrawals.
