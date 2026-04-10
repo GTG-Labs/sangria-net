@@ -66,7 +66,7 @@ describe('Basic API Integration Tests', () => {
     server.close()
   })
 
-  beforeEach(() => {
+  beforeAll(() => {
     vi.clearAllMocks()
     const config: SangriaConfig = {
       apiKey: 'test_api_key_integration',

@@ -75,38 +75,44 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: ${{ env.NODE_VERSION }}
-        cache: 'npm'
-        cache-dependency-path: 'tests/package-lock.json'
+        cache: 'pnpm'
+        cache-dependency-path: 'tests/pnpm-lock.yaml'
+
+    - name: Install pnpm
+      uses: pnpm/action-setup@v2
+      with:
+        version: 8
+        run_install: false
 
     - name: Install test dependencies
       run: |
         cd tests
-        npm ci
+        pnpm install --frozen-lockfile
 
     - name: Install TypeScript SDK dependencies
       run: |
         cd sdk/sdk-typescript
-        npm ci
+        pnpm install --frozen-lockfile
 
     - name: Build TypeScript SDK
       run: |
         cd sdk/sdk-typescript
-        npm run build
+        pnpm run build
 
     - name: Run TypeScript SDK unit tests
       run: |
         cd tests
-        npm run test:typescript:unit -- --reporter=junit --outputFile=../test-results-typescript-unit.xml
+        pnpm run test:typescript:unit -- --reporter=junit --outputFile=../test-results-typescript-unit.xml
 
     - name: Run TypeScript SDK integration tests
       run: |
         cd tests
-        npm run test:typescript:integration -- --reporter=junit --outputFile=../test-results-typescript-integration.xml
+        pnpm run test:typescript:integration -- --reporter=junit --outputFile=../test-results-typescript-integration.xml
 
     - name: TypeScript linting
       run: |
         cd tests
-        npm run lint:ts
+        pnpm run lint:ts
 
     - name: TypeScript type checking
       run: |
@@ -146,9 +152,12 @@ jobs:
         pip install -r tests/requirements.txt
         cd sdk/python && pip install -e . && cd ../..
 
+        # Install pnpm
+        npm install -g pnpm@8
+
         # TypeScript dependencies
-        cd tests && npm ci && cd ..
-        cd sdk/sdk-typescript && npm ci && cd ../..
+        cd tests && pnpm install --frozen-lockfile && cd ..
+        cd sdk/sdk-typescript && pnpm install --frozen-lockfile && cd ../..
 
     - name: Run comprehensive test suite
       run: |
@@ -158,7 +167,7 @@ jobs:
     - name: Generate test coverage report
       run: |
         cd tests
-        npm run test:coverage -- --reporter=json --outputFile=../coverage-report.json
+        pnpm run test:coverage -- --reporter=json --outputFile=../coverage-report.json
 
     - name: Upload coverage report
       uses: actions/upload-artifact@v4
@@ -198,9 +207,10 @@ jobs:
 
     - name: Test TypeScript SDK build
       run: |
+        npm install -g pnpm@8
         cd sdk/sdk-typescript
-        npm ci
-        npm run build
+        pnpm install --frozen-lockfile
+        pnpm run build
         echo "✅ TypeScript SDK build successful"
 
   security-scan:

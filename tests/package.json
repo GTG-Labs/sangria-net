@@ -14,7 +14,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "lint": "npm run lint:ts && npm run lint:py",
-    "lint:ts": "eslint tests/typescript/**/*.ts",
+    "lint:ts": "eslint typescript/**/*.ts",
     "lint:py": "cd .. && python -m flake8 tests/python/ && python -m mypy tests/python/",
     "install:deps": "npm install && cd .. && pip install -r tests/requirements.txt"
   },

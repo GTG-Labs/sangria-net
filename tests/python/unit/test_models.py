@@ -16,7 +16,7 @@ class TestFixedPriceOptions:
         options = FixedPriceOptions(
             price=10.50,
             resource="/premium-content",
-            description="Premium article access"
+            description="Premium article access",
         )
         assert options.price == 10.50
         assert options.resource == "/premium-content"
@@ -24,49 +24,35 @@ class TestFixedPriceOptions:
 
     def test_construction_without_description(self):
         """Test FixedPriceOptions creation without optional description."""
-        options = FixedPriceOptions(
-            price=5.00,
-            resource="/api/data"
-        )
+        options = FixedPriceOptions(price=5.00, resource="/api/data")
         assert options.price == 5.00
         assert options.resource == "/api/data"
         assert options.description is None
 
-    @pytest.mark.parametrize("invalid_price", [
-        0,
-        -1.0,
-        float('inf'),
-        float('nan')
-    ])
+    @pytest.mark.parametrize("invalid_price", [0, -1.0, float("inf"), float("nan")])
     def test_invalid_price_values(self, invalid_price):
         """Test that invalid price values raise ValueError."""
-        with pytest.raises(ValueError, match="price must be a finite number greater than 0"):
+        with pytest.raises(
+            ValueError, match="price must be a finite number greater than 0"
+        ):
             FixedPriceOptions(price=invalid_price, resource="/test")
 
     def test_to_generate_dict_with_description(self):
         """Test to_generate_dict method with description."""
         options = FixedPriceOptions(
-            price=15.99,
-            resource="/premium",
-            description="Premium access"
+            price=15.99, resource="/premium", description="Premium access"
         )
         expected = {
             "amount": 15.99,
             "resource": "/premium",
-            "description": "Premium access"
+            "description": "Premium access",
         }
         assert options.to_generate_dict() == expected
 
     def test_to_generate_dict_without_description(self):
         """Test to_generate_dict method without description."""
-        options = FixedPriceOptions(
-            price=5.00,
-            resource="/basic"
-        )
-        expected = {
-            "amount": 5.00,
-            "resource": "/basic"
-        }
+        options = FixedPriceOptions(price=5.00, resource="/basic")
+        expected = {"amount": 5.00, "resource": "/basic"}
         assert options.to_generate_dict() == expected
 
 
@@ -78,7 +64,7 @@ class TestPaymentResponse:
         response = PaymentResponse(
             status_code=402,
             body={"error": "Payment required"},
-            headers={"PAYMENT-REQUIRED": "encoded_data"}
+            headers={"PAYMENT-REQUIRED": "encoded_data"},
         )
         assert response.status_code == 402
         assert response.body == {"error": "Payment required"}
@@ -87,8 +73,7 @@ class TestPaymentResponse:
     def test_construction_without_headers(self):
         """Test PaymentResponse creation without headers."""
         response = PaymentResponse(
-            status_code=500,
-            body={"error": "Internal server error"}
+            status_code=500, body={"error": "Internal server error"}
         )
         assert response.status_code == 500
         assert response.body == {"error": "Internal server error"}
@@ -97,9 +82,7 @@ class TestPaymentResponse:
     def test_construction_empty_headers(self):
         """Test PaymentResponse creation with empty headers."""
         response = PaymentResponse(
-            status_code=402,
-            body={"challenge": "payment_data"},
-            headers={}
+            status_code=402, body={"challenge": "payment_data"}, headers={}
         )
         assert response.status_code == 402
         assert response.body == {"challenge": "payment_data"}
@@ -111,31 +94,21 @@ class TestPaymentProceeded:
 
     def test_construction_complete(self):
         """Test PaymentProceeded creation with all fields."""
-        payment = PaymentProceeded(
-            paid=True,
-            amount=25.00,
-            transaction="tx_abc123"
-        )
+        payment = PaymentProceeded(paid=True, amount=25.00, transaction="tx_abc123")
         assert payment.paid is True
         assert payment.amount == 25.00
         assert payment.transaction == "tx_abc123"
 
     def test_construction_without_transaction(self):
         """Test PaymentProceeded creation without transaction."""
-        payment = PaymentProceeded(
-            paid=True,
-            amount=10.00
-        )
+        payment = PaymentProceeded(paid=True, amount=10.00)
         assert payment.paid is True
         assert payment.amount == 10.00
         assert payment.transaction is None
 
     def test_construction_unpaid(self):
         """Test PaymentProceeded creation with paid=False."""
-        payment = PaymentProceeded(
-            paid=False,
-            amount=0.00
-        )
+        payment = PaymentProceeded(paid=False, amount=0.00)
         assert payment.paid is False
         assert payment.amount == 0.00
         assert payment.transaction is None

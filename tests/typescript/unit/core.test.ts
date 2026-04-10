@@ -2,13 +2,12 @@
  * Unit tests for Sangria TypeScript SDK core functionality.
  */
 
-import { beforeEach, describe, expect, it, vi, Mock, beforeAll } from 'vitest'
+import { beforeEach, describe, expect, it, vi, beforeAll } from 'vitest'
 import { Sangria } from '../../../sdk/sdk-typescript/src/core.js'
 import type {
   SangriaConfig,
   FixedPriceOptions,
-  PaymentContext,
-  PaymentResult
+  PaymentContext
 } from '../../../sdk/sdk-typescript/src/types.js'
 
 // Mock global fetch
@@ -61,7 +60,7 @@ describe('Sangria Core', () => {
       instance.handleFixedPrice(mockPaymentCtx, options)
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8080/v1/generate-payment',
+        'https://api.getsangria.com/v1/generate-payment',
         expect.any(Object)
       )
     })

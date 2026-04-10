@@ -31,8 +31,14 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: ${{ env.NODE_VERSION }}
-        cache: 'npm'
-        cache-dependency-path: 'tests/package-lock.json'
+        cache: 'pnpm'
+        cache-dependency-path: 'tests/pnpm-lock.yaml'
+
+    - name: Install pnpm
+      uses: pnpm/action-setup@v2
+      with:
+        version: 8
+        run_install: false
 
     - name: Install all dependencies
       run: |
@@ -41,9 +47,12 @@ jobs:
         pip install -r tests/requirements.txt
         cd sdk/python && pip install -e . && cd ../..
 
+        # Install pnpm
+        npm install -g pnpm@8
+
         # TypeScript dependencies
-        cd tests && npm ci && cd ..
-        cd sdk/sdk-typescript && npm ci && cd ../..
+        cd tests && pnpm install --frozen-lockfile && cd ..
+        cd sdk/sdk-typescript && pnpm install --frozen-lockfile && cd ../..
 
     - name: Run comprehensive test suite
       run: |
@@ -53,7 +62,7 @@ jobs:
     - name: Generate detailed coverage report
       run: |
         cd tests
-        npm run test:coverage -- --reporter=html --outputFile=../coverage-report/
+        pnpm run test:coverage -- --reporter=html --outputFile=../coverage-report/
 
         # Python coverage
         cd ..
@@ -137,15 +146,19 @@ jobs:
         cd sdk/python
         pip install -e .
 
+    - name: Install pnpm
+      run: |
+        npm install -g pnpm@8
+
     - name: Install TypeScript dependencies
       run: |
-        cd tests && npm ci && cd ..
-        cd sdk/sdk-typescript && npm ci
+        cd tests && pnpm install --frozen-lockfile && cd ..
+        cd sdk/sdk-typescript && pnpm install --frozen-lockfile
 
     - name: Build TypeScript SDK
       run: |
         cd sdk/sdk-typescript
-        npm run build
+        pnpm run build
 
     - name: Run Python tests
       run: |
@@ -154,7 +167,7 @@ jobs:
     - name: Run TypeScript tests
       run: |
         cd tests
-        npm run test:typescript
+        pnpm run test:typescript
 
   security-audit:
     name: Security Audit
@@ -176,14 +189,15 @@ jobs:
 
     - name: Install dependencies
       run: |
-        cd tests && npm ci && cd ..
-        cd sdk/sdk-typescript && npm ci && cd ../..
+        npm install -g pnpm@8
+        cd tests && pnpm install --frozen-lockfile && cd ..
+        cd sdk/sdk-typescript && pnpm install --frozen-lockfile && cd ../..
         pip install -r tests/requirements.txt
 
-    - name: Run npm audit
+    - name: Run pnpm audit
       run: |
         cd sdk/sdk-typescript
-        npm audit --audit-level=high
+        pnpm audit --audit-level=high
 
     - name: Run Python security checks
       run: |
