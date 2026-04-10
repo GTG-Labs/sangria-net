@@ -28,7 +28,7 @@ export default function Footer() {
               Docs
             </Link>
             <Link
-              href="https://github.com/GTG-Labs/sangria-net"
+              href="https://github.com/GTG-Labs/sangria"
               aria-label="GitHub repository"
               className="text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
             >
