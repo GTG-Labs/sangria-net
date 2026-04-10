@@ -286,6 +286,12 @@ interface WConfig {
   maxVelocity: number;
   controlSphere0?: boolean;
   followCursor?: boolean;
+  centerRepelRadius: number;
+  centerRepelStrength: number;
+  brownianMotion: number;
+  flowSpeed: number;
+  ballRepelRadius: number;
+  ballRepelStrength: number;
 }
 
 class W {
@@ -323,118 +329,130 @@ class W {
 
   update(deltaInfo: { delta: number }) {
     const { config, center, positionData, sizeData, velocityData } = this;
+    const p = positionData;
+    const v = velocityData;
     let startIdx = 0;
     if (config.controlSphere0) {
       startIdx = 1;
-      const firstVec = new Vector3().fromArray(positionData, 0);
-      firstVec.lerp(center, 0.1).toArray(positionData, 0);
-      new Vector3(0, 0, 0).toArray(velocityData, 0);
+      p[0] += (center.x - p[0]) * 0.1;
+      p[1] += (center.y - p[1]) * 0.1;
+      p[2] += (center.z - p[2]) * 0.1;
+      v[0] = v[1] = v[2] = 0;
     }
+    const gDelta = deltaInfo.delta * config.gravity;
+    const hasFlow = config.flowSpeed !== 0;
+    const hasBrownian = config.brownianMotion > 0;
+    const hasCenterRepel = config.centerRepelRadius > 0;
+    const friction = config.friction;
+    const maxVel = config.maxVelocity;
+    const maxVelSq = maxVel * maxVel;
+
+    // Phase 1: apply forces
     for (let idx = startIdx; idx < config.count; idx++) {
-      const base = 3 * idx;
-      const pos = new Vector3().fromArray(positionData, base);
-      const vel = new Vector3().fromArray(velocityData, base);
-      vel.y -= deltaInfo.delta * config.gravity * sizeData[idx];
-      // Constant horizontal flow
-      if (config.flowSpeed !== 0) {
-        vel.x += config.flowSpeed;
+      const b = 3 * idx;
+      v[b + 1] -= gDelta * sizeData[idx];
+      if (hasFlow) v[b] += config.flowSpeed;
+      if (hasBrownian) {
+        v[b] += MathUtils.randFloatSpread(config.brownianMotion);
+        v[b + 1] += MathUtils.randFloatSpread(config.brownianMotion);
+        v[b + 2] += MathUtils.randFloatSpread(config.brownianMotion * 0.3);
       }
-      // Brownian motion — tiny random nudge each frame
-      if (config.brownianMotion > 0) {
-        vel.x += MathUtils.randFloatSpread(config.brownianMotion);
-        vel.y += MathUtils.randFloatSpread(config.brownianMotion);
-        vel.z += MathUtils.randFloatSpread(config.brownianMotion * 0.3);
-      }
-      // Center repulsion
-      if (config.centerRepelRadius > 0) {
-        const dx = pos.x;
-        const dy = pos.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < config.centerRepelRadius && dist > 0.01) {
+      if (hasCenterRepel) {
+        const dx = p[b], dy = p[b + 1];
+        const distSq = dx * dx + dy * dy;
+        if (distSq < config.centerRepelRadius * config.centerRepelRadius && distSq > 0.0001) {
+          const dist = Math.sqrt(distSq);
           const force = (1 - dist / config.centerRepelRadius) * config.centerRepelStrength;
-          vel.x += (dx / dist) * force;
-          vel.y += (dy / dist) * force;
+          const invDist = 1 / dist;
+          v[b] += dx * invDist * force;
+          v[b + 1] += dy * invDist * force;
         }
       }
-      vel.multiplyScalar(config.friction);
-      vel.clampLength(0, config.maxVelocity);
-      pos.add(vel);
-      pos.toArray(positionData, base);
-      vel.toArray(velocityData, base);
+      v[b] *= friction;
+      v[b + 1] *= friction;
+      v[b + 2] *= friction;
+      // Clamp velocity
+      const vSq = v[b] * v[b] + v[b + 1] * v[b + 1] + v[b + 2] * v[b + 2];
+      if (vSq > maxVelSq) {
+        const scale = maxVel / Math.sqrt(vSq);
+        v[b] *= scale; v[b + 1] *= scale; v[b + 2] *= scale;
+      }
+      p[b] += v[b];
+      p[b + 1] += v[b + 1];
+      p[b + 2] += v[b + 2];
     }
+
+    // Phase 2: collisions and boundaries
+    const hasBallRepel = config.ballRepelRadius > 0;
+    const maxZ = Math.max(config.maxZ, config.maxSize);
     for (let idx = startIdx; idx < config.count; idx++) {
-      const base = 3 * idx;
-      const pos = new Vector3().fromArray(positionData, base);
-      const vel = new Vector3().fromArray(velocityData, base);
-      const radius = sizeData[idx];
+      const b = 3 * idx;
+      const r = sizeData[idx];
+      // Ball-to-ball
       for (let jdx = idx + 1; jdx < config.count; jdx++) {
-        const otherBase = 3 * jdx;
-        const otherPos = new Vector3().fromArray(positionData, otherBase);
-        const otherVel = new Vector3().fromArray(velocityData, otherBase);
-        const diff = new Vector3().copy(otherPos).sub(pos);
-        const dist = diff.length();
-        const sumRadius = radius + sizeData[jdx];
-        if (dist < sumRadius) {
-          const overlap = sumRadius - dist;
-          const correction = diff.normalize().multiplyScalar(0.5 * overlap);
-          const velCorrection = correction.clone().multiplyScalar(Math.max(vel.length(), 1));
-          pos.sub(correction);
-          vel.sub(velCorrection);
-          pos.toArray(positionData, base);
-          vel.toArray(velocityData, base);
-          otherPos.add(correction);
-          otherVel.add(correction.clone().multiplyScalar(Math.max(otherVel.length(), 1)));
-          otherPos.toArray(positionData, otherBase);
-          otherVel.toArray(velocityData, otherBase);
-        } else if (config.ballRepelRadius > 0 && dist < sumRadius + config.ballRepelRadius) {
-          // Soft repulsion zone — gentle push apart when nearby
-          const proximity = 1 - (dist - sumRadius) / config.ballRepelRadius;
-          const push = diff.normalize().multiplyScalar(proximity * config.ballRepelStrength);
-          vel.add(push.clone().negate());
-          otherVel.add(push);
-          vel.toArray(velocityData, base);
-          otherVel.toArray(velocityData, otherBase);
+        const ob = 3 * jdx;
+        const dx = p[ob] - p[b];
+        const dy = p[ob + 1] - p[b + 1];
+        const dz = p[ob + 2] - p[b + 2];
+        const distSq = dx * dx + dy * dy + dz * dz;
+        const sumR = r + sizeData[jdx];
+        const checkR = hasBallRepel ? sumR + config.ballRepelRadius : sumR;
+        if (distSq < checkR * checkR && distSq > 0.0001) {
+          const dist = Math.sqrt(distSq);
+          const invDist = 1 / dist;
+          const nx = dx * invDist, ny = dy * invDist, nz = dz * invDist;
+          if (dist < sumR) {
+            const overlap = (sumR - dist) * 0.5;
+            p[b] -= nx * overlap; p[b + 1] -= ny * overlap; p[b + 2] -= nz * overlap;
+            p[ob] += nx * overlap; p[ob + 1] += ny * overlap; p[ob + 2] += nz * overlap;
+            const velMag = Math.max(Math.sqrt(v[b] * v[b] + v[b + 1] * v[b + 1] + v[b + 2] * v[b + 2]), 1);
+            const ovelMag = Math.max(Math.sqrt(v[ob] * v[ob] + v[ob + 1] * v[ob + 1] + v[ob + 2] * v[ob + 2]), 1);
+            v[b] -= nx * overlap * velMag; v[b + 1] -= ny * overlap * velMag; v[b + 2] -= nz * overlap * velMag;
+            v[ob] += nx * overlap * ovelMag; v[ob + 1] += ny * overlap * ovelMag; v[ob + 2] += nz * overlap * ovelMag;
+          } else if (hasBallRepel) {
+            const proximity = (1 - (dist - sumR) / config.ballRepelRadius) * config.ballRepelStrength;
+            v[b] -= nx * proximity; v[b + 1] -= ny * proximity; v[b + 2] -= nz * proximity;
+            v[ob] += nx * proximity; v[ob + 1] += ny * proximity; v[ob + 2] += nz * proximity;
+          }
         }
       }
+      // Sphere0 collision
       if (config.controlSphere0) {
-        const diff = new Vector3().copy(new Vector3().fromArray(positionData, 0)).sub(pos);
-        const d = diff.length();
-        const sumRadius0 = radius + sizeData[0];
-        if (d < sumRadius0) {
-          const correction = diff.normalize().multiplyScalar(sumRadius0 - d);
-          const velCorrection = correction.clone().multiplyScalar(Math.max(vel.length(), 2));
-          pos.sub(correction);
-          vel.sub(velCorrection);
+        const dx = p[0] - p[b], dy = p[1] - p[b + 1], dz = p[2] - p[b + 2];
+        const distSq = dx * dx + dy * dy + dz * dz;
+        const sumR0 = r + sizeData[0];
+        if (distSq < sumR0 * sumR0 && distSq > 0.0001) {
+          const dist = Math.sqrt(distSq);
+          const invDist = 1 / dist;
+          const overlap = sumR0 - dist;
+          const nx = dx * invDist, ny = dy * invDist, nz = dz * invDist;
+          const velMag = Math.max(Math.sqrt(v[b] * v[b] + v[b + 1] * v[b + 1] + v[b + 2] * v[b + 2]), 2);
+          p[b] -= nx * overlap; p[b + 1] -= ny * overlap; p[b + 2] -= nz * overlap;
+          v[b] -= nx * overlap * velMag; v[b + 1] -= ny * overlap * velMag; v[b + 2] -= nz * overlap * velMag;
         }
       }
-      if (config.flowSpeed !== 0) {
-        // Wrap around horizontally — fully off one side, spawn fully off the other
-        const margin = radius * 2;
-        if (pos.x > config.maxX + margin) {
-          pos.x = -config.maxX - margin;
-        } else if (pos.x < -config.maxX - margin) {
-          pos.x = config.maxX + margin;
-        }
-      } else if (Math.abs(pos.x) + radius > config.maxX) {
-        pos.x = Math.sign(pos.x) * (config.maxX - radius);
-        vel.x = -vel.x * config.wallBounce;
+      // Boundaries
+      if (hasFlow) {
+        const margin = r * 2;
+        if (p[b] > config.maxX + margin) p[b] = -config.maxX - margin;
+        else if (p[b] < -config.maxX - margin) p[b] = config.maxX + margin;
+      } else if (Math.abs(p[b]) + r > config.maxX) {
+        p[b] = Math.sign(p[b]) * (config.maxX - r);
+        v[b] = -v[b] * config.wallBounce;
       }
       if (config.gravity === 0) {
-        if (Math.abs(pos.y) + radius > config.maxY) {
-          pos.y = Math.sign(pos.y) * (config.maxY - radius);
-          vel.y = -vel.y * config.wallBounce;
+        if (Math.abs(p[b + 1]) + r > config.maxY) {
+          p[b + 1] = Math.sign(p[b + 1]) * (config.maxY - r);
+          v[b + 1] = -v[b + 1] * config.wallBounce;
         }
-      } else if (pos.y - radius < -config.maxY) {
-        pos.y = -config.maxY + radius;
-        vel.y = -vel.y * config.wallBounce;
+      } else if (p[b + 1] - r < -config.maxY) {
+        p[b + 1] = -config.maxY + r;
+        v[b + 1] = -v[b + 1] * config.wallBounce;
       }
-      const maxBoundary = Math.max(config.maxZ, config.maxSize);
-      if (Math.abs(pos.z) + radius > maxBoundary) {
-        pos.z = Math.sign(pos.z) * (config.maxZ - radius);
-        vel.z = -vel.z * config.wallBounce;
+      if (Math.abs(p[b + 2]) + r > maxZ) {
+        p[b + 2] = Math.sign(p[b + 2]) * (config.maxZ - r);
+        v[b + 2] = -v[b + 2] * config.wallBounce;
       }
-      pos.toArray(positionData, base);
-      vel.toArray(velocityData, base);
     }
   }
 }
@@ -638,7 +656,7 @@ class Spheres extends InstancedMesh {
     const roomEnv = new RoomEnvironment();
     const pmrem = new PMREMGenerator(renderer);
     const envTexture = pmrem.fromScene(roomEnv).texture;
-    const geometry = new SphereGeometry();
+    const geometry = new SphereGeometry(1, 16, 12);
     const material = new Y({ envMap: envTexture, ...config.materialParams });
     material.envMapRotation.x = -Math.PI / 2;
     super(geometry, material, config.count);
