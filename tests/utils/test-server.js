@@ -59,8 +59,8 @@ export class MockSangriaServer {
       res.json(mockResponses.health.healthy())
     })
 
-    // Generate payment
-    this.app.post('/api/v1/payments/generate', (req, res) => {
+    // Generate payment (SDK endpoint)
+    this.app.post('/v1/generate-payment', (req, res) => {
       const { amount, resource, description } = req.body
 
       // Validate request
@@ -87,9 +87,9 @@ export class MockSangriaServer {
       res.json(mockResponses.generatePayment.success(amount, resource))
     })
 
-    // Settle payment
-    this.app.post('/api/v1/payments/settle', (req, res) => {
-      const { payment_header, amount, resource } = req.body
+    // Settle payment (SDK endpoint)
+    this.app.post('/v1/settle-payment', (req, res) => {
+      const { payment_payload } = req.body
       const authHeader = req.headers.authorization
 
       // Validate auth
@@ -97,17 +97,17 @@ export class MockSangriaServer {
         return res.status(401).json({ error: 'Invalid API key' })
       }
 
-      // Validate payment header
-      if (!payment_header) {
-        return res.status(400).json(mockResponses.generatePayment.validation_error('Payment header required'))
+      // Validate payment payload
+      if (!payment_payload) {
+        return res.status(400).json(mockResponses.generatePayment.validation_error('Payment payload required'))
       }
 
       // Simulate different payment outcomes
-      const scenario = this.getPaymentScenario(payment_header)
+      const scenario = this.getPaymentScenario(payment_payload)
 
       switch (scenario) {
         case 'success':
-          res.json(mockResponses.settlePayment.success(amount))
+          res.json(mockResponses.settlePayment.success())
           break
         case 'invalid_signature':
           res.status(402).json(mockResponses.settlePayment.invalid_signature())
@@ -122,7 +122,7 @@ export class MockSangriaServer {
           res.status(503).json(mockResponses.settlePayment.network_error())
           break
         default:
-          res.json(mockResponses.settlePayment.success(amount))
+          res.json(mockResponses.settlePayment.success())
       }
     })
 

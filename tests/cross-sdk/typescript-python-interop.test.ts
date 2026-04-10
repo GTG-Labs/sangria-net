@@ -5,6 +5,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { execSync } from 'child_process'
+import { writeFileSync, unlinkSync } from 'fs'
 import path from 'path'
 import { Sangria } from '../../sdk/sdk-typescript/src/index.js'
 import { MockSangriaServer } from '../utils/test-server.js'
@@ -12,6 +13,16 @@ import { MockSangriaServer } from '../utils/test-server.js'
 let mockServer: MockSangriaServer | null = null
 let tsSdk: Sangria
 const pythonSdkPath = path.resolve(__dirname, '../../sdk/python')
+
+function runPythonScript(script: string): string {
+  const tempFile = path.join(__dirname, `temp_${Date.now()}.py`)
+  try {
+    writeFileSync(tempFile, script)
+    return execSync(`cd ${pythonSdkPath} && source venv/bin/activate && python3 ${tempFile}`, { encoding: 'utf-8' })
+  } finally {
+    try { unlinkSync(tempFile) } catch {}
+  }
+}
 
 describe('TypeScript-Python SDK Interoperability', () => {
   beforeAll(async () => {
@@ -82,16 +93,13 @@ async def test_generate():
     result = await client.handle_fixed_price(None, options)
     await client.aclose()
 
-    print(f"status:{result.status_code}")
-    print(f"body:{result.body}")
+    print("status:" + str(result.status_code))
+    print("body:" + str(result.body))
 
 asyncio.run(test_generate())
 `
 
-    const pythonResult = execSync(
-      `cd ${pythonSdkPath} && python3 -c "${pythonScript}"`,
-      { encoding: 'utf-8' }
-    )
+    const pythonResult = runPythonScript(pythonScript)
 
     const pythonLines = pythonResult.trim().split('\n')
     const pythonStatus = parseInt(pythonLines.find(l => l.startsWith('status:'))?.split(':')[1] || '0')
@@ -166,20 +174,17 @@ async def test_settle():
     await client.aclose()
 
     if hasattr(result, 'paid'):
-        print(f"paid:{result.paid}")
-        print(f"amount:{result.amount}")
-        print(f"transaction:{getattr(result, 'transaction', None)}")
+        print("paid:" + str(result.paid))
+        print("amount:" + str(result.amount))
+        print("transaction:" + str(getattr(result, 'transaction', None)))
     else:
-        print(f"status_code:{result.status_code}")
-        print(f"body:{result.body}")
+        print("status_code:" + str(result.status_code))
+        print("body:" + str(result.body))
 
 asyncio.run(test_settle())
 `
 
-    const pythonSettleResult = execSync(
-      `cd ${pythonSdkPath} && python3 -c "${pythonSettleScript}"`,
-      { encoding: 'utf-8' }
-    )
+    const pythonSettleResult = runPythonScript(pythonSettleScript)
 
     const pythonLines = pythonSettleResult.trim().split('\n')
     const paidLine = pythonLines.find(l => l.startsWith('paid:'))
@@ -241,15 +246,12 @@ async def test_amount():
     result = await client.handle_fixed_price(None, options)
     await client.aclose()
 
-    print(f"amount:{result.body['amount']}")
+    print("amount:" + str(result.body['amount']))
 
 asyncio.run(test_amount())
 `
 
-      const pythonResult = execSync(
-        `cd ${pythonSdkPath} && python3 -c "${pythonScript}"`,
-        { encoding: 'utf-8' }
-      )
+      const pythonResult = runPythonScript(pythonScript)
 
       const pythonLines = pythonResult.trim().split('\n')
       const amountLine = pythonLines.find(l => l.startsWith('amount:'))
@@ -293,19 +295,16 @@ async def test_error():
             resource='https://example.com/premium'
         )
         result = await client.handle_fixed_price(None, options)
-        print(f"unexpected_success:{result}")
+        print("unexpected_success")
     except Exception as e:
-        print(f"error:{str(e)}")
+        print("error:" + str(e))
     finally:
         await client.aclose()
 
 asyncio.run(test_error())
 `
 
-    const pythonErrorResult = execSync(
-      `cd ${pythonSdkPath} && python3 -c "${pythonErrorScript}"`,
-      { encoding: 'utf-8' }
-    )
+    const pythonErrorResult = runPythonScript(pythonErrorScript)
 
     const pythonLines = pythonErrorResult.trim().split('\n')
     const errorLine = pythonLines.find(l => l.startsWith('error:'))
@@ -347,7 +346,10 @@ async def test_multiple():
         api_key='test-key'
     )
 
-    test_cases = ${JSON.stringify(testCases)}
+    test_cases = [
+        {"amount": 0.01, "resource": "https://example.com/test1"},
+        {"amount": 0.05, "resource": "https://example.com/test2"}
+    ]
     results = []
 
     for case in test_cases:
@@ -361,15 +363,12 @@ async def test_multiple():
     await client.aclose()
 
     for i, result in enumerate(results):
-        print(f"payment_{i}:{json.dumps(result)}")
+        print("payment_" + str(i) + ":" + json.dumps(result))
 
 asyncio.run(test_multiple())
 `
 
-    const pythonResult = execSync(
-      `cd ${pythonSdkPath} && python3 -c "${pythonScript}"`,
-      { encoding: 'utf-8' }
-    )
+    const pythonResult = runPythonScript(pythonScript)
 
     const pythonLines = pythonResult.trim().split('\n')
     const pythonPayments = pythonLines
