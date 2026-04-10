@@ -5,6 +5,7 @@
 
 import { ethers } from 'ethers'
 import Decimal from 'decimal.js'
+import { createHash } from 'crypto'
 
 // Configure Decimal.js for financial precision (6 decimal places for USDC)
 Decimal.set({
@@ -42,7 +43,7 @@ export interface PaymentSignature {
 export class CryptoValidator {
   private static instance: CryptoValidator
   private usedNonces = new Set<string>()
-  private usedSignatures = new Set<string>()
+  private usedSignatures = new Set<string>() // Stores SHA256 hashes of signatures
   private paymentStates = new Map<string, 'PENDING' | 'COMPLETED' | 'FAILED'>()
 
   static getInstance(): CryptoValidator {
@@ -50,6 +51,13 @@ export class CryptoValidator {
       CryptoValidator.instance = new CryptoValidator()
     }
     return CryptoValidator.instance
+  }
+
+  /**
+   * Hash signature for consistent storage/lookup (matches PaymentDatabase)
+   */
+  private hashSignature(signature: string): string {
+    return createHash('sha256').update(signature).digest('hex')
   }
 
   /**
@@ -170,8 +178,9 @@ export class CryptoValidator {
     expectedSigner: string
   ): Promise<{ valid: boolean; error?: string }> {
     try {
-      // 1. Check signature replay
-      if (this.usedSignatures.has(signature.signature)) {
+      // 1. Check signature replay (using hashed signature for consistency with PaymentDatabase)
+      const signatureHash = this.hashSignature(signature.signature)
+      if (this.usedSignatures.has(signatureHash)) {
         return { valid: false, error: 'SIGNATURE_REPLAY_ATTACK' }
       }
 
@@ -216,8 +225,8 @@ export class CryptoValidator {
         return { valid: false, error: 'CHAIN_ID_MISMATCH' }
       }
 
-      // 8. Mark as used to prevent replay
-      this.usedSignatures.add(signature.signature)
+      // 8. Mark as used to prevent replay (store hashed signature for consistency with PaymentDatabase)
+      this.usedSignatures.add(signatureHash)
       this.usedNonces.add(payment.nonce)
       this.paymentStates.set(payment.payment_id, 'COMPLETED')
 

@@ -6,10 +6,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import type { Request, Response, NextFunction } from 'express'
 
-// Mock the SangriaNet core before importing adapters
+// Mock the Sangria core before importing adapters
 const mockHandleFixedPrice = vi.fn()
-vi.mock('../../../../sdk/sdk-typescript/src/core.js', () => ({
-  SangriaNet: class MockSangriaNet {
+vi.mock('../../../sdk/sdk-typescript/src/core.ts', () => ({
+  Sangria: class MockSangria {
     handleFixedPrice = mockHandleFixedPrice
   }
 }))
@@ -28,12 +28,12 @@ describe('SDK Adapters', () => {
 
       // Import the adapter after mocking
       const { fixedPrice: fp } = await import('../../../sdk/sdk-typescript/src/adapters/express.js')
-      const { SangriaNet } = await import('../../../sdk/sdk-typescript/src/core.js')
+      const { Sangria } = await import('../../../sdk/sdk-typescript/src/core.js')
 
       fixedPrice = fp
 
       // Setup mocks
-      mockSangriaNet = new SangriaNet({ apiKey: 'test' })
+      mockSangriaNet = new Sangria({ apiKey: 'test' })
 
       mockReq = {
         headers: {},

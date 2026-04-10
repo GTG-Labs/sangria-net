@@ -38,10 +38,15 @@ describe('Security Penetration Tests', () => {
       const validSignature = await validator.signPayment(payment, domain, TEST_CONSTANTS.PRIVATE_KEYS.USER)
 
       // Attempt signature malleability - flip s value
+      const flippedS = flipSValue(validSignature.s)
       const malleableSignature = {
         ...validSignature,
-        s: flipSValue(validSignature.s),
-        signature: validSignature.signature // Keep original for now
+        s: flippedS,
+        signature: ethers.Signature.from({
+          r: validSignature.r,
+          s: flippedS,
+          v: validSignature.v
+        }).serialized
       }
 
       // Original signature should verify
@@ -134,7 +139,10 @@ describe('Security Penetration Tests', () => {
       )
       expect(mainnetVerification.valid).toBe(true)
 
-      // Should fail on different chain
+      // Reset validator state to isolate replay tracking from chain verification
+      validator.resetState()
+
+      // Should fail on different chain with CHAIN_ID_MISMATCH (not replay error)
       const crossChainVerification = await validator.verifyPaymentSignature(
         payment,
         signature,
@@ -142,8 +150,7 @@ describe('Security Penetration Tests', () => {
         TEST_CONSTANTS.ADDRESSES.USER
       )
       expect(crossChainVerification.valid).toBe(false)
-      // May fail as chain mismatch or signature replay depending on verification order
-      expect(['CHAIN_ID_MISMATCH', 'SIGNATURE_REPLAY_ATTACK']).toContain(crossChainVerification.error)
+      expect(crossChainVerification.error).toBe('CHAIN_ID_MISMATCH')
     })
   })
 

@@ -210,6 +210,26 @@ export class MockSangriaServer {
   resetRequestCount() {
     this.requestCount = 0
   }
+
+  /**
+   * Update server configuration and apply changes
+   */
+  updateConfiguration(newOptions = {}) {
+    // Validate and normalize options
+    const normalizedOptions = {
+      latency: typeof newOptions.latency === 'number' && newOptions.latency >= 0 ? newOptions.latency : this.options.latency,
+      errorRate: typeof newOptions.errorRate === 'number' && newOptions.errorRate >= 0 && newOptions.errorRate <= 1 ? newOptions.errorRate : this.options.errorRate,
+      rateLimitThreshold: newOptions.rateLimitThreshold !== undefined ? newOptions.rateLimitThreshold : this.options.rateLimitThreshold
+    }
+
+    // Update options
+    this.options = { ...this.options, ...normalizedOptions }
+
+    // Note: Middleware can't be dynamically updated in Express.
+    // For latency and error rate changes to take effect, the server would need to be restarted.
+    // However, we can return the applied configuration for logging purposes.
+    return this.options
+  }
 }
 
 /**

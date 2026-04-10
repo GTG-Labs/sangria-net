@@ -126,17 +126,6 @@ export class DeterministicSangriaServer {
         next()
       })
     }
-
-    // Error handler
-    this.app.use((error: any, req: any, res: any, next: any) => {
-      console.error('Server error:', error)
-      if (!res.headersSent) {
-        res.status(500).json({
-          error: 'Internal server error',
-          message: error.message
-        })
-      }
-    })
   }
 
   private setupRoutes() {
@@ -476,6 +465,17 @@ export class DeterministicSangriaServer {
       this.resetState()
       res.json({ message: 'State reset successfully' })
     })
+
+    // Error handler (must be registered after all routes)
+    this.app.use((error: any, req: any, res: any, next: any) => {
+      console.error('Server error:', error)
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: 'Internal server error',
+          message: error.message
+        })
+      }
+    })
   }
 
   /**
@@ -483,14 +483,18 @@ export class DeterministicSangriaServer {
    */
   async start(): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.server = this.app.listen(this.port, (err?: Error) => {
-        if (err) {
-          reject(err)
-        } else {
-          console.log(`Deterministic Sangria server running on port ${this.port}`)
-          resolve()
-        }
+      const onError = (err: Error) => {
+        this.server?.removeListener('error', onError)
+        reject(err)
+      }
+
+      this.server = this.app.listen(this.port, () => {
+        this.server?.removeListener('error', onError)
+        console.log(`Deterministic Sangria server running on port ${this.port}`)
+        resolve()
       })
+
+      this.server.once('error', onError)
     })
   }
 

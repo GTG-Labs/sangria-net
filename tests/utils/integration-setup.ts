@@ -9,8 +9,16 @@ import { MockSangriaServer, FrameworkTestServers } from './test-server.js'
 let mockServer: MockSangriaServer | null = null
 let frameworkServers: FrameworkTestServers | null = null
 
+// Capture original environment variables for restoration
+let originalTestApiBaseUrl: string | undefined
+let originalIntegrationTestMode: string | undefined
+
 beforeAll(async () => {
   console.log('🔧 Setting up integration test environment...')
+
+  // Capture original environment variable values
+  originalTestApiBaseUrl = process.env.TEST_API_BASE_URL
+  originalIntegrationTestMode = process.env.INTEGRATION_TEST_MODE
 
   // Start mock Sangria server
   mockServer = new MockSangriaServer(8080, {
@@ -41,6 +49,19 @@ afterAll(async () => {
   if (frameworkServers) {
     await frameworkServers.stopAll()
     frameworkServers = null
+  }
+
+  // Restore original environment variables
+  if (originalTestApiBaseUrl !== undefined) {
+    process.env.TEST_API_BASE_URL = originalTestApiBaseUrl
+  } else {
+    delete process.env.TEST_API_BASE_URL
+  }
+
+  if (originalIntegrationTestMode !== undefined) {
+    process.env.INTEGRATION_TEST_MODE = originalIntegrationTestMode
+  } else {
+    delete process.env.INTEGRATION_TEST_MODE
   }
 
   console.log('✅ Integration test cleanup completed')

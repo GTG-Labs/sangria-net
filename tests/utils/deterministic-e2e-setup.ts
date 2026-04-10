@@ -7,6 +7,8 @@ import { beforeAll, afterAll } from 'vitest'
 import { DeterministicSangriaServer } from './deterministic-server.js'
 
 let deterministicServer: DeterministicSangriaServer | null = null
+let prevE2EMode: string | undefined
+let prevBaseUrl: string | undefined
 
 beforeAll(async () => {
   console.log('🚀 Starting deterministic E2E test environment...')
@@ -21,6 +23,8 @@ beforeAll(async () => {
 
     await deterministicServer.start()
 
+    prevE2EMode = process.env.E2E_TEST_MODE
+    prevBaseUrl = process.env.TEST_API_BASE_URL
     process.env.E2E_TEST_MODE = 'deterministic'
     process.env.TEST_API_BASE_URL = deterministicServer.getBaseUrl()
 
@@ -41,9 +45,14 @@ afterAll(async () => {
   try {
     await deterministicServer.stop()
     deterministicServer = null
+    if (prevE2EMode === undefined) delete process.env.E2E_TEST_MODE
+    else process.env.E2E_TEST_MODE = prevE2EMode
+    if (prevBaseUrl === undefined) delete process.env.TEST_API_BASE_URL
+    else process.env.TEST_API_BASE_URL = prevBaseUrl
     console.log('✅ Deterministic test environment cleaned up')
   } catch (error) {
     console.error('❌ Error during cleanup:', error)
+    throw error
   }
 })
 
@@ -138,16 +147,23 @@ export const deterministicUtils = {
     from: string,
     to: string = '0x742d35Cc6634C0532925a3b8D400d77fb63D0C5D'.toLowerCase(),
     amount: string = '0.01',
-    testId: string = 'default'
+    testId: string = 'default',
+    now?: number
   ) => {
-    const now = Math.floor(Date.now() / 1000)
+    const timestamp = now ?? Math.floor(Date.now() / 1000)
+
+    // Parse amount string as decimal to avoid floating point precision issues
+    const [integerPart, fractionalPart = ''] = amount.split('.')
+    const paddedFractional = fractionalPart.padEnd(6, '0').slice(0, 6) // Ensure exactly 6 digits for USDC
+    const value = BigInt(integerPart + paddedFractional).toString()
+
     return {
       from,
       to,
-      value: (BigInt(Math.floor(parseFloat(amount) * 1000000))).toString(), // Convert to USDC base units
-      validAfter: now,
-      validBefore: now + 300, // 5 minutes
-      nonce: `0x${Buffer.from(`test-${testId}-${Date.now()}`).toString('hex').padStart(64, '0')}`
+      value, // USDC base units (6 decimal places)
+      validAfter: timestamp,
+      validBefore: timestamp + 300, // 5 minutes
+      nonce: `0x${Buffer.from(`test-${testId}-${timestamp}`).toString('hex').padStart(64, '0')}`
     }
   },
 

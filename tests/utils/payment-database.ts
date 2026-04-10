@@ -55,18 +55,41 @@ export interface PaymentMetrics {
 export class PaymentDatabase {
   private db: Database.Database
   private static instance: PaymentDatabase
+  private static instancePath: string
+  private dbPath: string
 
   private constructor(dbPath: string = ':memory:') {
+    this.dbPath = dbPath
     this.db = new Database(dbPath)
     this.initializeTables()
     this.setupIndices()
   }
 
   static getInstance(dbPath?: string): PaymentDatabase {
+    const requestedPath = dbPath ?? ':memory:'
+
     if (!PaymentDatabase.instance) {
-      PaymentDatabase.instance = new PaymentDatabase(dbPath)
+      PaymentDatabase.instance = new PaymentDatabase(requestedPath)
+      PaymentDatabase.instancePath = requestedPath
+    } else if (PaymentDatabase.instancePath !== requestedPath) {
+      throw new Error(
+        `PaymentDatabase instance already exists with path '${PaymentDatabase.instancePath}', ` +
+        `but '${requestedPath}' was requested. Use resetInstance() first to change database path.`
+      )
     }
+
     return PaymentDatabase.instance
+  }
+
+  /**
+   * Reset singleton instance for test isolation
+   */
+  static resetInstance(): void {
+    if (PaymentDatabase.instance) {
+      PaymentDatabase.instance.close()
+      PaymentDatabase.instance = undefined as any
+      PaymentDatabase.instancePath = undefined as any
+    }
   }
 
   /**

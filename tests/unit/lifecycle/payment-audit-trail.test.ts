@@ -189,22 +189,28 @@ describe('Payment Lifecycle and Audit Trail', () => {
 
     validTransitions.forEach(([fromState, toStates]) => {
       it(`should allow valid transitions from ${fromState}`, () => {
-        // Set initial state
-        if (fromState !== 'PENDING') {
-          db.updatePaymentState(payment.payment_id, fromState)
-        }
-
         toStates.forEach(toState => {
-          // Reset for each test
-          db.updatePaymentState(payment.payment_id, fromState)
+          // Create a fresh payment for each toState test
+          const paymentData = validator.generatePayment({
+            amount: '10.00',
+            resource: '/api/test',
+            chainId: TEST_CONSTANTS.CHAIN_IDS.BASE_MAINNET,
+            merchantAddress: TEST_CONSTANTS.ADDRESSES.MERCHANT
+          })
+          const newPayment = db.createPayment(paymentData, TEST_CONSTANTS.ADDRESSES.USER)
+
+          // Set the payment to the required fromState
+          if (fromState !== 'PENDING') {
+            db.updatePaymentState(newPayment.payment_id, fromState)
+          }
 
           expect(() => {
-            db.updatePaymentState(payment.payment_id, toState, {
+            db.updatePaymentState(newPayment.payment_id, toState, {
               transition_reason: `Test transition from ${fromState} to ${toState}`
             })
           }).not.toThrow()
 
-          const updated = db.getPayment(payment.payment_id)
+          const updated = db.getPayment(newPayment.payment_id)
           expect(updated?.state).toBe(toState)
         })
       })

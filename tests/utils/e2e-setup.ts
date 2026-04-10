@@ -84,8 +84,18 @@ export const e2eUtils = {
    */
   configureMockServer: (options: { latency?: number; errorRate?: number }) => {
     if (mockServer) {
-      // Update mock server configuration
-      console.log('Mock server configured:', options)
+      // Validate and apply configuration to mock server
+      const appliedConfig = mockServer.updateConfiguration(options)
+      console.log('Mock server configured with settings:', appliedConfig)
+
+      // Note: For latency and errorRate changes to take full effect,
+      // the server middleware would need to be restarted. The configuration
+      // is updated but existing middleware continues with previous settings.
+
+      return appliedConfig
+    } else {
+      console.warn('Mock server not available for configuration')
+      return null
     }
   },
 
