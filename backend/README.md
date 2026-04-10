@@ -61,6 +61,7 @@ These are called by the Sangria frontend dashboard. The user logs in via WorkOS 
 | DELETE | `/internal/api-keys/:id` | WorkOS JWT | Revoke an API key |
 | POST | `/internal/withdrawals` | WorkOS JWT | Request a merchant withdrawal (requires merchant_id) |
 | GET | `/internal/withdrawals` | WorkOS JWT | List withdrawals for a merchant (?merchant_id=) |
+| POST | `/internal/withdrawals/:id/cancel` | WorkOS JWT | Cancel a pending withdrawal (merchant self-service) |
 
 ### SDK endpoints — `/v1/*` (API key)
 
@@ -121,8 +122,8 @@ backend/
 │   └── hash.go                    # bcrypt hashing + verification
 ├── merchantHandlers/
 │   ├── payments.go                # GeneratePayment, SettlePayment
-│   ├── transactions.go            # GetMerchantTransactions (paginated)
-│   └── withdrawals.go             # RequestWithdrawal, ListWithdrawals
+│   ├── transactions.go            # GetMerchantBalance, GetMerchantTransactions (paginated)
+│   └── withdrawals.go             # RequestWithdrawal, ListWithdrawals, CancelWithdrawal
 ├── adminHandlers/
 │   ├── merchants.go               # CreateMerchantAPIKey
 │   ├── wallets.go                 # CreateWalletPool
@@ -135,6 +136,7 @@ backend/
 │   ├── merchants.go               # GetMerchantByID, EnsureUSDLiabilityAccount
 │   ├── cryptoWallets.go           # CreateCryptoWalletWithAccount, GetWalletByNetwork/Address
 │   ├── withdrawals.go             # CreateWithdrawal, Approve/Reject/Complete/FailWithdrawal
+│   ├── validation.go              # Shared input validation (ValidateAmountAndFee)
 │   ├── transaction.go             # Double-entry ledger (InsertTransaction, validateZeroNet)
 │   ├── users.go                   # User CRUD
 │   └── queries.go                 # Transaction queries (paginated)
@@ -164,26 +166,27 @@ backend/
 1. Merchant requests withdrawal from the dashboard (`POST /internal/withdrawals`)
 2. Balance is debited immediately and held in Withdrawal Clearing (prevents overdraw)
 3. If amount <= auto-approve threshold ($200 default): auto-approved. Otherwise: `pending_approval`
-4. Admin reviews pending withdrawals via `GET /admin/withdrawals?status=pending_approval`
-5. Admin approves (`/approve`) or rejects (`/reject`). Rejection reverses the balance debit.
-6. Admin sends the bank transfer manually (outside Sangria)
-7. If transfer lands: admin marks as completed (`/complete`). Completion splits the ledger — net amount exits the merchant pool, fee goes to platform revenue.
-8. If transfer bounces: admin marks as failed (`/fail`). Failure reverses the balance debit, restoring the merchant's funds.
+4. Merchant can self-cancel while pending (`POST /internal/withdrawals/:id/cancel`). Cancellation reverses the balance debit.
+5. Admin reviews pending withdrawals via `GET /admin/withdrawals?status=pending_approval`
+6. Admin approves (`/approve`) or rejects (`/reject`). Rejection reverses the balance debit.
+7. Admin sends the bank transfer manually (outside Sangria)
+8. If transfer lands: admin marks as completed (`/complete`). Completion splits the ledger — net amount exits the merchant pool, fee goes to platform revenue.
+9. If transfer bounces: admin marks as failed (`/fail`). Failure reverses the balance debit, restoring the merchant's funds.
 
 ### Withdrawal lifecycle
 
 ```
                           +-----------+
                           |  pending  |
-                     +--->| _approval |---+
-                     |    +-----------+   |
-                     |         |          |
-               auto-approve   | approve  | reject
-                     |         v          v
-                     |    +---------+  +----------+
-                     +--->| approved|  | canceled |
-                          +---------+  +----------+
-                               |
+                     +--->| _approval |---+---+
+                     |    +-----------+   |   |
+                     |         |          |   |
+               auto-approve   | approve  |   | merchant cancel
+                     |         v          |   | OR admin reject
+                     |    +---------+     v   v
+                     +--->| approved|  +----------+
+                          +---------+  | canceled |
+                               |       +----------+
                    bank transfer attempted
                           /          \
                     success          failure

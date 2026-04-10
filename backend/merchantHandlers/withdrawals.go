@@ -133,3 +133,53 @@ func ListWithdrawals(pool *pgxpool.Pool) fiber.Handler {
 		return c.JSON(withdrawals)
 	}
 }
+
+// CancelWithdrawal handles POST /withdrawals/:id/cancel.
+// Dashboard endpoint — merchant cancels their own pending withdrawal.
+func CancelWithdrawal(pool *pgxpool.Pool) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		user, ok := c.Locals("workos_user").(auth.WorkOSUser)
+		if !ok {
+			return c.Status(500).JSON(fiber.Map{"error": "internal server error"})
+		}
+		withdrawalID := c.Params("id")
+
+		var req struct {
+			MerchantID string `json:"merchant_id"`
+		}
+		if err := c.Bind().JSON(&req); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid request body"})
+		}
+		if req.MerchantID == "" {
+			return c.Status(400).JSON(fiber.Map{"error": "merchant_id is required"})
+		}
+
+		// Verify this merchant belongs to the authenticated user.
+		merchant, err := dbengine.GetMerchantByID(c.Context(), pool, req.MerchantID)
+		if err != nil {
+			if errors.Is(err, dbengine.ErrMerchantNotFound) {
+				return c.Status(404).JSON(fiber.Map{"error": "merchant not found"})
+			}
+			slog.Error("get merchant", "merchant_id", req.MerchantID, "error", err)
+			return c.Status(500).JSON(fiber.Map{"error": "failed to look up merchant"})
+		}
+		if merchant.UserID != user.ID {
+			return c.Status(403).JSON(fiber.Map{"error": "Forbidden"})
+		}
+
+		if err := dbengine.CancelWithdrawal(c.Context(), pool, withdrawalID, merchant.ID); err != nil {
+			if errors.Is(err, dbengine.ErrWithdrawalNotFound) {
+				return c.Status(400).JSON(fiber.Map{"error": "withdrawal not found or not pending approval"})
+			}
+			slog.Error("cancel withdrawal", "withdrawal_id", withdrawalID, "error", err)
+			return c.Status(500).JSON(fiber.Map{"error": "failed to cancel withdrawal"})
+		}
+
+		withdrawal, err := dbengine.GetWithdrawalByID(c.Context(), pool, withdrawalID)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": "failed to fetch withdrawal"})
+		}
+
+		return c.JSON(withdrawal)
+	}
+}
