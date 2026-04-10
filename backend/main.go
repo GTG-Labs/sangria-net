@@ -83,9 +83,9 @@ func main() {
 	utils.SetupCORSMiddleware(app)
 	setupRoutes(app, pool)
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
+	port, err := config.GetPort()
+	if err != nil {
+		log.Fatal(err)
 	}
 	log.Fatal(app.Listen(":" + port))
 }

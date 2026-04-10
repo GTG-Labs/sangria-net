@@ -49,3 +49,12 @@ func ConnectDatabase(ctx context.Context) (*pgxpool.Pool, error) {
 	slog.Info("connected to database")
 	return pool, nil
 }
+
+// GetPort returns the server port from the PORT environment variable.
+func GetPort() (string, error) {
+	port := os.Getenv("PORT")
+	if port == "" {
+		return "", fmt.Errorf("PORT environment variable is required")
+	}
+	return port, nil
+}
