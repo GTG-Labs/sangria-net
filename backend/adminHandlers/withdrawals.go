@@ -16,7 +16,10 @@ import (
 // Admin approves a pending withdrawal.
 func ApproveWithdrawal(pool *pgxpool.Pool) fiber.Handler {
 	return func(c fiber.Ctx) error {
-		admin := c.Locals("workos_user").(auth.WorkOSUser)
+		admin, ok := c.Locals("workos_user").(auth.WorkOSUser)
+		if !ok {
+			return c.Status(500).JSON(fiber.Map{"error": "internal server error"})
+		}
 		withdrawalID := c.Params("id")
 
 		var req struct {
@@ -52,7 +55,10 @@ func ApproveWithdrawal(pool *pgxpool.Pool) fiber.Handler {
 // Admin rejects a pending withdrawal and reverses the balance debit.
 func RejectWithdrawal(pool *pgxpool.Pool) fiber.Handler {
 	return func(c fiber.Ctx) error {
-		admin := c.Locals("workos_user").(auth.WorkOSUser)
+		admin, ok := c.Locals("workos_user").(auth.WorkOSUser)
+		if !ok {
+			return c.Status(500).JSON(fiber.Map{"error": "internal server error"})
+		}
 		withdrawalID := c.Params("id")
 
 		var req struct {

@@ -17,7 +17,10 @@ import (
 // Dashboard endpoint — user logs in via WorkOS, picks which merchant account to withdraw from.
 func RequestWithdrawal(pool *pgxpool.Pool) fiber.Handler {
 	return func(c fiber.Ctx) error {
-		user := c.Locals("workos_user").(auth.WorkOSUser)
+		user, ok := c.Locals("workos_user").(auth.WorkOSUser)
+		if !ok {
+			return c.Status(500).JSON(fiber.Map{"error": "internal server error"})
+		}
 
 		var req struct {
 			MerchantID     string  `json:"merchant_id"`
@@ -98,7 +101,10 @@ func RequestWithdrawal(pool *pgxpool.Pool) fiber.Handler {
 // Dashboard endpoint — returns withdrawals for a specific merchant owned by the authenticated user.
 func ListWithdrawals(pool *pgxpool.Pool) fiber.Handler {
 	return func(c fiber.Ctx) error {
-		user := c.Locals("workos_user").(auth.WorkOSUser)
+		user, ok := c.Locals("workos_user").(auth.WorkOSUser)
+		if !ok {
+			return c.Status(500).JSON(fiber.Map{"error": "internal server error"})
+		}
 
 		merchantID := c.Query("merchant_id")
 		if merchantID == "" {

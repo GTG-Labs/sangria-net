@@ -16,7 +16,10 @@ import (
 func CreateMerchantAPIKey(pool *pgxpool.Pool) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		// Get authenticated user from middleware context
-		user := c.Locals("workos_user").(auth.WorkOSUser)
+		user, ok := c.Locals("workos_user").(auth.WorkOSUser)
+		if !ok {
+			return c.Status(500).JSON(fiber.Map{"error": "internal server error"})
+		}
 
 		var req struct {
 			Name string `json:"name"`

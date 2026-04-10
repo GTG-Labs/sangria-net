@@ -96,7 +96,10 @@ type payloadEnvelope struct {
 // verifies and settles via the facilitator, then writes the ledger.
 func SettlePayment(pool *pgxpool.Pool) fiber.Handler {
 	return func(c fiber.Ctx) error {
-		merchant := c.Locals("merchant_api_key").(*dbengine.Merchant)
+		merchant, ok := c.Locals("merchant_api_key").(*dbengine.Merchant)
+		if !ok {
+			return c.Status(500).JSON(fiber.Map{"error": "internal server error"})
+		}
 
 		var req struct {
 			PaymentPayload string `json:"payment_payload"`
