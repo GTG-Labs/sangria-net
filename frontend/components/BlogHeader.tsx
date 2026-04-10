@@ -19,8 +19,8 @@ export default function BlogHeader() {
             clearcoat: 1,
             clearcoatRoughness: 0.05,
           }}
-          minSize={0.15}
-          maxSize={0.35}
+          minSize={0.25}
+          maxSize={0.5}
           gravity={0.5}
           friction={0.99}
           wallBounce={0.5}
