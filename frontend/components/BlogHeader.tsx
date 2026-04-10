@@ -6,10 +6,11 @@ const Ballpit = dynamic(() => import("@/components/Ballpit"), { ssr: false });
 
 export default function BlogHeader() {
   return (
-    <div className="relative overflow-hidden h-[220px] flex items-center justify-center">
+    <div className="relative overflow-hidden h-[220px] flex items-center justify-center bg-[#f5f0e8]">
       <div className="absolute inset-0">
         <Ballpit
           count={100}
+          colors={[0xa51c30, 0x8c1728, 0xc74b4b]}
           gravity={0.5}
           friction={0.99}
           wallBounce={0.5}
