@@ -1,7 +1,14 @@
 import type { SangriaRequestData, FixedPriceOptions } from "../types.js";
 import { Sangria } from "../core.js";
 
-// Next.js types — imported as type-only to avoid hard dependency
+/**
+ * Minimal type stubs for Next.js request/response.
+ *
+ * We intentionally avoid importing from "next/server" so the adapter
+ * compiles without next as a dependency. Consumers get full type safety
+ * from their own Next.js installation. The `any` fallbacks here only
+ * affect SDK internals, not the developer-facing API.
+ */
 type NextRequest = {
   headers: { get(name: string): string | null };
   url: string;

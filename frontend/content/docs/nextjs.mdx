@@ -26,7 +26,7 @@ Create a Sangria instance with your API key. Store your key in an environment va
 import { Sangria } from "@sangria/core";
 
 const sangria = new Sangria({
-  apiKey: process.env.SANGRIA_SECRET_KEY,
+  apiKey: process.env.SANGRIA_SECRET_KEY!,
 });
 ```
 
