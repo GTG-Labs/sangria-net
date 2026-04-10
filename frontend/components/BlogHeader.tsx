@@ -14,10 +14,10 @@ export default function BlogHeader() {
           lightIntensity={30}
           ambientIntensity={0.4}
           materialParams={{
-            metalness: 0.1,
-            roughness: 0.8,
-            clearcoat: 0.3,
-            clearcoatRoughness: 0.6,
+            metalness: 0.2,
+            roughness: 0.15,
+            clearcoat: 1,
+            clearcoatRoughness: 0.05,
           }}
           minSize={0.3}
           maxSize={0.7}
