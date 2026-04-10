@@ -28,6 +28,7 @@ export default function GitHubStarChip() {
       <Link
         href="https://github.com/GTG-Labs/sangria-net"
         target="_blank"
+        aria-label="Star us on GitHub"
         className="flex items-center gap-2 pl-4 py-2 hover:text-white transition-colors"
       >
         <svg

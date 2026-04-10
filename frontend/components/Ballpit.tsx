@@ -1,7 +1,5 @@
 "use client";
 
-import { gsap } from 'gsap';
-import { Observer } from 'gsap/Observer';
 import React, { useEffect, useRef } from 'react';
 import {
   ACESFilmicToneMapping,
@@ -27,8 +25,6 @@ import {
   WebGLRendererParameters
 } from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-
-gsap.registerPlugin(Observer);
 
 interface XConfig {
   canvas?: HTMLCanvasElement;
@@ -57,6 +53,9 @@ class X {
   #animationState = { elapsed: 0, delta: 0 };
   #isAnimating: boolean = false;
   #isVisible: boolean = false;
+  #boundOnResize = this.#onResize.bind(this);
+  #boundOnVisibility = this.#onVisibilityChange.bind(this);
+  #boundOnIntersection = this.#onIntersection.bind(this);
 
   canvas!: HTMLCanvasElement;
   camera!: PerspectiveCamera;
@@ -109,7 +108,8 @@ class X {
         this.canvas = elem;
       }
     }
-    this.canvas!.style.display = 'block';
+    if (!this.canvas) throw new Error('Ballpit: canvas element not found');
+    this.canvas.style.display = 'block';
     const rendererOptions: WebGLRendererParameters = {
       canvas: this.canvas,
       powerPreference: 'high-performance',
@@ -121,19 +121,19 @@ class X {
 
   #initObservers() {
     if (!(this.#config.size instanceof Object)) {
-      window.addEventListener('resize', this.#onResize.bind(this));
+      window.addEventListener('resize', this.#boundOnResize);
       if (this.#config.size === 'parent' && this.canvas.parentNode) {
-        this.#resizeObserver = new ResizeObserver(this.#onResize.bind(this));
+        this.#resizeObserver = new ResizeObserver(this.#boundOnResize);
         this.#resizeObserver.observe(this.canvas.parentNode as Element);
       }
     }
-    this.#intersectionObserver = new IntersectionObserver(this.#onIntersection.bind(this), {
+    this.#intersectionObserver = new IntersectionObserver(this.#boundOnIntersection, {
       root: null,
       rootMargin: '0px',
       threshold: 0
     });
     this.#intersectionObserver.observe(this.canvas);
-    document.addEventListener('visibilitychange', this.#onVisibilityChange.bind(this));
+    document.addEventListener('visibilitychange', this.#boundOnVisibility);
   }
 
   #onResize() {
@@ -259,10 +259,10 @@ class X {
   }
 
   dispose() {
-    window.removeEventListener('resize', this.#onResize.bind(this));
+    window.removeEventListener('resize', this.#boundOnResize);
     this.#resizeObserver?.disconnect();
     this.#intersectionObserver?.disconnect();
-    document.removeEventListener('visibilitychange', this.#onVisibilityChange.bind(this));
+    document.removeEventListener('visibilitychange', this.#boundOnVisibility);
     this.#stopAnimation();
     this.clear();
     this.#postprocessing?.dispose();

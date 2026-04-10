@@ -25,6 +25,7 @@ export default function NavLinks() {
           <Link
             key={link.href}
             href={link.href}
+            aria-current={isActive ? "page" : undefined}
             className={`${baseItem} ${divider} ${
               isActive
                 ? "text-gray-900 dark:text-white"
