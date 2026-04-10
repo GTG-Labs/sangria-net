@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -105,13 +106,17 @@ func APIKeyAuthMiddleware(pool *pgxpool.Pool) fiber.Handler {
 // Requires both:
 //  1. A valid X-Admin-Key header matching the ADMIN_API_KEY env var
 //  2. The user's role == "admin" in the database
+var adminWarnOnce sync.Once
+
 func RequireAdmin(pool *pgxpool.Pool) fiber.Handler {
 	adminKey := os.Getenv("ADMIN_API_KEY")
 
 	return func(c fiber.Ctx) error {
 		// Check admin API key header.
 		if adminKey == "" {
-			slog.Warn("ADMIN_API_KEY not set, admin endpoints are disabled")
+			adminWarnOnce.Do(func() {
+				slog.Warn("ADMIN_API_KEY not set, admin endpoints are disabled")
+			})
 			return c.Status(503).JSON(fiber.Map{"error": "Admin access not configured"})
 		}
 

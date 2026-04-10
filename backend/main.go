@@ -17,13 +17,27 @@ import (
 func main() {
 	config.LoadEnvironment()
 
-	// Configure structured logger. Use JSON in production (LOG_FORMAT=json),
-	// text format otherwise (human-readable for local dev).
+	// Configure structured logger.
+	// LOG_LEVEL: debug | info (default) | warn | error
+	// LOG_FORMAT: json | text (default)
+	var level slog.Level
+	switch os.Getenv("LOG_LEVEL") {
+	case "debug":
+		level = slog.LevelDebug
+	case "warn":
+		level = slog.LevelWarn
+	case "error":
+		level = slog.LevelError
+	default:
+		level = slog.LevelInfo
+	}
+
+	opts := &slog.HandlerOptions{Level: level}
 	var handler slog.Handler
 	if os.Getenv("LOG_FORMAT") == "json" {
-		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})
+		handler = slog.NewJSONHandler(os.Stdout, opts)
 	} else {
-		handler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})
+		handler = slog.NewTextHandler(os.Stdout, opts)
 	}
 	slog.SetDefault(slog.New(handler))
 
