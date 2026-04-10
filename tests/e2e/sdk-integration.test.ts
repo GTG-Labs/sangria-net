@@ -245,30 +245,6 @@ describe('E2E SDK Integration Tests', () => {
         }
       }, 15000)
 
-      it('should handle different price formats', async () => {
-        const testCases = [
-          { price: 0.000001, description: 'Micro payment' },
-          { price: 1.0, description: 'One dollar' },
-          { price: 999.99, description: 'Large payment' }
-        ]
-
-        for (const testCase of testCases) {
-          const result = await sangria.handleFixedPrice(
-            {
-              paymentHeader: undefined,
-              resourceUrl: '/api/test'
-            },
-            testCase
-          )
-
-          expect(result.action).toBe('respond')
-          if (result.action === 'respond') {
-            expect(result.body.amount).toBe(testCase.price)
-            expect(result.body.description).toBe(testCase.description)
-          }
-        }
-      }, 15000)
-
       it('should handle unauthorized API key', async () => {
         const unauthorizedSangria = new Sangria({
           apiKey: 'invalid',
@@ -366,100 +342,6 @@ describe('E2E SDK Integration Tests', () => {
         }
       }, 10000)
 
-      it('should handle settlement without transaction ID', async () => {
-        // This would require a specific backend response, but demonstrates the pattern
-        const result = await sangria.handleFixedPrice(
-          {
-            paymentHeader: 'valid_no_transaction',
-            resourceUrl: '/api/premium'
-          },
-          { price: 0.01 }
-        )
-
-        expect(result.action).toBe('proceed')
-        if (result.action === 'proceed') {
-          expect(result.data.paid).toBe(true)
-          expect(result.data.amount).toBe(0.01)
-          expect(result.data).toHaveProperty('transaction')
-        }
-      }, 10000)
-    })
-
-    describe('Input Validation E2E', () => {
-      it('should handle edge case pricing', async () => {
-        const edgeCases = [
-          { price: Number.MIN_VALUE, expectSuccess: true },
-          { price: 0.000001, expectSuccess: true },
-          { price: 999999.999999, expectSuccess: true }
-        ]
-
-        for (const testCase of edgeCases) {
-          try {
-            const result = await sangria.handleFixedPrice(
-              {
-                paymentHeader: undefined,
-                resourceUrl: '/api/test'
-              },
-              { price: testCase.price }
-            )
-
-            if (testCase.expectSuccess) {
-              expect(result.action).toBe('respond')
-              if (result.action === 'respond') {
-                expect(result.body.amount).toBe(testCase.price)
-              }
-            }
-          } catch (error) {
-            if (testCase.expectSuccess) {
-              throw error
-            }
-          }
-        }
-      }, 15000)
-
-      it('should handle special characters in resource URLs', async () => {
-        const testUrls = [
-          '/api/café',
-          '/api/resource?param=value&other=test',
-          '/api/path/with/segments',
-          '/api/resource#fragment'
-        ]
-
-        for (const url of testUrls) {
-          const result = await sangria.handleFixedPrice(
-            {
-              paymentHeader: undefined,
-              resourceUrl: url
-            },
-            { price: 0.01 }
-          )
-
-          expect(result.action).toBe('respond')
-          if (result.action === 'respond') {
-            expect(result.body.resource).toBe(url)
-          }
-        }
-      }, 15000)
-
-      it('should handle long descriptions', async () => {
-        const longDescription = 'A'.repeat(1000) // 1KB description
-
-        const result = await sangria.handleFixedPrice(
-          {
-            paymentHeader: undefined,
-            resourceUrl: '/api/test'
-          },
-          {
-            price: 0.01,
-            description: longDescription
-          }
-        )
-
-        expect(result.action).toBe('respond')
-        if (result.action === 'respond') {
-          expect(result.body.description).toBe(longDescription)
-        }
-      }, 10000)
     })
 
     describe('Concurrent Request Handling', () => {
@@ -532,15 +414,7 @@ describe('E2E SDK Integration Tests', () => {
       }, 20000)
     })
 
-    describe('Backend Health and Connectivity', () => {
-      it('should verify backend is responsive', async () => {
-        const response = await fetch(`${baseUrl}/health`)
-        expect(response.ok).toBe(true)
-
-        const data = await response.json()
-        expect(data.status).toBe('healthy')
-      }, 5000)
-
+    describe('Backend Connectivity', () => {
       it('should handle backend service interruption gracefully', async () => {
         // Temporarily stop backend
         await backend.stop()

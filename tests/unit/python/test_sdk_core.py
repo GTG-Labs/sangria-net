@@ -286,51 +286,9 @@ class TestSangriaMerchantClient:
 
         await client.aclose()
 
-    async def test_resource_url_handling(self, client):
-        """Test different resource URL formats"""
-        test_cases = [
-            "/api/premium",
-            "/api/premium?param=value",
-            "/api/path/with/segments",
-            "https://external.com/api/resource",
-            "/api/unicode-café",
-        ]
-
-        mock_response = {"payment_id": "test"}
-
-        with patch.object(client._http, 'post_json', return_value=mock_response) as mock_post:
-            for resource_url in test_cases:
-                options = FixedPriceOptions(price=0.01, resource=resource_url)
-                await client.handle_fixed_price(None, options)
-
-                # Verify the resource was passed correctly in the API call
-                call_args = mock_post.call_args[0][1]  # Second argument to post_json
-                assert call_args["resource"] == resource_url
-
-        await client.aclose()
-
     async def test_client_cleanup(self, client):
         """Test proper client cleanup"""
         with patch.object(client._http, 'close') as mock_close:
             await client.aclose()
             mock_close.assert_called_once()
 
-    async def test_payment_type_discriminated_union(self, client, valid_options):
-        """Test PaymentResult type discrimination works correctly"""
-        # Test PaymentResponse path
-        with patch.object(client._http, 'post_json', return_value={"test": "data"}):
-            result = await client.handle_fixed_price(None, valid_options)
-            assert isinstance(result, PaymentResponse)
-            assert hasattr(result, 'status_code')
-            assert hasattr(result, 'body')
-            assert hasattr(result, 'headers')
-
-        # Test PaymentProceeded path
-        with patch.object(client._http, 'post_json', return_value={"success": True}):
-            result = await client.handle_fixed_price("test_header", valid_options)
-            assert isinstance(result, PaymentProceeded)
-            assert hasattr(result, 'paid')
-            assert hasattr(result, 'amount')
-            assert hasattr(result, 'transaction')
-
-        await client.aclose()

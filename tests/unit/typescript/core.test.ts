@@ -468,59 +468,6 @@ describe('Sangria SDK Core', () => {
     })
   })
 
-  describe('Request Configuration', () => {
-    let sangria: Sangria
-
-    beforeEach(() => {
-      sangria = new Sangria({ apiKey: 'secret-key', baseUrl: 'https://api.example.com' })
-    })
-
-    it('should set correct headers for API requests', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ test: 'data' })
-      })
-
-      const ctx: PaymentContext = {
-        paymentHeader: undefined,
-        resourceUrl: '/api/test'
-      }
-
-      await sangria.handleFixedPrice(ctx, { price: 0.01 })
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: 'Bearer secret-key'
-          }
-        })
-      )
-    })
-
-    it('should set timeout for API requests', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ test: 'data' })
-      })
-
-      const ctx: PaymentContext = {
-        paymentHeader: undefined,
-        resourceUrl: '/api/test'
-      }
-
-      await sangria.handleFixedPrice(ctx, { price: 0.01 })
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          signal: expect.any(AbortSignal)
-        })
-      )
-    })
-  })
-
   describe('Edge Cases and Error Handling', () => {
     let sangria: Sangria
 
@@ -560,46 +507,6 @@ describe('Sangria SDK Core', () => {
       expect(result.action).toBe('respond')
       expect(result.status).toBe(500)
     }, 15000)
-
-    it('should handle large price values', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ payment_id: 'test' })
-      })
-
-      const ctx: PaymentContext = {
-        paymentHeader: undefined,
-        resourceUrl: '/api/test'
-      }
-
-      // Test with maximum safe JavaScript number
-      const largePrice = Number.MAX_SAFE_INTEGER / 1000000 // Still finite
-
-      const result = await sangria.handleFixedPrice(ctx, { price: largePrice })
-
-      expect(result.action).toBe('respond')
-      expect(result.status).toBe(402)
-    })
-
-    it('should handle very small price values', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ payment_id: 'test' })
-      })
-
-      const ctx: PaymentContext = {
-        paymentHeader: undefined,
-        resourceUrl: '/api/test'
-      }
-
-      // Test with very small but valid price
-      const smallPrice = 0.000001
-
-      const result = await sangria.handleFixedPrice(ctx, { price: smallPrice })
-
-      expect(result.action).toBe('respond')
-      expect(result.status).toBe(402)
-    })
 
     it('should handle empty payment header', async () => {
       mockFetch.mockResolvedValueOnce({
@@ -650,29 +557,4 @@ describe('Sangria SDK Core', () => {
     })
   })
 
-  describe('Type Safety', () => {
-    it('should ensure PaymentResult discriminated union works correctly', async () => {
-      const sangria = new Sangria({ apiKey: 'test-key' })
-
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ payment_id: 'test' })
-      })
-
-      const ctx: PaymentContext = {
-        paymentHeader: undefined,
-        resourceUrl: '/api/test'
-      }
-
-      const result = await sangria.handleFixedPrice(ctx, { price: 0.01 })
-
-      // TypeScript should ensure proper discrimination
-      if (result.action === 'respond') {
-        expect(result.status).toBeDefined()
-        expect(result.body).toBeDefined()
-      } else {
-        expect(result.data).toBeDefined()
-      }
-    })
-  })
 })

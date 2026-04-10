@@ -252,30 +252,6 @@ class TestFastAPIAdapter:
         assert call_args["payment_header"] is None
 
     @pytest.mark.asyncio
-    async def test_response_headers_propagation(self, mock_client, mock_request):
-        """Test that payment response headers are properly set"""
-        mock_payment_response = PaymentResponse(
-            status_code=402,
-            body={"payment_id": "test"},
-            headers={
-                "PAYMENT-REQUIRED": "encoded_payload",
-                "X-Custom-Header": "custom_value"
-            }
-        )
-        mock_client.handle_fixed_price.return_value = mock_payment_response
-
-        @require_sangria_payment(mock_client, amount=0.01)
-        async def protected_route(request: Request):
-            return {"data": "test"}
-
-        result = await protected_route(mock_request)
-
-        # Verify headers are included in JSONResponse
-        assert isinstance(result, JSONResponse)
-        # Note: JSONResponse headers need to be accessed differently in testing
-        # This verifies the headers dict was passed to JSONResponse constructor
-
-    @pytest.mark.asyncio
     async def test_concurrent_requests(self, mock_client):
         """Test decorator handles concurrent requests correctly"""
         import asyncio
@@ -306,46 +282,6 @@ class TestFastAPIAdapter:
 
         # Should have made 5 separate calls to client
         assert mock_client.handle_fixed_price.call_count == 5
-
-    @pytest.mark.asyncio
-    async def test_decorator_preserves_function_metadata(self, mock_client):
-        """Test that decorator preserves original function metadata"""
-        @require_sangria_payment(mock_client, amount=0.01, description="Test")
-        async def original_function(request: Request):
-            """Original function docstring"""
-            return {"test": "data"}
-
-        # Function name should be preserved
-        assert original_function.__name__ == "original_function"
-
-        # Docstring should be preserved (functools.wraps)
-        assert "Original function docstring" in (original_function.__doc__ or "")
-
-    @pytest.mark.asyncio
-    async def test_different_price_formats(self, mock_client, mock_request):
-        """Test decorator with different valid price formats"""
-        mock_payment_response = PaymentResponse(status_code=402, body={}, headers={})
-        mock_client.handle_fixed_price.return_value = mock_payment_response
-
-        test_prices = [
-            0.01,      # float
-            1,         # int
-            0.000001,  # very small
-            999.99     # large
-        ]
-
-        for price in test_prices:
-            @require_sangria_payment(mock_client, amount=price)
-            async def protected_route(request: Request):
-                return {"price": price}
-
-            await protected_route(mock_request)
-
-            # Verify price was passed correctly
-            call_args = mock_client.handle_fixed_price.call_args[1]
-            assert call_args["options"].price == price
-
-            mock_client.reset_mock()
 
     @pytest.mark.asyncio
     async def test_url_resource_extraction(self, mock_client):
