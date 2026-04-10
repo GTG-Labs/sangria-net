@@ -130,12 +130,10 @@ backend/
 ├── dbEngine/
 │   ├── models.go                  # All Go types + enums
 │   ├── engine.go                  # DB connection pool
-│   ├── accounts.go                # Account CRUD + balance queries
 │   ├── systemAccounts.go          # System account initialization
-│   ├── merchants.go               # Merchant DB operations
-│   ├── cards.go                   # Card DB operations
-│   ├── cryptoWallets.go           # Wallet pool operations
-│   ├── withdrawals.go             # Withdrawal DB operations + ledger entries
+│   ├── merchants.go               # GetMerchantByID, EnsureUSDLiabilityAccount
+│   ├── cryptoWallets.go           # CreateCryptoWalletWithAccount, GetWalletByNetwork/Address
+│   ├── withdrawals.go             # CreateWithdrawal, Approve/Reject/Complete/FailWithdrawal
 │   ├── transaction.go             # Double-entry ledger (InsertTransaction, validateZeroNet)
 │   ├── users.go                   # User CRUD
 │   └── queries.go                 # Transaction queries (paginated)
