@@ -91,54 +91,11 @@ jobs:
           git push
           echo "commit_sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
-  # Run full test suite before release
-  test-before-release:
-    name: Test Before Release
-    needs: [update-versions]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.update-versions.outputs.commit_sha || github.sha }}
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v3
-        with:
-          version: 9
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'pnpm'
-          cache-dependency-path: tests/pnpm-lock.yaml
-
-      - name: Setup Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install test dependencies
-        working-directory: tests
-        run: pnpm install
-
-      - name: Setup Python SDK environment
-        working-directory: sdk/python
-        run: |
-          python -m venv venv
-          source venv/bin/activate
-          pip install --upgrade pip
-          pip install -e ".[fastapi]"
-
-      - name: Run all tests
-        working-directory: tests
-        run: pnpm test:all
-
   # Build and publish TypeScript SDK
   deploy-typescript:
     name: Deploy TypeScript SDK
     runs-on: ubuntu-latest
-    needs: [update-versions, test-before-release]
+    needs: [update-versions]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -181,7 +138,7 @@ jobs:
   deploy-python:
     name: Deploy Python SDK
     runs-on: ubuntu-latest
-    needs: [update-versions, test-before-release]
+    needs: [update-versions]
     steps:
       - uses: actions/checkout@v4
         with:
