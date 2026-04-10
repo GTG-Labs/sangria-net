@@ -1,7 +1,7 @@
 {
   "name": "@sangria/core",
   "version": "0.1.0",
-  "description": "Sangria payment network SDK for Express, Hono, and Fastify",
+  "description": "Sangria payment network SDK for Express, Hono, Fastify, and Next.js",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -21,6 +21,10 @@
     "./fastify": {
       "import": "./dist/adapters/fastify.js",
       "types": "./dist/adapters/fastify.d.ts"
+    },
+    "./nextjs": {
+      "import": "./dist/adapters/nextjs.js",
+      "types": "./dist/adapters/nextjs.d.ts"
     }
   },
   "scripts": {
@@ -37,6 +41,7 @@
     "express",
     "hono",
     "fastify",
+    "nextjs",
     "middleware"
   ],
   "engines": {
@@ -49,7 +54,8 @@
   "peerDependencies": {
     "express": ">=4.0.0",
     "fastify": ">=4.0.0",
-    "hono": ">=4.0.0"
+    "hono": ">=4.0.0",
+    "next": ">=14.0.0"
   },
   "peerDependenciesMeta": {
     "express": {
@@ -59,6 +65,9 @@
       "optional": true
     },
     "fastify": {
+      "optional": true
+    },
+    "next": {
       "optional": true
     }
   },

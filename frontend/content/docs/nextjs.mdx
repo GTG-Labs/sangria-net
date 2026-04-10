@@ -1,0 +1,115 @@
+---
+title: Next.js
+description: Learn how to accept your first payment using Next.js App Router and the Sangria TypeScript SDK.
+---
+
+## Prerequisites
+
+To get the most out of this guide, you'll need to:
+
+- [Create an API key](https://sangria.dev/dashboard/api-keys) from the Sangria dashboard
+- Have Node.js 18+ installed
+
+## 1. Install
+
+Install the Sangria SDK in your Next.js project.
+
+```bash
+npm install @sangria/core
+```
+
+## 2. Initialize the client
+
+Create a Sangria instance with your API key. Store your key in an environment variable — never hard-code it.
+
+```ts
+import { Sangria } from "@sangria/core";
+
+const sangria = new Sangria({
+  apiKey: process.env.SANGRIA_SECRET_KEY!,
+});
+```
+
+## 3. Protect a route
+
+Import the Next.js adapter and wrap your route handler with `fixedPrice`. Your existing handler code stays exactly the same — just wrap it.
+
+```ts
+import { NextRequest, NextResponse } from "next/server";
+import { Sangria } from "@sangria/core";
+import { fixedPrice } from "@sangria/core/nextjs";
+
+const sangria = new Sangria({
+  apiKey: process.env.SANGRIA_SECRET_KEY!,
+});
+
+// Your existing handler — no changes needed
+async function handler(request: NextRequest) {
+  return NextResponse.json({
+    message: "You accessed the premium endpoint!",
+  });
+}
+
+// Wrap it with fixedPrice
+export const GET = fixedPrice(
+  sangria,
+  { price: 0.01, description: "Access premium content" },
+  handler
+);
+```
+
+### Bypassing payment
+
+If you want to skip Sangria for requests that already have their own API key (e.g. existing customers), use the `bypassPaymentIf` callback:
+
+```ts
+export const GET = fixedPrice(
+  sangria,
+  { price: 0.01, description: "Access premium content" },
+  handler,
+  {
+    bypassPaymentIf: (request) => request.headers.has("x-api-key"),
+  }
+);
+```
+
+### Accessing payment data
+
+Use the `getSangria` helper to read payment details inside your handler:
+
+```ts
+import { fixedPrice, getSangria } from "@sangria/core/nextjs";
+
+async function handler(request: NextRequest) {
+  const payment = getSangria(request);
+  // payment.paid — true if agent paid
+  // payment.amount — the price charged
+  // payment.transaction — on-chain tx hash
+
+  return NextResponse.json({ paid: payment?.paid });
+}
+```
+
+## 4. Run it
+
+Start your Next.js dev server:
+
+```bash
+SANGRIA_SECRET_KEY=sg_live_xxx npm run dev
+```
+
+When an agent calls your protected route:
+
+1. **First request** (no payment) — the SDK returns `402 Payment Required` with the price and payment details
+2. **Agent signs** the USDC payment off-chain
+3. **Retry with payment** — the agent sends the signed payment in a `payment-signature` header
+4. **SDK settles** the payment on-chain and your handler runs
+
+## Try it yourself
+
+```bash
+# This will return a 402 with payment requirements
+curl http://localhost:3000/api/premium
+```
+
+The response includes everything an agent needs to sign and submit payment automatically.

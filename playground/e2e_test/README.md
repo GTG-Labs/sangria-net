@@ -64,6 +64,9 @@ cd playground/merchant-fastify && SANGRIA_SECRET_KEY="sg_test_xxx" bun dev
 
 # Hono (Node.js)
 cd playground/merchant-hono && SANGRIA_SECRET_KEY="sg_test_xxx" bun dev
+
+# Next.js
+cd playground/merchant-nextjs && SANGRIA_SECRET_KEY="sg_test_xxx" pnpm dev
 ```
 
 ### 2. Run the test client
