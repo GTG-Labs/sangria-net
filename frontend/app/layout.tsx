@@ -1,20 +1,20 @@
 import type { Metadata } from "next";
-import { PT_Serif, Ubuntu, JetBrains_Mono } from "next/font/google";
+import { IBM_Plex_Sans, PT_Serif, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
 import { RootProvider } from "fumadocs-ui/provider/next";
+
+const ibmPlexSans = IBM_Plex_Sans({
+  variable: "--font-ibm-plex-sans",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  style: ["normal", "italic"],
+});
 
 const ptSerif = PT_Serif({
   variable: "--font-pt-serif",
   subsets: ["latin"],
   weight: ["400", "700"],
-  style: ["normal", "italic"],
-});
-
-const ubuntu = Ubuntu({
-  variable: "--font-ubuntu",
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "700"],
   style: ["normal", "italic"],
 });
 
@@ -38,7 +38,7 @@ export default function RootLayout({
     <html lang="en" className="scroll-smooth">
       <head></head>
       <body
-        className={`${ptSerif.variable} ${ubuntu.variable} ${jetbrainsMono.variable} antialiased`}
+        className={`${ibmPlexSans.variable} ${ptSerif.variable} ${jetbrainsMono.variable} antialiased`}
       >
         <RootProvider theme={{ enabled: false }} search={{ enabled: false }}>
             {children}

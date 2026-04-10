@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Calendar, Tag, User } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { MDXRemote } from "next-mdx-remote/rsc";
 import { getAllSlugs, getPostBySlug } from "@/lib/blog";
 import { mdxComponents } from "@/components/MdxComponents";
@@ -38,40 +38,29 @@ export default async function BlogPostPage({
       <div className="max-w-3xl mx-auto px-6">
         <Link
           href="/blog"
-          className="inline-flex items-center gap-2 text-zinc-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white transition-colors mb-8"
+          className="inline-flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white transition-colors mb-8"
         >
-          <ArrowLeft className="w-4 h-4" />
-          Back to Blog
+          <ArrowLeft className="w-3.5 h-3.5" />
+          Blog
         </Link>
 
         <header className="mb-10">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-zinc-500 dark:text-zinc-400 mb-4">
-            <span className="inline-flex items-center gap-1.5">
-              <User className="w-4 h-4" />
-              {post.author}
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <Calendar className="w-4 h-4" />
-              {new Date(post.date).toLocaleDateString("en-US", {
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-              })}
-            </span>
-            {post.tags.length > 0 && (
-              <span className="inline-flex items-center gap-1.5">
-                <Tag className="w-4 h-4" />
-                {post.tags.join(", ")}
-              </span>
-            )}
-          </div>
-          <h1 className="text-3xl md:text-5xl italic font-normal text-gray-900 dark:text-white leading-tight mb-4">
+          <p className="text-sm text-zinc-400 dark:text-zinc-500 mb-3">
+            {post.author}
+            {" · "}
+            {new Date(post.date).toLocaleDateString("en-US", {
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+            })}
+          </p>
+          <h1 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white leading-tight mb-3">
             {post.title}
           </h1>
-          <p className="text-lg text-zinc-600 dark:text-zinc-400 leading-relaxed">
+          <p className="text-zinc-500 dark:text-zinc-400 leading-relaxed">
             {post.description}
           </p>
-          <hr className="border-zinc-200 dark:border-white/10 mt-8" />
+          <hr className="border-zinc-200 dark:border-zinc-800 mt-8" />
         </header>
 
         <article>
