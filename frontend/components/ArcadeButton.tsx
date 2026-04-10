@@ -10,7 +10,7 @@ const slotStyles: Record<Variant, string> = {
 };
 
 const sizeStyles: Record<Size, string> = {
-  sm: "px-7 py-2 text-xs leading-none",
+  sm: "px-7 py-2.5 text-xs leading-none",
   md: "px-10 py-3 text-sm leading-none",
 };
 

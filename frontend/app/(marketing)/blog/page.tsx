@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { ArrowLeft, Calendar, Tag, User } from "lucide-react";
 import { getAllPosts } from "@/lib/blog";
+import BlogHeader from "@/components/BlogHeader";
 
 export const metadata = {
   title: "Blog — Sangria",
@@ -11,61 +11,43 @@ export default function BlogPage() {
   const posts = getAllPosts();
 
   return (
-    <div className="min-h-screen pt-24 pb-20">
-      <div className="max-w-4xl mx-auto px-6">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 text-zinc-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white transition-colors mb-8"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back to Home
-        </Link>
+    <div className="min-h-screen pt-12">
+      {/* Header with ballpit */}
+      <BlogHeader />
 
-        <div className="mb-12">
-          <h1 className="text-4xl md:text-5xl italic font-normal text-gray-900 dark:text-white mb-4">
-            Blog
-          </h1>
-          <p className="text-lg text-zinc-600 dark:text-zinc-400">
-            Updates, guides, and deep dives from the Sangria team.
-          </p>
-        </div>
-
+      {/* Card grid */}
+      <div className="max-w-6xl mx-auto px-6 pb-20">
         {posts.length === 0 ? (
-          <p className="text-zinc-500 dark:text-zinc-400">
+          <p className="text-zinc-500 dark:text-zinc-400 text-center py-20">
             No posts yet. Check back soon!
           </p>
         ) : (
-          <div className="space-y-6">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 border-t border-l border-zinc-200 dark:border-zinc-800">
             {posts.map((post) => (
               <Link
                 key={post.slug}
                 href={`/blog/${post.slug}`}
-                className="card p-6 card-hover block"
+                className="group border-b border-r border-zinc-200 dark:border-zinc-800 p-6 transition-all duration-200 hover:bg-[rgb(21,21,21)] hover:border-[rgb(21,21,21)]"
               >
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500 dark:text-zinc-400 mb-3">
-                  <span className="inline-flex items-center gap-1">
-                    <User className="w-3.5 h-3.5" />
-                    {post.author}
+                {post.tags[0] && (
+                  <span className="text-[0.6875rem] font-bold uppercase tracking-wide text-sangria-500 group-hover:text-sangria-400 transition-colors duration-200">
+                    {post.tags[0]}
                   </span>
-                  <span className="inline-flex items-center gap-1">
-                    <Calendar className="w-3.5 h-3.5" />
-                    {new Date(post.date).toLocaleDateString("en-US", {
-                      year: "numeric",
-                      month: "long",
-                      day: "numeric",
-                    })}
-                  </span>
-                  {post.tags.length > 0 && (
-                    <span className="inline-flex items-center gap-1">
-                      <Tag className="w-3.5 h-3.5" />
-                      {post.tags.join(", ")}
-                    </span>
-                  )}
-                </div>
-                <h2 className="text-xl italic font-normal text-gray-900 dark:text-white mb-2">
+                )}
+
+                <h2 className="text-base font-semibold text-gray-900 dark:text-white mt-2 mb-2 leading-snug transition-colors duration-200 group-hover:text-[rgb(234,235,224)]">
                   {post.title}
                 </h2>
-                <p className="text-zinc-600 dark:text-zinc-400 text-sm leading-relaxed">
+
+                <p className="text-xs text-zinc-400 dark:text-zinc-500 mb-3 transition-colors duration-200 group-hover:text-[rgb(234,235,224)]/60">
+                  {post.author} · {new Date(post.date).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
+                </p>
+
+                <p className="text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed line-clamp-3 transition-colors duration-200 group-hover:text-[rgb(234,235,224)]/70">
                   {post.description}
                 </p>
               </Link>

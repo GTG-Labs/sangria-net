@@ -1,7 +1,13 @@
 import Image from "next/image";
 import ArcadeButton from "@/components/ArcadeButton";
+import { withAuth, getSignInUrl } from "@workos-inc/authkit-nextjs";
 
-export default function Home() {
+export default async function Home() {
+  const [{ user }, signInUrl] = await Promise.all([
+    withAuth(),
+    getSignInUrl(),
+  ]);
+
   return (
     <div className="min-h-screen">
       {/* Hero */}
@@ -23,13 +29,23 @@ export default function Home() {
               </p>
 
               <div className="flex flex-col sm:flex-row items-stretch sm:items-start gap-4">
-                <ArcadeButton
-                  href="/docs"
-                  glow
-                  className="[&>span]:w-full sm:[&>span]:w-auto"
-                >
-                  Get Started →
-                </ArcadeButton>
+                {user ? (
+                  <ArcadeButton
+                    href="/dashboard/api-keys"
+                    glow
+                    className="[&>span]:w-full sm:[&>span]:w-auto"
+                  >
+                    Go to Dashboard →
+                  </ArcadeButton>
+                ) : (
+                  <ArcadeButton
+                    href={signInUrl}
+                    glow
+                    className="[&>span]:w-full sm:[&>span]:w-auto"
+                  >
+                    Sign Up →
+                  </ArcadeButton>
+                )}
                 <ArcadeButton
                   href="https://github.com/GTG-Labs/sangria-net"
                   variant="secondary"
