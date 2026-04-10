@@ -19,7 +19,7 @@ export default function BlogHeader() {
             clearcoat: 1,
             clearcoatRoughness: 0.05,
             transparent: true,
-            opacity: 0.35,
+            opacity: 0.55,
           }}
           minSize={0.3}
           maxSize={0.8}
