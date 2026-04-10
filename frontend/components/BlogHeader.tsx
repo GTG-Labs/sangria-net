@@ -21,10 +21,10 @@ export default function BlogHeader() {
           }}
           minSize={0.25}
           maxSize={0.5}
-          gravity={0.5}
-          friction={0.99}
-          wallBounce={0.5}
-          maxVelocity={0.08}
+          gravity={0.02}
+          friction={0.999}
+          wallBounce={0.95}
+          maxVelocity={0.15}
           centerRepelRadius={3.5}
           centerRepelStrength={0.003}
           followCursor={false}
