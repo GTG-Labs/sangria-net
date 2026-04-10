@@ -54,7 +54,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/GTG-Labs/sangria-net.git",
-    "directory": "sdk/sdk-typescript"
+    "directory": "sdk/sangria"
   },
   "bugs": {
     "url": "https://github.com/GTG-Labs/sangria-net/issues"
