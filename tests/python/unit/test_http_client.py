@@ -26,7 +26,9 @@ class TestSangriaHTTPClient:
     def test_init_strips_trailing_slash(self):
         """Test that trailing slash is stripped from base URL."""
         client = SangriaHTTPClient(
-            base_url="https://api.sangria.net/", api_key="test_key", timeout_seconds=8.0
+            base_url="https://api.sangria.net/",
+            api_key="test_key",
+            timeout_seconds=8.0,
         )
         assert client._client.base_url == "https://api.sangria.net"
 
@@ -34,12 +36,16 @@ class TestSangriaHTTPClient:
     async def test_post_json_success(self):
         """Test successful POST JSON request."""
         client = SangriaHTTPClient(
-            base_url="https://api.test.com", api_key="test_key", timeout_seconds=5.0
+            base_url="https://api.test.com",
+            api_key="test_key",
+            timeout_seconds=5.0,
         )
 
         mock_response = AsyncMock()
         mock_response.status_code = 200
-        mock_response.json = Mock(return_value={"success": True, "data": "test"})
+        mock_response.json = Mock(
+            return_value={"success": True, "data": "test"}
+        )
 
         with patch.object(client._client, "post", return_value=mock_response):
             result = await client.post_json("/test", {"param": "value"})
@@ -53,33 +59,45 @@ class TestSangriaHTTPClient:
     async def test_post_json_4xx_no_raise(self):
         """Test that 4xx responses don't raise but return JSON."""
         client = SangriaHTTPClient(
-            base_url="https://api.test.com", api_key="test_key", timeout_seconds=5.0
+            base_url="https://api.test.com",
+            api_key="test_key",
+            timeout_seconds=5.0,
         )
 
         mock_response = AsyncMock()
         mock_response.status_code = 400
         mock_response.json = Mock(
-            return_value={"error": "Bad request", "error_reason": "invalid_data"}
+            return_value={
+                "error": "Bad request",
+                "error_reason": "invalid_data",
+            }
         )
 
         with patch.object(client._client, "post", return_value=mock_response):
             result = await client.post_json("/test", {"invalid": "data"})
 
-            assert result == {"error": "Bad request", "error_reason": "invalid_data"}
+            assert result == {
+                "error": "Bad request",
+                "error_reason": "invalid_data",
+            }
             mock_response.raise_for_status.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_post_json_5xx_raises(self):
         """Test that 5xx responses raise HTTPError."""
         client = SangriaHTTPClient(
-            base_url="https://api.test.com", api_key="test_key", timeout_seconds=5.0
+            base_url="https://api.test.com",
+            api_key="test_key",
+            timeout_seconds=5.0,
         )
 
         mock_response = AsyncMock()
         mock_response.status_code = 500
         mock_response.raise_for_status = Mock(
             side_effect=httpx.HTTPStatusError(
-                "500 Internal Server Error", request=None, response=mock_response
+                "500 Internal Server Error",
+                request=None,
+                response=mock_response,
             )
         )
 
@@ -91,15 +109,21 @@ class TestSangriaHTTPClient:
     async def test_post_json_handles_various_4xx_codes(self):
         """Test that various 4xx codes are handled without raising."""
         client = SangriaHTTPClient(
-            base_url="https://api.test.com", api_key="test_key", timeout_seconds=5.0
+            base_url="https://api.test.com",
+            api_key="test_key",
+            timeout_seconds=5.0,
         )
 
         for status_code in [400, 401, 403, 404, 422, 429]:
             mock_response = AsyncMock()
             mock_response.status_code = status_code
-            mock_response.json = Mock(return_value={"error": f"Error {status_code}"})
+            mock_response.json = Mock(
+                return_value={"error": f"Error {status_code}"}
+            )
 
-            with patch.object(client._client, "post", return_value=mock_response):
+            with patch.object(
+                client._client, "post", return_value=mock_response
+            ):
                 result = await client.post_json("/test", {"data": "test"})
                 assert result == {"error": f"Error {status_code}"}
 
@@ -107,7 +131,9 @@ class TestSangriaHTTPClient:
     async def test_close(self):
         """Test client close method."""
         client = SangriaHTTPClient(
-            base_url="https://api.test.com", api_key="test_key", timeout_seconds=5.0
+            base_url="https://api.test.com",
+            api_key="test_key",
+            timeout_seconds=5.0,
         )
 
         with patch.object(client._client, "aclose") as mock_close:
@@ -118,7 +144,9 @@ class TestSangriaHTTPClient:
     async def test_post_json_with_complex_payload(self):
         """Test POST JSON with complex payload."""
         client = SangriaHTTPClient(
-            base_url="https://api.test.com", api_key="test_key", timeout_seconds=5.0
+            base_url="https://api.test.com",
+            api_key="test_key",
+            timeout_seconds=5.0,
         )
 
         complex_payload = {
@@ -150,7 +178,9 @@ class TestSangriaHTTPClient:
     async def test_post_json_empty_response_body(self):
         """Test POST JSON with empty response body."""
         client = SangriaHTTPClient(
-            base_url="https://api.test.com", api_key="test_key", timeout_seconds=5.0
+            base_url="https://api.test.com",
+            api_key="test_key",
+            timeout_seconds=5.0,
         )
 
         mock_response = AsyncMock()

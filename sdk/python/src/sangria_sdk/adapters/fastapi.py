@@ -22,7 +22,9 @@ def require_sangria_payment(
     description: str | None = None,
     bypass_if: Callable[[Request], bool] | None = None,
 ) -> Callable[[Callable[..., Awaitable[Any]]], Callable[..., Awaitable[Any]]]:
-    def decorator(func: Callable[..., Awaitable[Any]]) -> Callable[..., Awaitable[Any]]:
+    def decorator(
+        func: Callable[..., Awaitable[Any]]
+    ) -> Callable[..., Awaitable[Any]]:
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             request: Request | None = kwargs.get("request")

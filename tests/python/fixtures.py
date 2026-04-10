@@ -25,7 +25,10 @@ MOCK_SETTLE_PAYMENT_FAILURE = {
     "error_reason": "invalid_signature",
 }
 
-MOCK_SETTLE_PAYMENT_FAILURE_NO_MESSAGE = {"success": False, "error_reason": "timeout"}
+MOCK_SETTLE_PAYMENT_FAILURE_NO_MESSAGE = {
+    "success": False,
+    "error_reason": "timeout",
+}
 
 # Mock error responses
 MOCK_API_ERROR_RESPONSES = {
@@ -46,12 +49,17 @@ MOCK_API_ERROR_RESPONSES = {
     },
     "service_unavailable": {
         "status": 503,
-        "body": {"error": "Service Unavailable", "message": "Payment service is down"},
+        "body": {
+            "error": "Service Unavailable",
+            "message": "Payment service is down",
+        },
     },
 }
 
 
-def create_mock_generate_response(amount: float, **kwargs: Any) -> Dict[str, Any]:
+def create_mock_generate_response(
+    amount: float, **kwargs: Any
+) -> Dict[str, Any]:
     """Create a mock generate payment response with custom amount."""
     response = MOCK_GENERATE_PAYMENT_SUCCESS.copy()
     response["amount"] = amount
@@ -59,7 +67,9 @@ def create_mock_generate_response(amount: float, **kwargs: Any) -> Dict[str, Any
     return response
 
 
-def create_mock_settle_response(success: bool, **kwargs: Any) -> Dict[str, Any]:
+def create_mock_settle_response(
+    success: bool, **kwargs: Any
+) -> Dict[str, Any]:
     """Create a mock settle payment response."""
     if success:
         response = MOCK_SETTLE_PAYMENT_SUCCESS.copy()

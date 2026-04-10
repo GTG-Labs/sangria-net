@@ -6,7 +6,11 @@ from unittest.mock import patch
 
 import pytest
 from sangria_sdk.client import SangriaMerchantClient
-from sangria_sdk.models import FixedPriceOptions, PaymentProceeded, PaymentResponse
+from sangria_sdk.models import (
+    FixedPriceOptions,
+    PaymentProceeded,
+    PaymentResponse,
+)
 
 
 class TestSangriaMerchantClient:
@@ -34,7 +38,7 @@ class TestSangriaMerchantClient:
 
     @pytest.mark.asyncio
     async def test_handle_fixed_price_no_payment_header(self):
-        """Test handle_fixed_price without payment header (generate payment)."""
+        """Test handle_fixed_price without payment header."""
         client = SangriaMerchantClient(
             base_url="https://api.test.com", api_key="test_key"
         )
@@ -75,7 +79,7 @@ class TestSangriaMerchantClient:
 
     @pytest.mark.asyncio
     async def test_handle_fixed_price_with_payment_header_success(self):
-        """Test handle_fixed_price with payment header (successful settlement)."""
+        """Test handle_fixed_price with payment header."""
         client = SangriaMerchantClient(
             base_url="https://api.test.com", api_key="test_key"
         )
@@ -91,10 +95,13 @@ class TestSangriaMerchantClient:
         with patch.object(
             client._http, "post_json", return_value=mock_settle_response
         ) as mock_post:
-            result = await client.handle_fixed_price("payment_signature_xyz", options)
+            result = await client.handle_fixed_price(
+                "payment_signature_xyz", options
+            )
 
             mock_post.assert_called_once_with(
-                "/v1/settle-payment", {"payment_payload": "payment_signature_xyz"}
+                "/v1/settle-payment",
+                {"payment_payload": "payment_signature_xyz"},
             )
 
             assert isinstance(result, PaymentProceeded)
@@ -120,7 +127,9 @@ class TestSangriaMerchantClient:
         with patch.object(
             client._http, "post_json", return_value=mock_settle_response
         ) as mock_post:
-            result = await client.handle_fixed_price("invalid_signature", options)
+            result = await client.handle_fixed_price(
+                "invalid_signature", options
+            )
 
             mock_post.assert_called_once_with(
                 "/v1/settle-payment", {"payment_payload": "invalid_signature"}
@@ -144,12 +153,17 @@ class TestSangriaMerchantClient:
 
         mock_settle_response = {"success": False, "error_reason": "timeout"}
 
-        with patch.object(client._http, "post_json", return_value=mock_settle_response):
+        with patch.object(
+            client._http, "post_json", return_value=mock_settle_response
+        ):
             result = await client.handle_fixed_price("test_signature", options)
 
             assert isinstance(result, PaymentResponse)
             assert result.status_code == 402
-            assert result.body == {"error": "Payment failed", "error_reason": "timeout"}
+            assert result.body == {
+                "error": "Payment failed",
+                "error_reason": "timeout",
+            }
 
     @pytest.mark.asyncio
     async def test_generate_payment_exception(self):
@@ -198,7 +212,9 @@ class TestSangriaMerchantClient:
 
         mock_settle_response = {"success": True}
 
-        with patch.object(client._http, "post_json", return_value=mock_settle_response):
+        with patch.object(
+            client._http, "post_json", return_value=mock_settle_response
+        ):
             result = await client.handle_fixed_price("test_signature", options)
 
             assert isinstance(result, PaymentProceeded)

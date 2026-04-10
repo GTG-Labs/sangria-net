@@ -72,7 +72,9 @@ def setup_respx_mock():
         yield mock
 
 
-def assert_request_headers(request: httpx.Request, expected_api_key: str) -> None:
+def assert_request_headers(
+    request: httpx.Request, expected_api_key: str
+) -> None:
     """Assert that the request has the correct headers."""
     assert request.headers["Authorization"] == f"Bearer {expected_api_key}"
     assert request.headers["Content-Type"] == "application/json"

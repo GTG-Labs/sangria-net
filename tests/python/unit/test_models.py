@@ -29,7 +29,9 @@ class TestFixedPriceOptions:
         assert options.resource == "/api/data"
         assert options.description is None
 
-    @pytest.mark.parametrize("invalid_price", [0, -1.0, float("inf"), float("nan")])
+    @pytest.mark.parametrize(
+        "invalid_price", [0, -1.0, float("inf"), float("nan")]
+    )
     def test_invalid_price_values(self, invalid_price):
         """Test that invalid price values raise ValueError."""
         with pytest.raises(
@@ -94,7 +96,9 @@ class TestPaymentProceeded:
 
     def test_construction_complete(self):
         """Test PaymentProceeded creation with all fields."""
-        payment = PaymentProceeded(paid=True, amount=25.00, transaction="tx_abc123")
+        payment = PaymentProceeded(
+            paid=True, amount=25.00, transaction="tx_abc123"
+        )
         assert payment.paid is True
         assert payment.amount == 25.00
         assert payment.transaction == "tx_abc123"

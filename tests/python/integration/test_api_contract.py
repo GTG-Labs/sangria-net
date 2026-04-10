@@ -6,7 +6,11 @@ import json
 import pytest
 import httpx
 from sangria_sdk import SangriaMerchantClient
-from sangria_sdk.models import FixedPriceOptions, PaymentResponse, PaymentProceeded
+from sangria_sdk.models import (
+    FixedPriceOptions,
+    PaymentResponse,
+    PaymentProceeded,
+)
 
 from conftest import assert_request_headers, assert_request_payload
 
@@ -25,7 +29,9 @@ class TestGeneratePaymentAPI:
     ):
         """Test successful payment generation API call."""
         setup_respx_mock.post(f"{mock_api_base_url}/v1/generate-payment").mock(
-            return_value=httpx.Response(200, json=mock_generate_payment_success)
+            return_value=httpx.Response(
+                200, json=mock_generate_payment_success
+            )
         )
 
         options = FixedPriceOptions(
@@ -66,7 +72,9 @@ class TestGeneratePaymentAPI:
     ):
         """Test payment generation without description."""
         setup_respx_mock.post(f"{mock_api_base_url}/v1/generate-payment").mock(
-            return_value=httpx.Response(200, json=mock_generate_payment_success)
+            return_value=httpx.Response(
+                200, json=mock_generate_payment_success
+            )
         )
 
         options = FixedPriceOptions(price=5.99, resource="/api/data")
@@ -78,7 +86,9 @@ class TestGeneratePaymentAPI:
 
         request = setup_respx_mock.calls[0].request
         assert_request_headers(request, test_api_key)
-        assert_request_payload(request, {"amount": 5.99, "resource": "/api/data"})
+        assert_request_payload(
+            request, {"amount": 5.99, "resource": "/api/data"}
+        )
 
     async def test_generate_payment_server_error(
         self, sangria_client, setup_respx_mock, mock_api_base_url
@@ -133,7 +143,9 @@ class TestSettlePaymentAPI:
         options = FixedPriceOptions(price=10.00, resource="/premium")
         payment_signature = "payment_sig_abc123xyz"
 
-        result = await sangria_client.handle_fixed_price(payment_signature, options)
+        result = await sangria_client.handle_fixed_price(
+            payment_signature, options
+        )
 
         assert isinstance(result, PaymentProceeded)
         assert result.paid is True
@@ -160,7 +172,9 @@ class TestSettlePaymentAPI:
         options = FixedPriceOptions(price=25.00, resource="/premium")
         invalid_signature = "invalid_payment_signature"
 
-        result = await sangria_client.handle_fixed_price(invalid_signature, options)
+        result = await sangria_client.handle_fixed_price(
+            invalid_signature, options
+        )
 
         assert isinstance(result, PaymentResponse)
         assert result.status_code == 402
@@ -190,7 +204,9 @@ class TestSettlePaymentAPI:
         options = FixedPriceOptions(price=15.00, resource="/test")
         malformed_signature = "malformed_signature"
 
-        result = await sangria_client.handle_fixed_price(malformed_signature, options)
+        result = await sangria_client.handle_fixed_price(
+            malformed_signature, options
+        )
 
         assert isinstance(result, PaymentResponse)
         assert result.status_code == 402
@@ -248,8 +264,12 @@ class TestCustomEndpoints:
             settle_endpoint="/custom/payment/settle",
         )
 
-        setup_respx_mock.post(f"{mock_api_base_url}/custom/payment/generate").mock(
-            return_value=httpx.Response(200, json=mock_generate_payment_success)
+        setup_respx_mock.post(
+            f"{mock_api_base_url}/custom/payment/generate"
+        ).mock(
+            return_value=httpx.Response(
+                200, json=mock_generate_payment_success
+            )
         )
 
         options = FixedPriceOptions(price=8.00, resource="/test")
@@ -276,13 +296,17 @@ class TestCustomEndpoints:
             settle_endpoint="/custom/payment/settle",
         )
 
-        setup_respx_mock.post(f"{mock_api_base_url}/custom/payment/settle").mock(
+        setup_respx_mock.post(
+            f"{mock_api_base_url}/custom/payment/settle"
+        ).mock(
             return_value=httpx.Response(200, json=mock_settle_payment_success)
         )
 
         options = FixedPriceOptions(price=18.00, resource="/premium")
 
-        result = await custom_client.handle_fixed_price("test_signature", options)
+        result = await custom_client.handle_fixed_price(
+            "test_signature", options
+        )
 
         assert isinstance(result, PaymentProceeded)
         assert result.paid is True

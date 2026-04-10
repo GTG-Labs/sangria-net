@@ -74,7 +74,7 @@ jobs:
     - name: Install pnpm
       uses: pnpm/action-setup@v2
       with:
-        version: 8
+        version: 9
         run_install: false
 
     - name: Set up Node.js
@@ -87,12 +87,12 @@ jobs:
     - name: Install test dependencies
       run: |
         cd tests
-        pnpm install --frozen-lockfile
+        pnpm install --no-frozen-lockfile
 
     - name: Install TypeScript SDK dependencies
       run: |
         cd sdk/sdk-typescript
-        pnpm install --frozen-lockfile
+        pnpm install --no-frozen-lockfile
 
     - name: Build TypeScript SDK
       run: |
@@ -153,7 +153,7 @@ jobs:
         cd sdk/python && pip install -e . && cd ../..
 
         # Install pnpm
-        npm install -g pnpm@8
+        npm install -g pnpm@9
 
         # TypeScript dependencies
         cd tests && pnpm install --frozen-lockfile && cd ..
@@ -207,7 +207,7 @@ jobs:
 
     - name: Test TypeScript SDK build
       run: |
-        npm install -g pnpm@8
+        npm install -g pnpm@9
         cd sdk/sdk-typescript
         pnpm install --frozen-lockfile
         pnpm run build
