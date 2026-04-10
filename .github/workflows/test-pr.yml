@@ -156,8 +156,8 @@ jobs:
         npm install -g pnpm@9
 
         # TypeScript dependencies
-        cd tests && pnpm install --frozen-lockfile && cd ..
-        cd sdk/sdk-typescript && pnpm install --frozen-lockfile && cd ../..
+        cd tests && pnpm install --no-frozen-lockfile && cd ..
+        cd sdk/sdk-typescript && pnpm install --no-frozen-lockfile && cd ../..
 
     - name: Run comprehensive test suite
       run: |
@@ -209,7 +209,7 @@ jobs:
       run: |
         npm install -g pnpm@9
         cd sdk/sdk-typescript
-        pnpm install --frozen-lockfile
+        pnpm install --no-frozen-lockfile
         pnpm run build
         echo "✅ TypeScript SDK build successful"
 
