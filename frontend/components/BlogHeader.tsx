@@ -25,6 +25,8 @@ export default function BlogHeader() {
           friction={0.99}
           wallBounce={0.5}
           maxVelocity={0.08}
+          centerRepelRadius={3.5}
+          centerRepelStrength={0.003}
           followCursor={false}
         />
       </div>

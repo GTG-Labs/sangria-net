@@ -331,6 +331,17 @@ class W {
       const pos = new Vector3().fromArray(positionData, base);
       const vel = new Vector3().fromArray(velocityData, base);
       vel.y -= deltaInfo.delta * config.gravity * sizeData[idx];
+      // Center repulsion
+      if (config.centerRepelRadius > 0) {
+        const dx = pos.x;
+        const dy = pos.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < config.centerRepelRadius && dist > 0.01) {
+          const force = (1 - dist / config.centerRepelRadius) * config.centerRepelStrength;
+          vel.x += (dx / dist) * force;
+          vel.y += (dy / dist) * force;
+        }
+      }
       vel.multiplyScalar(config.friction);
       vel.clampLength(0, config.maxVelocity);
       pos.add(vel);
@@ -469,7 +480,9 @@ const DefaultConfig = {
   maxY: 5,
   maxZ: 2,
   controlSphere0: false,
-  followCursor: true
+  followCursor: true,
+  centerRepelRadius: 0,
+  centerRepelStrength: 0
 };
 
 const DummyObj = new Object3D();
