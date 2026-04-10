@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/logger"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"sangria/backend/adminHandlers"
@@ -41,6 +42,9 @@ func main() {
 	}
 
 	app := fiber.New()
+	app.Use(logger.New(logger.Config{
+		Format: "${time} ${method} ${path} ${status} ${latency} ${ip}\n",
+	}))
 	utils.SetupCORSMiddleware(app)
 	setupRoutes(app, pool)
 
