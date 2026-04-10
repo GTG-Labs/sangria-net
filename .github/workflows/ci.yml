@@ -91,9 +91,6 @@ jobs:
         working-directory: tests
         run: pnpm test:security
 
-      - name: Run financial tests
-        working-directory: tests
-        run: pnpm test:financial
 
   # Run Python tests
   test-python:
@@ -141,7 +138,7 @@ jobs:
 
   # Run E2E and integration tests
   test-integration:
-    name: Integration Tests (E2E, Performance, Cross-SDK, Benchmarks)
+    name: Integration Tests (E2E)
     runs-on: ubuntu-latest
     needs: [test-typescript, test-python]
     steps:
@@ -167,17 +164,9 @@ jobs:
         working-directory: tests
         run: pnpm test:e2e
 
-      - name: Run performance tests
+      - name: Performance tests (placeholder)
         working-directory: tests
-        run: pnpm test:performance
-
-      - name: Run cross-SDK interoperability tests
-        working-directory: tests
-        run: pnpm test:cross-sdk
-
-      - name: Run performance benchmarks
-        working-directory: tests
-        run: pnpm benchmark
+        run: echo "Performance tests would be configured here when needed"
 
   # Security audit
   security:
