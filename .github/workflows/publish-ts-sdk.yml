@@ -1,0 +1,84 @@
+name: Publish TypeScript SDK
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Release type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      test_mode:
+        description: 'Dry run — no publish, no commit'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  publish:
+    name: Build & Publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: sdk/sdk-typescript/pnpm-lock.yaml
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        working-directory: sdk/sdk-typescript
+        run: pnpm install
+
+      - name: Bump version
+        id: version
+        working-directory: sdk/sdk-typescript
+        run: |
+          npm version ${{ inputs.release_type }} --no-git-tag-version
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Publishing @sangria-sdk/core@$VERSION"
+
+      - name: Build
+        working-directory: sdk/sdk-typescript
+        run: pnpm build
+
+      - name: Publish (dry run)
+        if: ${{ inputs.test_mode }}
+        working-directory: sdk/sdk-typescript
+        run: pnpm publish --dry-run --no-git-checks
+
+      - name: Publish to npm
+        if: ${{ !inputs.test_mode }}
+        working-directory: sdk/sdk-typescript
+        run: pnpm publish --access public --no-git-checks --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Commit version bump
+        if: ${{ !inputs.test_mode }}
+        run: |
+          git config user.email "action@github.com"
+          git config user.name "GitHub Action"
+          git add sdk/sdk-typescript/package.json
+          git commit -m "chore: release @sangria-sdk/core@${{ steps.version.outputs.version }}"
+          git tag "ts-sdk@${{ steps.version.outputs.version }}"
+          git push && git push --tags
