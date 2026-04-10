@@ -1,0 +1,62 @@
+package merchantHandlers
+
+import (
+	"log"
+
+	"github.com/gofiber/fiber/v3"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"sangrianet/backend/auth"
+	dbengine "sangrianet/backend/dbEngine"
+	"sangrianet/backend/utils"
+)
+
+// GetMerchantTransactions handles GET /transactions with cursor-based pagination
+// Query params: ?limit=20&cursor=base64_encoded_timestamp
+func GetMerchantTransactions(pool *pgxpool.Pool) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		user := c.Locals("workos_user").(auth.WorkOSUser)
+
+		// Parse pagination params from query string
+		limit, cursor, err := utils.ParsePaginationParams(
+			c.Query("limit"),
+			c.Query("cursor"),
+		)
+		if err != nil {
+			return c.Status(400).JSON(fiber.Map{
+				"error": "Invalid pagination parameters: " + err.Error(),
+			})
+		}
+
+		// Fetch paginated transactions with total count
+		transactions, nextCursor, total, err := dbengine.GetMerchantTransactionsPaginated(
+			c.Context(), pool, user.ID, limit, cursor,
+		)
+		if err != nil {
+			log.Printf("Failed to fetch transactions for user %s: %v", user.ID, err)
+			return c.Status(500).JSON(fiber.Map{
+				"error": "Failed to retrieve transactions",
+			})
+		}
+
+		// Build pagination metadata
+		paginationMeta := dbengine.PaginationMeta{
+			HasMore: nextCursor != nil,
+			Count:   len(transactions),
+			Limit:   limit,
+			Total:   total,
+		}
+		if nextCursor != nil {
+			encoded := utils.EncodeCursor(*nextCursor)
+			paginationMeta.NextCursor = &encoded
+		}
+
+		// Return paginated response
+		response := dbengine.TransactionsResponse{
+			Data:       transactions,
+			Pagination: paginationMeta,
+		}
+
+		return c.JSON(response)
+	}
+}

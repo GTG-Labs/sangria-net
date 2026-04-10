@@ -1,12 +1,14 @@
-export default function TransactionsPage() {
-  return (
-    <div className="mx-auto max-w-6xl">
-      <h1 className="text-4xl font-semibold tracking-tight text-gray-900">
-        Transactions
-      </h1>
-      <p className="mt-2 text-gray-500">
-        View and manage your payment transactions.
-      </p>
-    </div>
-  );
+import { withAuth, getSignInUrl } from "@workos-inc/authkit-nextjs";
+import { redirect } from "next/navigation";
+import TransactionsContent from "./TransactionsContent";
+
+export default async function TransactionsPage() {
+  const { user } = await withAuth();
+
+  if (!user) {
+    const signInUrl = await getSignInUrl();
+    redirect(signInUrl);
+  }
+
+  return <TransactionsContent />;
 }

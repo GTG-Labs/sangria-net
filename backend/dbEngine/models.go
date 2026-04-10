@@ -114,3 +114,28 @@ type CryptoWallet struct {
 	CreatedAt  time.Time `json:"created_at"`
 }
 
+// MerchantTransaction represents a transaction with enriched data for API responses.
+type MerchantTransaction struct {
+	ID             string    `json:"id"`
+	IdempotencyKey string    `json:"idempotency_key"`
+	CreatedAt      time.Time `json:"created_at"`
+	Amount         int64     `json:"amount"`
+	Currency       Currency  `json:"currency"`
+	Type           string    `json:"type"`
+}
+
+// PaginationMeta holds pagination metadata for API responses
+type PaginationMeta struct {
+	NextCursor *string `json:"next_cursor"` // Base64-encoded cursor, nil if no more
+	HasMore    bool    `json:"has_more"`    // True if more results exist
+	Count      int     `json:"count"`       // Items in this response
+	Limit      int     `json:"limit"`       // Requested page size
+	Total      int     `json:"total"`       // Total count of all transactions
+}
+
+// TransactionsResponse wraps transaction data with pagination metadata
+type TransactionsResponse struct {
+	Data       []MerchantTransaction `json:"data"`
+	Pagination PaginationMeta    `json:"pagination"`
+}
+
