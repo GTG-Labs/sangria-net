@@ -57,7 +57,7 @@ jobs:
       continue-on-error: true  # Allow mypy warnings for now
 
     - name: Upload Python test results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: python-test-results
@@ -114,7 +114,7 @@ jobs:
         npx tsc --noEmit
 
     - name: Upload TypeScript test results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: typescript-test-results
@@ -161,7 +161,7 @@ jobs:
         npm run test:coverage -- --reporter=json --outputFile=../coverage-report.json
 
     - name: Upload coverage report
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: coverage-report
@@ -233,7 +233,7 @@ jobs:
 
     steps:
     - name: Download test artifacts
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         path: test-results/
 

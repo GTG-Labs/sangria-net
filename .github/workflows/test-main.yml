@@ -60,7 +60,7 @@ jobs:
         python -m pytest tests/python/ --cov=sdk/python/src --cov-report=html:python-coverage/ --cov-report=xml:python-coverage.xml
 
     - name: Upload coverage reports
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: coverage-reports
         path: |
