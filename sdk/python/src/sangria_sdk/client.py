@@ -14,10 +14,12 @@ from .models import (
 
 
 class SangriaMerchantClient:
+    _DEFAULT_BASE_URL = "https://api.getsangria.com"
+
     def __init__(
         self,
-        base_url: str,
         api_key: str,
+        base_url: str = _DEFAULT_BASE_URL,
         generate_endpoint: str = "/v1/generate-payment",
         settle_endpoint: str = "/v1/settle-payment",
         timeout_seconds: float = 8.0,
