@@ -6,7 +6,7 @@ import type {
   X402ChallengePayload,
 } from "./types.js";
 
-const DEFAULT_BASE_URL = "http://localhost:8080";
+const DEFAULT_BASE_URL = "https://api.getsangria.com";
 
 export class Sangria {
   private apiKey: string;
