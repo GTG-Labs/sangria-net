@@ -47,7 +47,7 @@ export default async function Home() {
                   </ArcadeButton>
                 )}
                 <ArcadeButton
-                  href="https://github.com/GTG-Labs/sangria-net"
+                  href="https://github.com/GTG-Labs/sangria"
                   variant="secondary"
                   className="[&>span]:w-full sm:[&>span]:w-auto"
                 >

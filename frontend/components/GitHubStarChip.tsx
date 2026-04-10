@@ -10,7 +10,7 @@ export default function GitHubStarChip() {
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch("https://api.github.com/repos/GTG-Labs/sangria-net", {
+    fetch("https://api.github.com/repos/GTG-Labs/sangria", {
       signal: controller.signal,
     })
       .then((res) => (res.ok ? res.json() : null))
@@ -26,7 +26,7 @@ export default function GitHubStarChip() {
   return (
     <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full bg-zinc-800 text-zinc-200 text-sm font-medium shadow-lg">
       <Link
-        href="https://github.com/GTG-Labs/sangria-net"
+        href="https://github.com/GTG-Labs/sangria"
         target="_blank"
         aria-label="Star us on GitHub"
         className="flex items-center gap-2 pl-4 py-2 hover:text-white transition-colors"

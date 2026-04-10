@@ -16,7 +16,7 @@ cp .env.example .env   # fill in all required variables
 go run .
 ```
 
-The server starts on `http://localhost:8080`.
+The server starts on the port specified by the `PORT` environment variable (required).
 
 ### Environment variables
 

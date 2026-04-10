@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log"
 	"log/slog"
 	"os"
 
@@ -82,10 +83,11 @@ func main() {
 	utils.SetupCORSMiddleware(app)
 	setupRoutes(app, pool)
 
-	if err := app.Listen(":8080"); err != nil {
-		slog.Error("server stopped", "error", err)
-		os.Exit(1)
+	port, err := config.GetPort()
+	if err != nil {
+		log.Fatal(err)
 	}
+	log.Fatal(app.Listen(":" + port))
 }
 
 func setupRoutes(app *fiber.App, pool *pgxpool.Pool) {
