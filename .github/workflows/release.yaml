@@ -22,6 +22,9 @@ on:
         default: false
         type: boolean
 
+permissions:
+  contents: write
+
 env:
   NODE_VERSION: '20'
   PYTHON_VERSION: '3.11'
@@ -125,7 +128,7 @@ jobs:
           python -m venv venv
           source venv/bin/activate
           pip install --upgrade pip
-          pip install -e ".[dev]"
+          pip install -e ".[fastapi]"
 
       - name: Run all tests
         working-directory: tests
@@ -205,7 +208,7 @@ jobs:
       - name: Publish to PyPI (dry run)
         if: ${{ inputs.test_mode }}
         working-directory: sdk/python
-        run: python -m twine upload --repository testpypi dist/* || echo "Dry run completed"
+        run: python -m twine upload --repository testpypi dist/*
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.TEST_PYPI_TOKEN }}

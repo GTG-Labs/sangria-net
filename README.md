@@ -38,7 +38,7 @@ app.listen(3000);
 ### Python (FastAPI)
 
 ```bash
-pip install sangria-merchant-sdk[fastapi]
+pip install sangria-core[fastapi]
 ```
 
 ```python
@@ -113,7 +113,7 @@ sequenceDiagram
 | [`dbSchema/`](dbSchema/)                     | Database schema (single source of truth)           | Drizzle ORM                     |
 | [`frontend/`](frontend/)                     | Documentation site                                 | Next.js, Tailwind               |
 | [`sdk/sdk-typescript/`](sdk/sdk-typescript/) | TypeScript merchant SDK (`@sangria/core`)          | TypeScript                      |
-| [`sdk/python/`](sdk/python/)                 | Python merchant SDK (`sangria-merchant-sdk`)       | Python, httpx                   |
+| [`sdk/python/`](sdk/python/)                 | Python merchant SDK (`sangria-core`)       | Python, httpx                   |
 | [`playground/`](playground/)                 | Example merchants + buyer client                   | Express, Fastify, Hono, FastAPI |
 
 ---
