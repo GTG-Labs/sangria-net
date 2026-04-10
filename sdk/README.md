@@ -7,6 +7,6 @@ These are simple SDKs merchants can add to easily accept payments. We integrate 
 | SDK                             | Frameworks             | Install                            |
 | ------------------------------- | ---------------------- | ---------------------------------- |
 | [TypeScript](./sdk-typescript/) | Express, Fastify, Hono | `pnpm add @sangria/core`           |
-| [Python](./python/)             | FastAPI                | `pip install sangria-merchant-sdk` |
+| [Python](./python/)             | FastAPI                | `pip install sangria-core` |
 
 The merchant writes zero payment logic. One middleware call handles the full x402 negotiation loop.

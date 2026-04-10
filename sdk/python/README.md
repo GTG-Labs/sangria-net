@@ -1,11 +1,11 @@
-# sangria-merchant-sdk
+# sangria-core
 
 Python SDK for accepting x402 payments. Supports FastAPI.
 
 ## Install
 
 ```bash
-pip install sangria-merchant-sdk
+pip install sangria-core
 ```
 
 ## Quick Start
