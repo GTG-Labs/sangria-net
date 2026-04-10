@@ -335,6 +335,10 @@ class W {
       const pos = new Vector3().fromArray(positionData, base);
       const vel = new Vector3().fromArray(velocityData, base);
       vel.y -= deltaInfo.delta * config.gravity * sizeData[idx];
+      // Constant horizontal flow
+      if (config.flowSpeed !== 0) {
+        vel.x += config.flowSpeed;
+      }
       // Brownian motion — tiny random nudge each frame
       if (config.brownianMotion > 0) {
         vel.x += MathUtils.randFloatSpread(config.brownianMotion);
@@ -395,7 +399,14 @@ class W {
           vel.sub(velCorrection);
         }
       }
-      if (Math.abs(pos.x) + radius > config.maxX) {
+      if (config.flowSpeed !== 0) {
+        // Wrap around horizontally
+        if (pos.x - radius > config.maxX) {
+          pos.x = -config.maxX - radius;
+        } else if (pos.x + radius < -config.maxX) {
+          pos.x = config.maxX + radius;
+        }
+      } else if (Math.abs(pos.x) + radius > config.maxX) {
         pos.x = Math.sign(pos.x) * (config.maxX - radius);
         vel.x = -vel.x * config.wallBounce;
       }
@@ -493,7 +504,8 @@ const DefaultConfig = {
   followCursor: true,
   centerRepelRadius: 0,
   centerRepelStrength: 0,
-  brownianMotion: 0
+  brownianMotion: 0,
+  flowSpeed: 0
 };
 
 const DummyObj = new Object3D();
