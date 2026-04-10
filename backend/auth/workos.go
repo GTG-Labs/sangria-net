@@ -142,7 +142,7 @@ func VerifyWorkOSToken(ctx context.Context, tokenStr string) (string, error) {
 
 // CreateUser handles POST /users endpoint
 func CreateUser(pool *pgxpool.Pool) fiber.Handler {
-	return func(c *fiber.Ctx) error {
+	return func(c fiber.Ctx) error {
 		user := c.Locals("workos_user").(WorkOSUser)
 
 		if user.ID == "" {

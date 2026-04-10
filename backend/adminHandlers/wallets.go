@@ -14,11 +14,11 @@ import (
 // CreateWalletPool handles POST /wallets/pool.
 // Creates a new CDP wallet and adds it to the pool (admin-only, WorkOS JWT auth).
 func CreateWalletPool(pool *pgxpool.Pool) fiber.Handler {
-	return func(c *fiber.Ctx) error {
+	return func(c fiber.Ctx) error {
 		var req struct {
 			Network string `json:"network"`
 		}
-		if err := c.BodyParser(&req); err != nil {
+		if err := c.Bind().JSON(&req); err != nil {
 			return c.Status(400).JSON(fiber.Map{"error": "invalid request body"})
 		}
 
