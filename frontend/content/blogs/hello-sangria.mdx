@@ -15,11 +15,11 @@ With the [x402 protocol](https://www.x402.org/), any HTTP endpoint can require p
 
 ## How It Works
 
-At a high level, Sangria supports three scenarios depending on who is on the platform:
+At a high level, Sangria supports three scenarios depending on who is on the platform. **Scenario 1 is live today**; Scenarios 2 and 3 are on the roadmap.
 
-1. **Scenario 1 — Client on Sangria, Merchant external (raw x402)**: the client pays with **Sangria Credits** while Sangria’s **Treasury Wallet** settles USDC on-chain.
-2. **Scenario 2 — Both on Sangria**: an internal ledger debit/credit (no blockchain, no ERC-3009 signing).
-3. **Scenario 3 — Client external, Merchant on Sangria**: the external client pays USDC on-chain and Sangria credits the merchant’s fiat balance.
+1. **Scenario 1 — Merchant on Sangria, Client external** _(supported)_: an external client (AI agent or raw wallet) pays USDC on-chain and Sangria credits the merchant's fiat balance.
+2. **Scenario 2 — Client on Sangria, Merchant external** _(coming soon)_: the client pays with **Sangria Credits** while Sangria's **Treasury Wallet** settles USDC on-chain on their behalf.
+3. **Scenario 3 — Both on Sangria** _(coming soon)_: a pure internal ledger debit/credit — no blockchain interaction needed.
 
 The basic x402 request loop looks like this:
 
@@ -30,9 +30,10 @@ The basic x402 request loop looks like this:
 5. Server verifies, settles on-chain, and returns the data
 
 **Signing model by scenario:**
-- **Scenario 1:** the Sangria backend signs ERC-3009 server-side with the **Treasury Wallet** (secure key custody; never client-side SDK keys).
-- **Scenario 2:** no signing; purely internal ledger updates.
-- **Scenario 3:** the external client signs ERC-3009 with its own wallet.
+
+- **Scenario 1:** the external client signs ERC-3009 with its own wallet.
+- **Scenario 2:** the Sangria backend signs ERC-3009 server-side with the **Treasury Wallet** (secure key custody; never client-side SDK keys).
+- **Scenario 3:** no signing; purely internal ledger updates.
 
 ```python
 from fastapi import FastAPI
@@ -65,8 +66,9 @@ async def premium():
 
 We're working on:
 
+- **Scenario 2 & 3** — Sangria Credits for clients and internal ledger settlements
 - **Variable pricing** — pay based on actual usage, not a fixed price
-- **Multi-chain support** — beyond Base Sepolia
+- **Multi-chain support** — beyond Base mainnet
 - **Agent-to-agent payments** — autonomous agents transacting with each other
 
 Stay tuned for more updates.

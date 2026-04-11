@@ -57,13 +57,13 @@ Frontend (Docs + Merchant dashboard)
 
 ### Layer descriptions
 
-| Layer | Technology | Responsibility |
-| --- | --- | --- |
-| **Client** | Python, HTTPX, x402, `eth_account` | 402 negotiation, external-wallet EIP-712 signing, credit verification |
-| **Orchestration** | Go, CDP SDK | Treasury wallets, server-side ERC-3009 authorization signing, mutexes, settlement, ledger management |
-| **Persistence** | PostgreSQL, Drizzle ORM | User balances, API keys, audit logs |
-| **Infrastructure** | Coinbase Facilitator, Base Blockchain | Gas-free settlement, on-chain USDC transfer |
-| **Frontend** | Next.js 16, React 19, Tailwind CSS 4 | Merchant dashboard, documentation, auth |
+| Layer              | Technology                            | Responsibility                                                                                       |
+| ------------------ | ------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| **Client**         | Python, HTTPX, x402, `eth_account`    | 402 negotiation, external-wallet EIP-712 signing, credit verification                                |
+| **Orchestration**  | Go, CDP SDK                           | Treasury wallets, server-side ERC-3009 authorization signing, mutexes, settlement, ledger management |
+| **Persistence**    | PostgreSQL, Drizzle ORM               | User balances, API keys, audit logs                                                                  |
+| **Infrastructure** | Coinbase Facilitator, Base Blockchain | Gas-free settlement, on-chain USDC transfer                                                          |
+| **Frontend**       | Next.js 16, React 19, Tailwind CSS 4  | Merchant dashboard, documentation, auth                                                              |
 
 ### Component breakdown
 
@@ -73,10 +73,10 @@ A Python client library extending HTTPX with x402 payment capabilities.
 
 - `sangria.post()`, `sangria.get()`, etc. behave like normal HTTP calls.
 - If an endpoint returns `402 Payment Required`, the SDK automatically:
-    1. Reads payment terms from response headers.
-    2. Verifies the user has sufficient Sangria Credits.
-    3. For Sangria-credit flows (Scenario 1), requests a backend-generated **ERC-3009 TransferWithAuthorization** signed server-side by the Treasury wallet; for external raw x402 clients (Scenario 3), the client signs the **ERC-3009 TransferWithAuthorization** with its own wallet.
-    4. Retries the request with the signed payment in the `PAYMENT-SIGNATURE` header.
+  1. Reads payment terms from response headers.
+  2. Verifies the user has sufficient Sangria Credits.
+  3. For external raw x402 clients (Scenario 1), the client signs the **ERC-3009 TransferWithAuthorization** with its own wallet; for Sangria-credit flows (Scenario 2), requests a backend-generated **ERC-3009 TransferWithAuthorization** signed server-side by the Treasury wallet.
+  4. Retries the request with the signed payment in the `PAYMENT-SIGNATURE` header.
 - Supports both `exact` (fixed price) and `upto` (variable price) schemes.
 
 **Key file:** `playground/main.py`
