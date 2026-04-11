@@ -126,7 +126,10 @@ func RequireAdmin(pool *pgxpool.Pool) fiber.Handler {
 		}
 
 		// Check user role in database.
-		user := c.Locals("workos_user").(WorkOSUser)
+		user, ok := c.Locals("workos_user").(WorkOSUser)
+		if !ok {
+			return c.Status(500).JSON(fiber.Map{"error": "Internal server error"})
+		}
 		dbUser, err := dbengine.GetUserByWorkosID(c.Context(), pool, user.ID)
 		if err != nil {
 			slog.Error("admin role check: database lookup failed", "user_id", user.ID, "error", err)
