@@ -50,18 +50,9 @@ x402 enables pricing at request granularity: per API call, per data lookup, per 
 
 x402 defines **payment negotiation and transport**. Sangria focuses on **execution, merchant usability, and operational reliability** for real-world deployments.
 
-Based on Sangria's architecture, we support one payment scenario today, with two more planned:
+Today, Sangria supports external clients paying USDC on-chain to merchants hosted on the platform. Sangria receives the on-chain payment, verifies settlement, and credits the merchant's fiat balance — so merchants never need to handle crypto directly.
 
-1. **Client external, merchant on Sangria** _(supported now)_
-   An external client (AI agent or raw wallet) pays USDC on-chain; Sangria credits the merchant's fiat balance.
-
-2. **Client on Sangria, merchant external** _(planned)_
-   The client pays in Sangria Credits; Sangria's treasury handles USDC settlement to the external merchant over x402-compatible flows.
-
-3. **Client and merchant both on Sangria** _(planned)_
-   Settlement happens as an internal ledger transfer for speed and cost efficiency, with no on-chain hop needed.
-
-This model gives merchants better interoperability while insulating end users from unnecessary crypto complexity.
+This model gives merchants reliable interoperability while insulating them from unnecessary crypto complexity.
 
 ## Why This Matters for AI Agents
 
@@ -85,4 +76,4 @@ x402 is a real attempt to solve one of the web's oldest missing pieces: low-fric
 
 As usage shifts toward autonomous software and pay-per-action services, protocols like x402 become foundational. Sangria builds on that foundation to make these flows practical for both developers and merchants—without forcing users to become crypto experts.
 
-The next internet payment layer is not about bigger checkout pages. It's about programmable value exchange at request speed.
+The next internet payment layer is not about bigger checkout pages. It's about money moving autonomously at the speed of of a HTTP request.

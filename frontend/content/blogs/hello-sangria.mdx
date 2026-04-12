@@ -15,11 +15,7 @@ With the [x402 protocol](https://www.x402.org/), any HTTP endpoint can require p
 
 ## How It Works
 
-At a high level, Sangria supports three scenarios depending on who is on the platform. **Scenario 1 is live today**; Scenarios 2 and 3 are on the roadmap.
-
-1. **Scenario 1 — Merchant on Sangria, Client external** _(supported)_: an external client (AI agent or raw wallet) pays USDC on-chain and Sangria credits the merchant's fiat balance.
-2. **Scenario 2 — Client on Sangria, Merchant external** _(coming soon)_: the client pays with **Sangria Credits** while Sangria's **Treasury Wallet** settles USDC on-chain on their behalf.
-3. **Scenario 3 — Both on Sangria** _(coming soon)_: a pure internal ledger debit/credit — no blockchain interaction needed.
+Today, Sangria supports external clients paying merchants hosted on the platform. An external client (AI agent or raw wallet) pays USDC on-chain and Sangria credits the merchant's fiat balance.
 
 The basic x402 request loop looks like this:
 
@@ -29,11 +25,7 @@ The basic x402 request loop looks like this:
 4. Client retries the request with the payment header
 5. Server verifies, settles on-chain, and returns the data
 
-**Signing model by scenario:**
-
-- **Scenario 1:** the external client signs ERC-3009 with its own wallet.
-- **Scenario 2:** the Sangria backend signs ERC-3009 server-side with the **Treasury Wallet** (secure key custody; never client-side SDK keys).
-- **Scenario 3:** no signing; purely internal ledger updates.
+The external client signs the payment authorization using ERC-3009 `TransferWithAuthorization` with its own wallet.
 
 ```python
 from fastapi import FastAPI
@@ -66,8 +58,7 @@ async def premium():
 
 We're working on:
 
-- **Scenario 2** — Sangria Credits for clients, settled on-chain via the treasury wallet
-- **Scenario 3** — internal ledger settlements (no blockchain required)
+- **Sangria for Clients** — Sangria Credits for clients, settled on-chain via the treasury wallet
 - **Variable pricing** — pay based on actual usage, not a fixed price
 - **Multi-chain support** — beyond Base Sepolia
 - **Agent-to-agent payments** — autonomous agents transacting with each other

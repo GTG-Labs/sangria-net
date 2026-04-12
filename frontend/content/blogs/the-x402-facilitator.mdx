@@ -100,13 +100,13 @@ server = x402ResourceServer(facilitator)
 
 Three lines. That's all it takes to connect your resource server to a facilitator that handles verification, settlement, gas, and duplicate protection across multiple chains.
 
-For our three payment scenarios — client external with merchant on Sangria, client on Sangria with external merchant, or both on Sangria — the facilitator adapts accordingly. When both parties are on Sangria, the facilitator step is bypassed entirely in favor of an internal ledger transfer. When one side is external, the facilitator bridges the gap between HTTP and on-chain settlement.
+When a client pays on-chain, Sangria's facilitator layer verifies the ERC-3009 authorization and coordinates settlement — so the merchant's API never touches the blockchain directly.
 
 ## The Bigger Picture
 
 The facilitator is what makes x402 a **practical** protocol, not just a theoretical one.
 
-Without it, every server operator would need to become a blockchain developer. With it, they just need to add middleware. Without it, gas mechanics and chain-specific quirks would leak into application logic. With it, servers think in HTTP and facilitators think in chains.
+Without it, every server operator would need to become a blockchain developer. With it, they just need to add middleware.
 
 Multiple facilitators are already live in production across Base, Solana, Polygon, and Avalanche. The protocol is designed so that **anyone can run a facilitator** — there's no central authority, no gatekeeping, and no permission required.
 
