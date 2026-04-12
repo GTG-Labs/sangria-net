@@ -7,10 +7,18 @@ MICROUNITS_PER_DOLLAR: int = 1_000_000
 """Number of microunits in 1 USD."""
 
 
+_MAX_SAFE_MICROUNITS: int = 9_007_199_254_740_991  # JS Number.MAX_SAFE_INTEGER
+
+
 def to_microunits(dollars: float) -> int:
     """Convert a dollar amount to microunits. Rounds half-up to match JS Math.round."""
     from decimal import Decimal, ROUND_HALF_UP
-    return int((Decimal(str(dollars)) * Decimal(MICROUNITS_PER_DOLLAR)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    microunits = int((Decimal(str(dollars)) * Decimal(MICROUNITS_PER_DOLLAR)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    if microunits > _MAX_SAFE_MICROUNITS:
+        raise ValueError(
+            "amount exceeds safe integer range for JSON transport and cannot be represented safely"
+        )
+    return microunits
 
 
 def from_microunits(microunits: int) -> float:

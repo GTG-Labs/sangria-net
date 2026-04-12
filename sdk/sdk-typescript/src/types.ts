@@ -21,7 +21,13 @@ export const MICROUNITS_PER_DOLLAR = 1_000_000;
 
 /** Convert a dollar amount to microunits. Rounds to nearest integer. */
 export function toMicrounits(dollars: number): number {
-  return Math.round(dollars * MICROUNITS_PER_DOLLAR);
+  const microunits = Math.round(dollars * MICROUNITS_PER_DOLLAR);
+  if (microunits > Number.MAX_SAFE_INTEGER) {
+    throw new Error(
+      "Sangria: amount exceeds Number.MAX_SAFE_INTEGER microunits and cannot be represented safely"
+    );
+  }
+  return microunits;
 }
 
 /** Convert microunits to a dollar amount (for display purposes only). */
