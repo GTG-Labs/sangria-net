@@ -1,0 +1,51 @@
+name: Deploy SDKs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'sdk/**'
+      - 'deployment/SDK_VERSIONS.md'
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  detect-changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      typescript-changed: ${{ steps.changes.outputs.typescript }}
+      python-changed: ${{ steps.changes.outputs.python }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            typescript:
+              - 'sdk/sdk-typescript/**'
+            python:
+              - 'sdk/python/**'
+
+  deploy-typescript:
+    name: Deploy TypeScript SDK
+    needs: detect-changes
+    if: needs.detect-changes.outputs.typescript-changed == 'true'
+    uses: ./.github/workflows/publish-ts-sdk.yml
+    with:
+      test_mode: false
+    secrets: inherit
+
+  deploy-python:
+    name: Deploy Python SDK
+    needs: detect-changes
+    if: needs.detect-changes.outputs.python-changed == 'true'
+    uses: ./.github/workflows/publish-python-sdk.yml
+    with:
+      test_mode: false
+    secrets: inherit

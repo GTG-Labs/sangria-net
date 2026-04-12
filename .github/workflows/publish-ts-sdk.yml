@@ -3,15 +3,13 @@ name: Publish TypeScript SDK
 on:
   workflow_dispatch:
     inputs:
-      release_type:
-        description: 'Release type'
-        required: true
-        default: 'patch'
-        type: choice
-        options:
-          - patch
-          - minor
-          - major
+      test_mode:
+        description: 'Dry run — no publish, no commit'
+        required: false
+        default: false
+        type: boolean
+  workflow_call:
+    inputs:
       test_mode:
         description: 'Dry run — no publish, no commit'
         required: false
@@ -48,14 +46,23 @@ jobs:
         working-directory: sdk/sdk-typescript
         run: pnpm install
 
-      - name: Bump version
+      - name: Get version from SDK_VERSIONS.md
         id: version
         working-directory: sdk/sdk-typescript
         run: |
-          npm version ${{ inputs.release_type }} --no-git-tag-version
-          VERSION=$(node -p "require('./package.json').version")
+          # Extract version from deployment/SDK_VERSIONS.md
+          VERSION=$(grep -A 2 "## TypeScript SDK" ../../deployment/SDK_VERSIONS.md | grep "VERSION:" | sed 's/VERSION: //')
+          echo "📖 Version from SDK_VERSIONS.md: $VERSION"
+
+          # Update package.json to match
+          node -e "
+            const pkg = require('./package.json');
+            pkg.version = '$VERSION';
+            require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Publishing @sangria-sdk/core@$VERSION"
+          echo "📦 Publishing @sangria-sdk/core@$VERSION"
 
       - name: Build
         working-directory: sdk/sdk-typescript
