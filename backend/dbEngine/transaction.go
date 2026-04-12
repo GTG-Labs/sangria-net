@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -289,6 +290,12 @@ func handleExistingTransaction(ctx context.Context, pool *pgxpool.Pool, idempote
 // the blockchain tx hash. Returns ErrTransactionNotPending if the row is not
 // in pending state (e.g. already confirmed by a concurrent request).
 func ConfirmTransaction(ctx context.Context, pool *pgxpool.Pool, txnID string, txHash string) error {
+	if strings.TrimSpace(txnID) == "" {
+		return fmt.Errorf("transaction ID must not be empty")
+	}
+	if strings.TrimSpace(txHash) == "" {
+		return fmt.Errorf("tx hash must not be empty when confirming a transaction")
+	}
 	result, err := pool.Exec(ctx,
 		`UPDATE transactions
 		 SET status = 'confirmed', tx_hash = $2
@@ -307,6 +314,9 @@ func ConfirmTransaction(ctx context.Context, pool *pgxpool.Pool, txnID string, t
 // FailTransaction transitions a pending transaction to failed. Called when the
 // external facilitator settlement fails after the pending ledger was written.
 func FailTransaction(ctx context.Context, pool *pgxpool.Pool, txnID string) error {
+	if strings.TrimSpace(txnID) == "" {
+		return fmt.Errorf("transaction ID must not be empty")
+	}
 	result, err := pool.Exec(ctx,
 		`UPDATE transactions
 		 SET status = 'failed'
