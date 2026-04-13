@@ -71,7 +71,8 @@ func CreateOrganizationInvitation(ctx context.Context, pool *pgxpool.Pool, organ
 
 	if err != nil {
 		// Check for unique constraint violation (duplicate pending invitation)
-		if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Code == "23505" {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			return OrganizationInvitation{}, ErrDuplicateInvitation
 		}
 		return OrganizationInvitation{}, fmt.Errorf("failed to create organization invitation: %w", err)
@@ -158,7 +159,10 @@ func ListPendingInvitationsForOrganization(ctx context.Context, pool *pgxpool.Po
 		invitations = append(invitations, invitation)
 	}
 
-	return invitations, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("querying organization invitations: %w", err)
+	}
+	return invitations, nil
 }
 
 // GetUserInvitations returns all invitations for a specific user email.
@@ -189,7 +193,10 @@ func GetUserInvitations(ctx context.Context, pool *pgxpool.Pool, email string) (
 		invitations = append(invitations, invitation)
 	}
 
-	return invitations, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("querying organization invitations: %w", err)
+	}
+	return invitations, nil
 }
 
 // AcceptInvitation accepts a pending invitation and adds the user to the organization.
@@ -262,6 +269,9 @@ func DeclineInvitation(ctx context.Context, pool *pgxpool.Pool, token string) er
 }
 
 // CancelInvitation allows an admin to cancel a pending invitation.
+// Note: Canceled invitations are marked as 'expired' for consistency with
+// the InvitationStatus enum defined in dbSchema/schema.ts, where both
+// expired and canceled invitations share the same terminal status value.
 func CancelInvitation(ctx context.Context, pool *pgxpool.Pool, invitationID string) error {
 	result, err := pool.Exec(ctx, `
 		UPDATE organization_invitations
@@ -297,7 +307,7 @@ func AddUserToOrganizationTx(ctx context.Context, tx pgx.Tx, userID, organizatio
 		INSERT INTO organization_members (user_id, organization_id, is_admin, joined_at)
 		VALUES ($1, $2, $3, NOW())
 		ON CONFLICT (user_id, organization_id) DO UPDATE
-			SET is_admin = EXCLUDED.is_admin`,
+			SET is_admin = organization_members.is_admin OR EXCLUDED.is_admin`,
 		userID, organizationID, isAdmin,
 	)
 	return err

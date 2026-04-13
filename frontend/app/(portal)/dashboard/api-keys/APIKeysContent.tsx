@@ -6,11 +6,11 @@ import ArcadeButton from "@/components/ArcadeButton";
 
 interface APIKey {
   id: string;
-  user_id: string;
+  organization_id: string;
   name: string;
-  key_id?: string;
-  api_key: string;
-  is_active: boolean;
+  key_id: string;
+  api_key?: string; // Only present during creation
+  status: 'active' | 'pending' | 'inactive';
   last_used_at: string | null;
   created_at: string;
 }
@@ -337,12 +337,15 @@ export default function APIKeysContent() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span
                         className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                          key.is_active
+                          key.status === 'active'
                             ? "bg-green-100 text-green-800"
+                            : key.status === 'pending'
+                            ? "bg-yellow-100 text-yellow-800"
                             : "bg-gray-100 text-gray-800"
                         }`}
                       >
-                        {key.is_active ? "Active" : "Revoked"}
+                        {key.status === 'active' ? 'Active' :
+                         key.status === 'pending' ? 'Pending' : 'Inactive'}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -354,7 +357,7 @@ export default function APIKeysContent() {
                       {new Date(key.created_at).toLocaleDateString()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      {key.is_active && (
+                      {key.status === 'active' && (
                         <button
                           onClick={() => revokeAPIKey(key.id)}
                           className="text-red-600 hover:text-red-800"
