@@ -270,6 +270,9 @@ func SettlePayment(pool *pgxpool.Pool) fiber.Handler {
 		logger.Info("settle payment: calling verify")
 		verifyResp, err := x402Handlers.Verify(c.Context(), payload, canonicalRequirements)
 		if err != nil {
+			// HTTP error (timeout, connection refused) — we don't know if the
+			// signature is valid or not. Leave the ledger row as pending so a
+			// retry can re-attempt.
 			logger.Error("settle payment: verify error", "error", err)
 			if failErr := dbengine.FailTransaction(c.Context(), pool, txn.ID); failErr != nil {
 				logger.Warn("settle payment: could not mark transaction as failed", "error", failErr)
@@ -281,11 +284,8 @@ func SettlePayment(pool *pgxpool.Pool) fiber.Handler {
 			})
 		}
 		if !verifyResp.IsValid {
-<<<<<<< Updated upstream
-=======
 			// Definitive rejection — the facilitator explicitly said no.
 			// Log the raw facilitator reason but return a sanitized message to the client.
->>>>>>> Stashed changes
 			logger.Warn("settle payment: verify rejected",
 				"reason", verifyResp.InvalidReason,
 				"message", verifyResp.InvalidMessage)
@@ -305,6 +305,9 @@ func SettlePayment(pool *pgxpool.Pool) fiber.Handler {
 		logger.Info("settle payment: calling settle")
 		settleResp, err := x402Handlers.Settle(c.Context(), payload, canonicalRequirements)
 		if err != nil {
+			// HTTP error (timeout, connection refused) — we don't know if the
+			// on-chain transfer happened or not. Leave the ledger row as pending
+			// so a retry can re-attempt and get the definitive outcome.
 			logger.Error("settle payment: settle error", "error", err)
 			if failErr := dbengine.FailTransaction(c.Context(), pool, txn.ID); failErr != nil {
 				logger.Warn("settle payment: could not mark transaction as failed", "error", failErr)
@@ -316,12 +319,9 @@ func SettlePayment(pool *pgxpool.Pool) fiber.Handler {
 			})
 		}
 		if !settleResp.Success {
-<<<<<<< Updated upstream
-=======
 			// Definitive rejection — the facilitator explicitly said no.
 			// On-chain transfer did NOT happen.
 			// Log the raw facilitator reason but return a sanitized message to the client.
->>>>>>> Stashed changes
 			logger.Warn("settle payment: settle rejected",
 				"reason", settleResp.ErrorReason,
 				"message", settleResp.ErrorMessage)
