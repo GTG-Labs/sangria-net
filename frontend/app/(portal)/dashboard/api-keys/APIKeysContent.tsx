@@ -100,11 +100,16 @@ export default function APIKeysContent() {
         const result: APIKey & { message?: string } = await response.json();
 
         if (response.status === 202) {
-          // Pending key - show pending message
+          // Pending key - show pending message but preserve the key for later
           setPendingKeyInfo({
             name: result.name,
             status: result.status
           });
+          // Preserve the API key for pending keys so user can see it
+          if (result.api_key) {
+            setNewKeyResult(result.api_key);
+            setShowNewKey(true);
+          }
         } else {
           // Active key - show the API key
           if (result.api_key) {
@@ -286,7 +291,7 @@ export default function APIKeysContent() {
               </h3>
               <p className="text-yellow-700 mb-4">
                 Your API key "{pendingKeyInfo.name}" has been created but requires admin approval before it can be used.
-                You'll be able to see the actual API key once an admin approves it.
+                The API key is shown below, but it won't work until an admin approves it.
               </p>
               <div className="flex gap-3">
                 <button

@@ -44,11 +44,22 @@ func ApproveAPIKey(pool *pgxpool.Pool) fiber.Handler {
 			return c.Status(403).JSON(fiber.Map{"error": "admin access required"})
 		}
 
-		// Update the API key status to active
-		result, err := pool.Exec(c.Context(),
-			`UPDATE merchants SET status = 'active' WHERE id = $1 AND status = 'pending'`,
-			keyID,
-		)
+		// Update the API key status to active (only for organizations the user admins)
+		adminOrgIDs := make([]string, 0)
+		for _, membership := range memberships {
+			if membership.IsAdmin {
+				adminOrgIDs = append(adminOrgIDs, membership.OrganizationID)
+			}
+		}
+
+		if len(adminOrgIDs) == 0 {
+			return c.Status(403).JSON(fiber.Map{"error": "admin access required"})
+		}
+
+		// Build query with organization constraint
+		query := `UPDATE merchants SET status = 'active'
+				  WHERE id = $1 AND status = 'pending' AND organization_id = ANY($2)`
+		result, err := pool.Exec(c.Context(), query, keyID, adminOrgIDs)
 		if err != nil {
 			slog.Error("approve API key", "key_id", keyID, "user_id", user.ID, "error", err)
 			return c.Status(500).JSON(fiber.Map{"error": "failed to approve API key"})
@@ -98,11 +109,22 @@ func RejectAPIKey(pool *pgxpool.Pool) fiber.Handler {
 			return c.Status(403).JSON(fiber.Map{"error": "admin access required"})
 		}
 
-		// Update the API key status to inactive
-		result, err := pool.Exec(c.Context(),
-			`UPDATE merchants SET status = 'inactive' WHERE id = $1 AND status = 'pending'`,
-			keyID,
-		)
+		// Update the API key status to inactive (only for organizations the user admins)
+		adminOrgIDs := make([]string, 0)
+		for _, membership := range memberships {
+			if membership.IsAdmin {
+				adminOrgIDs = append(adminOrgIDs, membership.OrganizationID)
+			}
+		}
+
+		if len(adminOrgIDs) == 0 {
+			return c.Status(403).JSON(fiber.Map{"error": "admin access required"})
+		}
+
+		// Build query with organization constraint
+		query := `UPDATE merchants SET status = 'inactive'
+				  WHERE id = $1 AND status = 'pending' AND organization_id = ANY($2)`
+		result, err := pool.Exec(c.Context(), query, keyID, adminOrgIDs)
 		if err != nil {
 			slog.Error("reject API key", "key_id", keyID, "user_id", user.ID, "error", err)
 			return c.Status(500).JSON(fiber.Map{"error": "failed to reject API key"})

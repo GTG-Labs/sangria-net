@@ -5,14 +5,26 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"regexp"
+	"strings"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"sangria/backend/auth"
 	dbengine "sangria/backend/dbEngine"
 	"sangria/backend/emailService"
 )
+
+// Simple email validation regex
+var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
+
+// isValidEmail performs basic email format validation
+func isValidEmail(email string) bool {
+	email = strings.TrimSpace(strings.ToLower(email))
+	return len(email) > 0 && len(email) <= 255 && emailRegex.MatchString(email)
+}
 
 // CreateOrganization handles POST /organizations
 // Creates a new organization and makes the requesting user an admin
@@ -85,6 +97,11 @@ func InviteMember(pool *pgxpool.Pool) fiber.Handler {
 			return c.Status(400).JSON(fiber.Map{"error": "organization ID is required"})
 		}
 
+		// Validate UUID format
+		if _, err := uuid.Parse(organizationID); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid organization ID format"})
+		}
+
 		var req struct {
 			Email   string  `json:"email"`
 			Message *string `json:"message"`
@@ -95,6 +112,10 @@ func InviteMember(pool *pgxpool.Pool) fiber.Handler {
 
 		if req.Email == "" {
 			return c.Status(400).JSON(fiber.Map{"error": "email is required"})
+		}
+
+		if !isValidEmail(req.Email) {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid email format"})
 		}
 
 		// Verify user is an admin of this organization
@@ -192,6 +213,11 @@ func ListPendingInvitations(pool *pgxpool.Pool) fiber.Handler {
 		organizationID := c.Params("id")
 		if organizationID == "" {
 			return c.Status(400).JSON(fiber.Map{"error": "organization ID is required"})
+		}
+
+		// Validate UUID format
+		if _, err := uuid.Parse(organizationID); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid organization ID format"})
 		}
 
 		// Verify user is an admin of this organization
