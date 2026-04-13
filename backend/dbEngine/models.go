@@ -58,6 +58,12 @@ type OrganizationMember struct {
 	JoinedAt       time.Time `json:"joined_at"`
 }
 
+type OrganizationWithMembership struct {
+	Organization
+	IsAdmin  bool      `json:"is_admin"`
+	JoinedAt time.Time `json:"joined_at"`
+}
+
 type Transaction struct {
 	ID             string    `json:"id"`
 	IdempotencyKey string    `json:"idempotency_key"`

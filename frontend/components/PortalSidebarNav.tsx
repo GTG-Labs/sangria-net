@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { KeyRound, LayoutDashboard, ExternalLink } from "lucide-react";
+import { KeyRound, LayoutDashboard, ExternalLink, Building2, Users } from "lucide-react";
 
 const navItems = [
   { href: "/dashboard/transactions", label: "Overview", icon: LayoutDashboard },
+  { href: "/dashboard/organizations", label: "Organizations", icon: Building2 },
   { href: "/dashboard/api-keys", label: "API Keys", icon: KeyRound },
+  { href: "/dashboard/api-key-requests", label: "Key Requests", icon: Users },
   { href: "/docs", label: "Docs", icon: ExternalLink, external: true },
 ];
 
