@@ -19,6 +19,7 @@
 
 import "dotenv/config";
 import { CdpClient } from "@coinbase/cdp-sdk";
+import { isAddress } from "viem";
 import type { Address } from "viem";
 
 // ---------------------------------------------------------------------------
@@ -34,7 +35,13 @@ function requireEnv(name: string): string {
 const MERCHANT_URL = (
   process.env.MERCHANT_URL ?? "http://localhost:4005"
 ).replace(/\/+$/, "");
-const BUYER_ADDRESS = requireEnv("BUYER_ADDRESS") as Address;
+const buyerAddr = requireEnv("BUYER_ADDRESS");
+if (!isAddress(buyerAddr)) {
+  throw new Error(
+    `BUYER_ADDRESS is not a valid Ethereum address: ${buyerAddr}`
+  );
+}
+const BUYER_ADDRESS = buyerAddr as Address;
 
 // ---------------------------------------------------------------------------
 // Types matching the x402 spec / Sangria SDK response
@@ -137,8 +144,8 @@ async function main() {
 
   const signature = await account.signTypedData({
     domain: {
-      name: "USD Coin",
-      version: "2",
+      name: (accepts.extra?.name as string) ?? "USD Coin",
+      version: (accepts.extra?.version as string) ?? "2",
       chainId,
       verifyingContract: accepts.asset,
     },
@@ -218,7 +225,13 @@ async function main() {
   });
 
   console.log(`  Status: ${settleResp.status}`);
-  const result = (await settleResp.json()) as Record<string, unknown>;
+  let result: Record<string, unknown>;
+  try {
+    result = (await settleResp.json()) as Record<string, unknown>;
+  } catch {
+    const rawText = await settleResp.text();
+    result = { rawText, message: "Response body was not valid JSON" };
+  }
 
   // ------------------------------------------------------------------
   // Result
@@ -228,7 +241,10 @@ async function main() {
     console.log(JSON.stringify(result, null, 2));
   } else {
     console.error("\n=== Payment failed ===");
-    console.error(JSON.stringify(result, null, 2));
+    console.error(
+      `  HTTP ${settleResp.status}:`,
+      JSON.stringify(result, null, 2)
+    );
     process.exit(1);
   }
 }

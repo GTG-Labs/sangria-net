@@ -1,7 +1,12 @@
 import { authkitMiddleware } from "@workos-inc/authkit-nextjs";
 
+const redirectUri = process.env.NEXT_PUBLIC_WORKOS_REDIRECT_URI;
+if (!redirectUri) {
+  throw new Error("Missing required env var: NEXT_PUBLIC_WORKOS_REDIRECT_URI");
+}
+
 export default authkitMiddleware({
-  redirectUri: `${process.env.NEXT_PUBLIC_WORKOS_REDIRECT_URI}`,
+  redirectUri,
 });
 
 export const config = {
