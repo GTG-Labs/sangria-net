@@ -82,7 +82,8 @@ func doFacilitatorRequest(ctx context.Context, method, url, authPath, facilitato
 		}
 
 		if isRetryable(nil, resp.StatusCode) {
-			lastErr = fmt.Errorf("returned %d: %s", resp.StatusCode, string(respBody))
+			slog.Debug("facilitator returned retryable status", "status", resp.StatusCode, "body", string(respBody))
+			lastErr = fmt.Errorf("returned status %d", resp.StatusCode)
 			continue
 		}
 
