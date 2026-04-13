@@ -114,7 +114,7 @@ Defined in `schema.ts`. All tables use UUID primary keys with `defaultRandom()`.
 | api_key | text | bcrypt hash |
 | key_id | varchar(8) | For O(1) indexed lookup |
 | name | varchar(255) | Human-readable name |
-| is_active | boolean | Default true |
+| status | api_key_status | Enum: 'active', 'pending', 'inactive'. Default 'active' |
 | last_used_at | timestamp (tz) | Nullable |
 | created_at | timestamp (tz) | Default now() |
 

@@ -20,12 +20,14 @@ func RegisterJWTRoutes(app *fiber.App, pool *pgxpool.Pool) {
 	apiKeys := internal.Group("/api-keys")
 	apiKeys.Get("/", auth.ListAPIKeys(pool))
 	apiKeys.Delete("/:id", auth.DeleteAPIKey(pool))
+	apiKeys.Post("/:id/approve", adminHandlers.ApproveAPIKey(pool))
+	apiKeys.Post("/:id/reject", adminHandlers.RejectAPIKey(pool))
 
 	// Withdrawal endpoints — user picks which merchant account to withdraw from.
 	internal.Post("/withdrawals", merchantHandlers.RequestWithdrawal(pool))
 	internal.Get("/withdrawals", merchantHandlers.ListWithdrawals(pool))
 	internal.Post("/withdrawals/:id/cancel", merchantHandlers.CancelWithdrawal(pool))
 
-	// TODO: Register organization invitation and API key request routes.
+	// TODO: Register organization invitation routes.
 	// DB functions exist in dbEngine/requests.go, handlers need to be created.
 }

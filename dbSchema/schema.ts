@@ -204,6 +204,8 @@ export const networkEnum = pgEnum("network", [
 // Merchants — API keys for businesses receiving payments through x402
 // ---------------------------------------------------------------------------
 
+export const apiKeyStatusEnum = pgEnum("api_key_status", ["active", "pending", "inactive"]);
+
 export const merchants = pgTable(
   "merchants",
   {
@@ -214,7 +216,7 @@ export const merchants = pgTable(
     apiKey: text("api_key").notNull(),
     keyId: varchar("key_id", { length: 8 }).notNull(),
     name: varchar({ length: 255 }).notNull(),
-    isActive: boolean("is_active").notNull().default(true),
+    status: apiKeyStatusEnum().notNull().default("active"),
     lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
