@@ -193,8 +193,10 @@ func Verify(ctx context.Context, payload json.RawMessage, requirements PaymentRe
 	if err != nil {
 		return nil, fmt.Errorf("facilitator verify: %w", err)
 	}
+
 	if statusCode != http.StatusOK {
-		return nil, fmt.Errorf("facilitator verify returned %d: %s", statusCode, string(respBody))
+		slog.Debug("facilitator verify non-200 response", "status", statusCode, "body", string(respBody))
+		return nil, fmt.Errorf("facilitator verify returned status %d", statusCode)
 	}
 
 	var result VerifyResponse
@@ -226,7 +228,8 @@ func Settle(ctx context.Context, payload json.RawMessage, requirements PaymentRe
 		return nil, fmt.Errorf("facilitator settle: %w", err)
 	}
 	if statusCode != http.StatusOK {
-		return nil, fmt.Errorf("facilitator settle returned %d: %s", statusCode, string(respBody))
+		slog.Debug("facilitator settle non-200 response", "status", statusCode, "body", string(respBody))
+		return nil, fmt.Errorf("facilitator settle returned status %d", statusCode)
 	}
 
 	var result SettleResponse
