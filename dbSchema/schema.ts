@@ -35,6 +35,7 @@ export const accountTypeEnum = pgEnum("account_type", [
 export const organizations = pgTable("organizations", {
   id: uuid().primaryKey().defaultRandom(),
   name: varchar({ length: 255 }).notNull(),
+  isPersonal: boolean("is_personal").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

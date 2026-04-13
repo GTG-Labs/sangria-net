@@ -61,7 +61,7 @@ func AddUserToOrganization(ctx context.Context, pool *pgxpool.Pool, userID, orga
 	return err
 }
 
-// GetUserOrganizations returns all organizations for a user with their admin status
+// GetUserOrganizations returns all organizations for a user with their admin status.
 func GetUserOrganizations(ctx context.Context, pool *pgxpool.Pool, userID string) ([]OrganizationMember, error) {
 	rows, err := pool.Query(ctx,
 		`SELECT user_id, organization_id, is_admin, joined_at
@@ -84,6 +84,20 @@ func GetUserOrganizations(ctx context.Context, pool *pgxpool.Pool, userID string
 		memberships = append(memberships, m)
 	}
 	return memberships, rows.Err()
+}
+
+// GetUserPersonalOrgID returns the organization ID of the user's personal org, if one exists.
+func GetUserPersonalOrgID(ctx context.Context, pool *pgxpool.Pool, userID string) (string, error) {
+	var orgID string
+	err := pool.QueryRow(ctx,
+		`SELECT o.id
+		 FROM organizations o
+		 JOIN organization_members om ON om.organization_id = o.id
+		 WHERE om.user_id = $1 AND o.is_personal = true
+		 LIMIT 1`,
+		userID,
+	).Scan(&orgID)
+	return orgID, err
 }
 
 // IsAdmin returns true if the given WorkOS user ID has an entry in the admins table.

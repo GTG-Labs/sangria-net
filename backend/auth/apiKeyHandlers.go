@@ -56,7 +56,11 @@ func ListAPIKeys(pool *pgxpool.Pool) fiber.Handler {
 		} else if len(memberships) == 1 {
 			selectedOrgID = memberships[0].OrganizationID
 		} else {
-			return c.Status(400).JSON(fiber.Map{"error": "multiple organizations found, please specify org_id or organization_id parameter"})
+			personalOrgID, err := dbengine.GetUserPersonalOrgID(c.Context(), pool, user.ID)
+			if err != nil {
+				return c.Status(400).JSON(fiber.Map{"error": "multiple organizations found, please specify org_id or organization_id parameter"})
+			}
+			selectedOrgID = personalOrgID
 		}
 
 		apiKeys, err := GetAPIKeysByOrganizationID(c.Context(), pool, selectedOrgID)
