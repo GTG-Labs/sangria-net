@@ -23,6 +23,21 @@ func UpsertUser(ctx context.Context, pool *pgxpool.Pool, owner, workosID string)
 	return u, err
 }
 
+// UpsertUserTx creates or updates a user (WorkOS identity) within a transaction and returns the full row.
+func UpsertUserTx(ctx context.Context, tx pgx.Tx, owner, workosID string) (User, error) {
+	var u User
+	err := tx.QueryRow(ctx,
+		`INSERT INTO users (workos_id, owner)
+		 VALUES ($1, $2)
+		 ON CONFLICT (workos_id) DO UPDATE
+		 	SET owner = EXCLUDED.owner,
+		 	    updated_at = NOW()
+		 RETURNING workos_id, owner, created_at, updated_at`,
+		workosID, owner,
+	).Scan(&u.WorkosID, &u.Owner, &u.CreatedAt, &u.UpdatedAt)
+	return u, err
+}
+
 // GetUserByWorkosID returns a user by their WorkOS ID.
 func GetUserByWorkosID(ctx context.Context, pool *pgxpool.Pool, workosID string) (User, error) {
 	var u User
