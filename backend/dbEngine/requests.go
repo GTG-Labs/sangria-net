@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -193,7 +194,7 @@ func GetUserInvitations(ctx context.Context, pool *pgxpool.Pool, email string) (
 }
 
 // AcceptInvitation accepts a pending invitation and adds the user to the organization.
-func AcceptInvitation(ctx context.Context, pool *pgxpool.Pool, token, userID string) error {
+func AcceptInvitation(ctx context.Context, pool *pgxpool.Pool, token, userID, userEmail string) error {
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -221,6 +222,11 @@ func AcceptInvitation(ctx context.Context, pool *pgxpool.Pool, token, userID str
 		return ErrInvalidToken
 	}
 	if time.Now().After(invitation.ExpiresAt) {
+		return ErrInvalidToken
+	}
+
+	// Verify that the authenticated user's email matches the invited email
+	if strings.ToLower(strings.TrimSpace(userEmail)) != strings.ToLower(strings.TrimSpace(invitation.InviteeEmail)) {
 		return ErrInvalidToken
 	}
 

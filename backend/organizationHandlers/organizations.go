@@ -167,12 +167,12 @@ func AcceptInvitation(pool *pgxpool.Pool) fiber.Handler {
 		}
 
 		// Accept the invitation
-		err := dbengine.AcceptInvitation(c.Context(), pool, req.Token, user.ID)
+		err := dbengine.AcceptInvitation(c.Context(), pool, req.Token, user.ID, user.Email)
 		if err != nil {
-			if err == dbengine.ErrInvitationNotFound {
+			if err == dbengine.ErrInvalidToken {
 				return c.Status(404).JSON(fiber.Map{"error": "invitation not found or expired"})
 			}
-			slog.Error("accept invitation", "user_id", user.ID, "token", req.Token, "error", err)
+			slog.Error("accept invitation", "user_id", user.ID, "error", err)
 			return c.Status(500).JSON(fiber.Map{"error": "failed to accept invitation"})
 		}
 

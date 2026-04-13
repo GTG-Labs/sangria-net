@@ -16,6 +16,7 @@ async function apiCall(endpoint: string, options: RequestInit = {}) {
 
   const response = await fetch(url, {
     ...options,
+    credentials: options.credentials ?? 'include',
     headers: {
       'Content-Type': 'application/json',
       ...options.headers,
@@ -25,6 +26,11 @@ async function apiCall(endpoint: string, options: RequestInit = {}) {
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
     throw new APIError(response.status, errorData.error || 'Request failed');
+  }
+
+  // Handle empty responses (204 No Content) or non-JSON responses
+  if (response.status === 204 || !response.headers.get('content-type')?.includes('application/json')) {
+    return undefined;
   }
 
   return response.json();

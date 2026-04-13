@@ -59,18 +59,26 @@ func CreateMerchantAPIKey(pool *pgxpool.Pool) fiber.Handler {
 		if orgID := c.Query("organization_id"); orgID != "" {
 			found := false
 			for _, membership := range memberships {
-				if membership.OrganizationID == orgID {
+				if membership.OrganizationID == orgID && membership.IsAdmin {
 					selectedOrgID = orgID
 					found = true
 					break
 				}
 			}
 			if !found {
-				return c.Status(403).JSON(fiber.Map{"error": "user is not a member of the specified organization"})
+				return c.Status(403).JSON(fiber.Map{"error": "user is not an admin of the specified organization"})
 			}
 		} else {
-			// Use first available organization
-			selectedOrgID = memberships[0].OrganizationID
+			// Find first admin membership
+			for _, membership := range memberships {
+				if membership.IsAdmin {
+					selectedOrgID = membership.OrganizationID
+					break
+				}
+			}
+			if selectedOrgID == "" {
+				return c.Status(400).JSON(fiber.Map{"error": "user must be an admin of an organization to create API keys. Please specify organization_id for which you are an admin"})
+			}
 		}
 
 		// Ensure the organization has a USD LIABILITY account before creating the API key,

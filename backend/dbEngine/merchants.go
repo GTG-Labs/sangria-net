@@ -56,7 +56,9 @@ func EnsureUSDLiabilityAccount(ctx context.Context, pool *pgxpool.Pool, organiza
 	).Scan(&a.ID, &a.Name, &a.Type, &a.Currency, &a.OrganizationID, &a.CreatedAt)
 
 	if err == nil {
-		tx.Commit(ctx)
+		if err := tx.Commit(ctx); err != nil {
+			return Account{}, fmt.Errorf("failed to commit transaction: %w", err)
+		}
 		return a, nil
 	}
 

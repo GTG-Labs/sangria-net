@@ -73,7 +73,7 @@ func GetMerchantTransactionsPaginated(
 
 	// Get total count (separate query)
 	countQuery := fmt.Sprintf(`
-		SELECT COUNT(DISTINCT t.id)
+		SELECT COUNT(*)
 		FROM transactions t
 		JOIN ledger_entries le ON le.transaction_id = t.id
 		JOIN accounts a ON a.id = le.account_id
