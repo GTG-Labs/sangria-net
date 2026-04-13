@@ -30,6 +30,8 @@ var ErrInvalidToken = errors.New("invalid or expired invitation token")
 
 // ---------------------------------------------------------------------------
 // Organization Invitations
+// TODO: HTTP handlers and routes for these DB functions have not been implemented yet.
+// See routes/jwt.go for the planned endpoints.
 // ---------------------------------------------------------------------------
 
 // generateInvitationToken creates a cryptographically secure random token for invitations.
@@ -284,6 +286,8 @@ func ExpireOldInvitations(ctx context.Context, pool *pgxpool.Pool) (int, error) 
 
 // ---------------------------------------------------------------------------
 // API Key Creation Requests
+// TODO: HTTP handlers and routes for these DB functions have not been implemented yet.
+// See routes/jwt.go for the planned endpoints.
 // ---------------------------------------------------------------------------
 
 // CreateAPIKeyCreationRequest creates a new request for an API key within an organization.
