@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -59,7 +60,7 @@ func CreateOrganizationInvitation(ctx context.Context, pool *pgxpool.Pool, organ
 
 	err = pool.QueryRow(ctx, `
 		INSERT INTO organization_invitations (organization_id, inviter_user_id, invitee_email, message, invitation_token, expires_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		VALUES ($1, $2, LOWER($3), $4, $5, $6)
 		RETURNING id, organization_id, inviter_user_id, invitee_email, invitee_user_id, status,
 		          message, invitation_token, expires_at, created_at, accepted_at, declined_at`,
 		organizationID, inviterUserID, inviteeEmail, message, token, expiresAt,
@@ -171,7 +172,7 @@ func GetUserInvitations(ctx context.Context, pool *pgxpool.Pool, email string) (
 		SELECT id, organization_id, inviter_user_id, invitee_email, invitee_user_id, status,
 		       message, invitation_token, expires_at, created_at, accepted_at, declined_at
 		FROM organization_invitations
-		WHERE invitee_email = $1
+		WHERE LOWER(invitee_email) = LOWER($1)
 		ORDER BY created_at DESC`,
 		email,
 	)
@@ -200,7 +201,8 @@ func GetUserInvitations(ctx context.Context, pool *pgxpool.Pool, email string) (
 }
 
 // AcceptInvitation accepts a pending invitation and adds the user to the organization.
-func AcceptInvitation(ctx context.Context, pool *pgxpool.Pool, token, userID string) error {
+// Verifies that the user's email matches the invitation's target email.
+func AcceptInvitation(ctx context.Context, pool *pgxpool.Pool, token, userID, userEmail string) error {
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -228,6 +230,11 @@ func AcceptInvitation(ctx context.Context, pool *pgxpool.Pool, token, userID str
 		return ErrInvalidToken
 	}
 	if time.Now().After(invitation.ExpiresAt) {
+		return ErrInvalidToken
+	}
+
+	// Verify that the user's email matches the invitation target email (case-insensitive)
+	if !strings.EqualFold(userEmail, invitation.InviteeEmail) {
 		return ErrInvalidToken
 	}
 

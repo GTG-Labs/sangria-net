@@ -219,7 +219,9 @@ func ensureUserPersonalOrganizationTx(ctx context.Context, tx pgx.Tx, userWorkos
 		// Personal org already exists, no need to create
 		return nil
 	}
-	// Continue to create personal org if not found or on other errors
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("failed to check existing personal organization: %w", err)
+	}
 
 	// Create personal organization inside transaction
 	var personalOrgID string
@@ -272,8 +274,8 @@ func GetCurrentUser(pool *pgxpool.Pool) fiber.Handler {
 		}
 
 		// Format organizations for frontend
-		organizations := make([]fiber.Map, len(memberships))
-		for i, membership := range memberships {
+		var organizations []fiber.Map
+		for _, membership := range memberships {
 			// Get organization details
 			var orgName string
 			var isPersonal bool
@@ -286,12 +288,12 @@ func GetCurrentUser(pool *pgxpool.Pool) fiber.Handler {
 				continue
 			}
 
-			organizations[i] = fiber.Map{
+			organizations = append(organizations, fiber.Map{
 				"id":         membership.OrganizationID,
 				"name":       orgName,
 				"isPersonal": isPersonal,
 				"isAdmin":    membership.IsAdmin,
-			}
+			})
 		}
 
 		return c.JSON(fiber.Map{

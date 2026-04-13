@@ -82,7 +82,7 @@ func CreateMerchantAPIKey(pool *pgxpool.Pool) fiber.Handler {
 		merchant, fullKey, err := auth.CreateAPIKey(c.Context(), pool, selectedOrgID, req.Name, keyStatus)
 		if err != nil {
 			if errors.Is(err, auth.ErrMaxAPIKeysReached) {
-				return c.Status(400).JSON(fiber.Map{"error": "maximum number of API keys reached (10)"})
+				return c.Status(400).JSON(fiber.Map{"error": "maximum number of API keys reached (10). This includes active and pending keys."})
 			}
 			slog.Error("create merchant API key", "org_id", selectedOrgID, "user_id", user.ID, "error", err)
 			return c.Status(500).JSON(fiber.Map{"error": "failed to create merchant"})

@@ -48,16 +48,16 @@ func CreateAPIKey(ctx context.Context, pool *pgxpool.Pool, organizationID, name 
 		return nil, "", fmt.Errorf("failed to lock organization for key creation: %w", err)
 	}
 
-	// Check active key count within transaction
-	var activeCount int
+	// Check total key count (active + pending) within transaction
+	var totalCount int
 	err = tx.QueryRow(ctx,
-		`SELECT COUNT(*) FROM merchants WHERE organization_id = $1 AND status = 'active'`,
+		`SELECT COUNT(*) FROM merchants WHERE organization_id = $1 AND status IN ('active', 'pending')`,
 		organizationID,
-	).Scan(&activeCount)
+	).Scan(&totalCount)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to check active API key count: %w", err)
+		return nil, "", fmt.Errorf("failed to check API key count: %w", err)
 	}
-	if activeCount >= 10 {
+	if totalCount >= 10 {
 		return nil, "", ErrMaxAPIKeysReached
 	}
 

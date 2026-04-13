@@ -216,7 +216,7 @@ export const merchants = pgTable(
     apiKey: text("api_key").notNull(),
     keyId: varchar("key_id", { length: 8 }).notNull(),
     name: varchar({ length: 255 }).notNull(),
-    status: apiKeyStatusEnum().notNull().default("active"),
+    status: apiKeyStatusEnum().notNull().default("pending"),
     lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -361,8 +361,8 @@ export const organizationInvitations = pgTable(
     index("idx_org_invitations_created_at").on(table.createdAt.desc()),
     // Unique secure token for invitation links
     unique("uq_org_invitations_token").on(table.invitationToken),
-    // Prevent duplicate pending invitations to same email for same org
-    uniqueIndex("uq_org_invitations_pending").on(table.organizationId, table.inviteeEmail).where(sql`status = 'pending'`),
+    // Prevent duplicate pending invitations to same email for same org (case-insensitive)
+    uniqueIndex("uq_org_invitations_pending").on(table.organizationId, sql`lower(${table.inviteeEmail})`).where(sql`status = 'pending'`),
   ],
 );
 

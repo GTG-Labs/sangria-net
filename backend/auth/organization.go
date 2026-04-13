@@ -93,7 +93,7 @@ func ResolveOrganizationContext(ctx context.Context, c fiber.Ctx, pool *pgxpool.
 			slog.Error("get user personal org ID", "user_id", user.ID, "error", err)
 			return OrganizationResolutionResult{
 				HTTPStatus: 500,
-				Error:      "failed to get user personal organization: " + err.Error(),
+				Error:      "failed to get user personal organization: ",
 			}
 		}
 		selectedOrgID = personalOrgID
