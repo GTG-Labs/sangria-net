@@ -2,7 +2,9 @@ package dbengine
 
 import (
 	"context"
+	"errors"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -78,4 +80,21 @@ func IsAdmin(ctx context.Context, pool *pgxpool.Pool, workosID string) (bool, er
 		workosID,
 	).Scan(&exists)
 	return exists, err
+}
+
+// IsOrganizationAdmin returns true if the given user is an admin of the specified organization.
+func IsOrganizationAdmin(ctx context.Context, pool *pgxpool.Pool, userID, organizationID string) (bool, error) {
+	var isAdmin bool
+	err := pool.QueryRow(ctx,
+		`SELECT is_admin FROM organization_members
+		 WHERE user_id = $1 AND organization_id = $2`,
+		userID, organizationID,
+	).Scan(&isAdmin)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil // User is not a member of the organization
+		}
+		return false, err
+	}
+	return isAdmin, nil
 }

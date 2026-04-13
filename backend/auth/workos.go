@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
@@ -180,23 +179,49 @@ func CreateUser(pool *pgxpool.Pool) fiber.Handler {
 // ensureUserPersonalOrganization creates a personal organization for the user if they don't have one
 // Each user gets their own personal organization where they are the admin
 func ensureUserPersonalOrganization(ctx context.Context, pool *pgxpool.Pool, userWorkosID, userName string) error {
-	// Check if user already has a personal organization
-	memberships, err := dbengine.GetUserOrganizations(ctx, pool, userWorkosID)
+	// Start transaction to ensure atomicity
+	tx, err := pool.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get user organizations: %w", err)
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// Re-query user memberships inside the transaction to detect concurrent creations
+	rows, err := tx.Query(ctx, `
+		SELECT user_id, organization_id, is_admin, joined_at
+		FROM organization_members
+		WHERE user_id = $1
+		ORDER BY joined_at ASC`,
+		userWorkosID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to get user organizations in transaction: %w", err)
+	}
+	defer rows.Close()
+
+	var memberships []dbengine.OrganizationMember
+	for rows.Next() {
+		var m dbengine.OrganizationMember
+		if err := rows.Scan(&m.UserID, &m.OrganizationID, &m.IsAdmin, &m.JoinedAt); err != nil {
+			return fmt.Errorf("failed to scan membership: %w", err)
+		}
+		memberships = append(memberships, m)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("error iterating memberships: %w", err)
 	}
 
 	// If user already has organizations, skip creating personal org
 	// (they might be returning users or have been invited to orgs)
 	if len(memberships) > 0 {
-		return nil
+		return tx.Commit(ctx)
 	}
 
-	// Create personal organization
+	// Create personal organization inside transaction
 	var personalOrgID string
 	personalOrgName := fmt.Sprintf("%s's Personal Organization", userName)
 
-	err = pool.QueryRow(ctx, `
+	err = tx.QueryRow(ctx, `
 		INSERT INTO organizations (name, created_at)
 		VALUES ($1, NOW())
 		RETURNING id`,
@@ -205,10 +230,15 @@ func ensureUserPersonalOrganization(ctx context.Context, pool *pgxpool.Pool, use
 		return fmt.Errorf("failed to create personal organization: %w", err)
 	}
 
-	// Add user to their personal organization as admin
-	err = dbengine.AddUserToOrganization(ctx, pool, userWorkosID, personalOrgID, true)
+	// Add user to their personal organization as admin using transaction
+	err = dbengine.AddUserToOrganizationTx(ctx, tx, userWorkosID, personalOrgID, true)
 	if err != nil {
 		return fmt.Errorf("failed to add user to personal organization: %w", err)
+	}
+
+	// Commit transaction
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit personal organization transaction: %w", err)
 	}
 
 	return nil

@@ -54,9 +54,23 @@ func GetMerchantTransactions(pool *pgxpool.Pool) fiber.Handler {
 			})
 		}
 
+		// Get user's organizations to determine organization context
+		memberships, err := dbengine.GetUserOrganizations(c.Context(), pool, user.ID)
+		if err != nil {
+			slog.Error("get user organizations", "user_id", user.ID, "error", err)
+			return c.Status(500).JSON(fiber.Map{"error": "failed to get user organizations"})
+		}
+		if len(memberships) == 0 {
+			slog.Error("user has no organizations", "user_id", user.ID)
+			return c.Status(400).JSON(fiber.Map{"error": "user must belong to an organization"})
+		}
+
+		// Use the first organization (usually personal org for merchant)
+		selectedOrgID := memberships[0].OrganizationID
+
 		// Fetch paginated transactions with total count
 		transactions, nextCursor, total, err := dbengine.GetMerchantTransactionsPaginated(
-			c.Context(), pool, user.ID, limit, cursor,
+			c.Context(), pool, selectedOrgID, limit, cursor,
 		)
 		if err != nil {
 			slog.Error("fetch transactions: query failed", "user_id", user.ID, "error", err)
