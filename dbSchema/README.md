@@ -54,8 +54,19 @@ Defined in `schema.ts`. All tables use UUID primary keys with `defaultRandom()`.
 | `account_type` | ASSET, LIABILITY, EQUITY, REVENUE, EXPENSE |
 | `network` | base, base-sepolia, polygon, solana, solana-devnet |
 | `withdrawal_status` | pending_approval, approved, processing, completed, failed, reversed, canceled |
+| `api_key_status` | active, pending, inactive |
+| `invitation_status` | pending, accepted, declined, expired |
 
-### Tables
+### Core Tables
+
+**organizations** — multi-tenant business entities
+
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid | Primary key |
+| name | varchar(255) | Organization name |
+| is_personal | boolean | True for auto-created personal orgs |
+| created_at | timestamp (tz) | Default now() |
 
 **users** — WorkOS identities
 
@@ -66,6 +77,36 @@ Defined in `schema.ts`. All tables use UUID primary keys with `defaultRandom()`.
 | created_at | timestamp (tz) | Default now() |
 | updated_at | timestamp (tz) | Default now() |
 
+**organization_members** — user-organization relationships
+
+| Column | Type | Notes |
+|---|---|---|
+| user_id | text | FK → users.workos_id |
+| organization_id | uuid | FK → organizations.id |
+| is_admin | boolean | Admin permissions within org |
+| joined_at | timestamp (tz) | When user joined org |
+
+Primary key: `(user_id, organization_id)` — users can only be in each organization once.
+
+**organization_invitations** — email-based org invitations
+
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid | Primary key |
+| organization_id | uuid | FK → organizations.id |
+| inviter_user_id | text | FK → users.workos_id (admin who sent invite) |
+| invitee_email | varchar(255) | Email being invited |
+| invitee_user_id | text | FK → users.workos_id (set when accepted) |
+| status | invitation_status | pending, accepted, declined, expired |
+| message | text | Optional welcome message |
+| invitation_token | varchar(255) | Secure token for email links |
+| expires_at | timestamp (tz) | 7 days from creation |
+| created_at | timestamp (tz) | Default now() |
+| accepted_at | timestamp (tz) | When invitation was accepted |
+| declined_at | timestamp (tz) | When invitation was declined |
+
+Constraints: Unique token, prevent duplicate pending invitations to same email per org.
+
 **admins** — access control list for Sangria staff
 
 | Column | Type | Notes |
@@ -73,15 +114,17 @@ Defined in `schema.ts`. All tables use UUID primary keys with `defaultRandom()`.
 | user_id | text | Primary key, FK → users.workos_id |
 | created_at | timestamp (tz) | Default now() |
 
+### Financial Engine
+
 **accounts** — double-entry ledger accounts
 
 | Column | Type | Notes |
 |---|---|---|
 | id | uuid | Primary key |
 | name | varchar(255) | Account name |
-| type | account_type | ASSET, LIABILITY, etc. |
+| type | account_type | ASSET, LIABILITY, EQUITY, REVENUE, EXPENSE |
 | currency | currency | USD, USDC, ETH |
-| user_id | text | Nullable, FK → users.workos_id |
+| organization_id | uuid | FK → organizations.id (nullable) |
 | created_at | timestamp (tz) | Default now() |
 
 **transactions** — idempotency envelopes for ledger writes
@@ -105,22 +148,22 @@ Defined in `schema.ts`. All tables use UUID primary keys with `defaultRandom()`.
 | direction | direction | DEBIT or CREDIT |
 | account_id | uuid | FK → accounts.id |
 
-**merchants** — API keys for businesses receiving x402 payments
+### Business Operations
+
+**merchants** — API keys for x402 payments
 
 | Column | Type | Notes |
 |---|---|---|
 | id | uuid | Primary key |
-| user_id | text | FK → users.workos_id |
-| api_key | text | bcrypt hash |
+| organization_id | uuid | FK → organizations.id |
+| api_key | text | bcrypt hash of full key |
 | key_id | varchar(8) | For O(1) indexed lookup |
 | name | varchar(255) | Human-readable name |
-| status | api_key_status | Enum: 'active', 'pending', 'inactive'. Default 'active' |
+| status | api_key_status | active, pending, inactive (default: active) |
 | last_used_at | timestamp (tz) | Nullable |
 | created_at | timestamp (tz) | Default now() |
 
-**cards** — API keys for SDK developers (future)
-
-Same structure as merchants, with card-specific key generation (TODO).
+Constraints: Unique API key, indexed by organization and key_id.
 
 **crypto_wallets** — Sangria-owned CDP wallet pool
 
@@ -130,7 +173,7 @@ Same structure as merchants, with card-specific key generation (TODO).
 | address | varchar(255) | On-chain address |
 | network | network | Which chain |
 | account_id | uuid | FK → accounts.id (USDC ASSET) |
-| last_used_at | timestamp (tz) | For LRU selection |
+| last_used_at | timestamp (tz) | For LRU selection, default epoch |
 | created_at | timestamp (tz) | Default now() |
 
 Constraints: `UNIQUE(address, network)`, `UNIQUE(account_id)`
@@ -157,6 +200,35 @@ Constraints: `UNIQUE(address, network)`, `UNIQUE(account_id)`
 | failed_by | text | Admin who marked the withdrawal as failed |
 | idempotency_key | varchar(255) | UNIQUE |
 | created_at + per-status timestamps | timestamp (tz) | approved_at, completed_at, etc. |
+
+## Multi-Tenancy Architecture
+
+Sangria uses an organization-based multi-tenancy model:
+
+### Organization Structure
+- **Organizations** are the main business entities
+- **Users** can belong to multiple organizations with different roles
+- **Personal Organizations** are auto-created for each user (is_personal=true)
+- **Organization Admins** can manage API keys and invite other users
+
+### Access Control
+- **API Keys** belong to organizations, not individual users
+- **Accounts** and **Transactions** are scoped to organizations
+- **Admins** (Sangria staff) have cross-organization access
+- **Organization Members** can be regular users or admins within that org
+
+### Data Isolation
+All business data is scoped to organizations:
+- Merchants (API keys) → organization_id
+- Accounts → organization_id
+- Crypto Wallets → account_id → organization_id
+- Withdrawals → merchant_id → organization_id
+
+### API Key Workflow
+1. **Creation**: Users create API keys within an organization context
+2. **Status**: Admin users get `active` keys immediately, members get `pending` keys
+3. **Approval**: Organization admins can approve/reject `pending` keys from their org
+4. **Security**: Cross-organization approval is prevented at the database and application level
 
 ## Updating the schema
 

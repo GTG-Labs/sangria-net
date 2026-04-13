@@ -42,47 +42,23 @@ func CreateMerchantAPIKey(pool *pgxpool.Pool) fiber.Handler {
 			return c.Status(500).JSON(fiber.Map{"error": "failed to create user"})
 		}
 
-		// Get user organizations and derive selectedOrgID
+		// Resolve organization context
+		orgResult := auth.ResolveOrganizationContext(c.Context(), c, pool, user)
+		if orgResult.Error != "" {
+			// Convert 400 status to 403 for consistency with existing error handling in this handler
+			status := orgResult.HTTPStatus
+			if status == 400 && orgResult.Error == "user is not a member of the specified organization" {
+				status = 403
+			}
+			return c.Status(status).JSON(fiber.Map{"error": orgResult.Error})
+		}
+		selectedOrgID := orgResult.OrganizationID
+
+		// Get memberships for admin check
 		memberships, err := dbengine.GetUserOrganizations(c.Context(), pool, user.ID)
 		if err != nil {
 			slog.Error("get user organizations", "user_id", user.ID, "error", err)
 			return c.Status(500).JSON(fiber.Map{"error": "failed to get user organizations"})
-		}
-		if len(memberships) == 0 {
-			slog.Error("user has no organizations", "user_id", user.ID)
-			return c.Status(400).JSON(fiber.Map{"error": "user must belong to an organization"})
-		}
-
-		// Derive selectedOrgID from request or membership
-		var selectedOrgID string
-
-		if orgID := c.Query("org_id"); orgID != "" {
-			found := false
-			for _, membership := range memberships {
-				if membership.OrganizationID == orgID {
-					selectedOrgID = orgID
-					found = true
-					break
-				}
-			}
-			if !found {
-				return c.Status(403).JSON(fiber.Map{"error": "user is not a member of the specified organization"})
-			}
-		} else if orgID := c.Query("organization_id"); orgID != "" {
-			found := false
-			for _, membership := range memberships {
-				if membership.OrganizationID == orgID {
-					selectedOrgID = orgID
-					found = true
-					break
-				}
-			}
-			if !found {
-				return c.Status(403).JSON(fiber.Map{"error": "user is not a member of the specified organization"})
-			}
-		} else {
-			// Use first available organization
-			selectedOrgID = memberships[0].OrganizationID
 		}
 
 		// Ensure the organization has a USD LIABILITY account before creating the API key,
