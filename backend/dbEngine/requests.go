@@ -98,8 +98,11 @@ func GetOrganizationInvitationByToken(ctx context.Context, pool *pgxpool.Pool, t
 	if errors.Is(err, pgx.ErrNoRows) {
 		return OrganizationInvitation{}, ErrInvitationNotFound
 	}
+	if err != nil {
+		return OrganizationInvitation{}, fmt.Errorf("fetching organization invitation by token: %w", err)
+	}
 
-	return invitation, fmt.Errorf("fetching organization invitation by token: %w", err)
+	return invitation, nil
 }
 
 // GetOrganizationInvitation retrieves an invitation by its ID.
@@ -120,8 +123,11 @@ func GetOrganizationInvitation(ctx context.Context, pool *pgxpool.Pool, invitati
 	if errors.Is(err, pgx.ErrNoRows) {
 		return OrganizationInvitation{}, ErrInvitationNotFound
 	}
+	if err != nil {
+		return OrganizationInvitation{}, fmt.Errorf("fetching organization invitation by ID: %w", err)
+	}
 
-	return invitation, fmt.Errorf("fetching organization invitation by ID: %w", err)
+	return invitation, nil
 }
 
 // ListPendingInvitationsForOrganization returns all pending invitations for an organization.
