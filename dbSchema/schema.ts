@@ -10,6 +10,7 @@ import {
   index,
   unique,
   text,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -65,7 +66,7 @@ export const organizationMembers = pgTable(
   },
   (table) => [
     // Composite primary key - user can only be in each organization once
-    { primaryKey: [table.userId, table.organizationId] },
+    primaryKey({ columns: [table.userId, table.organizationId] }),
     index("idx_organization_members_user_id").on(table.userId),
     index("idx_organization_members_organization_id").on(table.organizationId),
     index("idx_organization_members_is_admin").on(table.isAdmin),
@@ -169,6 +170,13 @@ export const requestStatusEnum = pgEnum("request_status", [
   "approved", // admin approved the request
   "rejected", // admin rejected the request
   "canceled", // requester canceled before review
+]);
+
+export const invitationStatusEnum = pgEnum("invitation_status", [
+  "pending", // invitation sent, awaiting user response
+  "accepted", // user accepted the invitation
+  "declined", // user declined the invitation
+  "expired", // invitation expired before response
 ]);
 
 // ---------------------------------------------------------------------------
@@ -301,42 +309,45 @@ export const withdrawals = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// Organization Joining Requests — users requesting to join organizations
+// Organization Invitations — admins inviting users to join organizations
 // ---------------------------------------------------------------------------
 
-export const organizationJoiningRequests = pgTable(
-  "organization_joining_requests",
+export const organizationInvitations = pgTable(
+  "organization_invitations",
   {
     id: uuid().primaryKey().defaultRandom(),
-    requesterUserId: text("requester_user_id")
-      .notNull()
-      .references(() => users.workosId),
-    targetOrganizationId: uuid("target_organization_id")
+    organizationId: uuid("organization_id")
       .notNull()
       .references(() => organizations.id),
-    message: text(), // optional justification from requester
-    status: requestStatusEnum().notNull().default("pending"),
-
-    // Admin review fields
-    reviewedBy: text("reviewed_by").references(() => users.workosId),
-    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
-    reviewNote: text("review_note"), // admin's response/reason
+    inviterUserId: text("inviter_user_id")
+      .notNull()
+      .references(() => users.workosId), // Admin who sent the invitation
+    inviteeEmail: varchar("invitee_email", { length: 255 }).notNull(), // Email being invited
+    inviteeUserId: text("invitee_user_id").references(() => users.workosId), // Set when user accepts
+    status: invitationStatusEnum().notNull().default("pending"),
+    message: text(), // Optional welcome message from admin
+    invitationToken: varchar("invitation_token", { length: 255 }).notNull(), // Secure token for email link
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(), // 7 days from creation
 
     // Timestamps
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
-    approvedAt: timestamp("approved_at", { withTimezone: true }),
-    rejectedAt: timestamp("rejected_at", { withTimezone: true }),
-    canceledAt: timestamp("canceled_at", { withTimezone: true }),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    declinedAt: timestamp("declined_at", { withTimezone: true }),
   },
   (table) => [
-    index("idx_org_join_requests_requester").on(table.requesterUserId),
-    index("idx_org_join_requests_target_org").on(table.targetOrganizationId),
-    index("idx_org_join_requests_status").on(table.status),
-    index("idx_org_join_requests_created_at").on(table.createdAt.desc()),
-    // Prevent duplicate pending requests from same user to same org
-    unique("uq_org_join_requests_pending").on(table.requesterUserId, table.targetOrganizationId)
+    index("idx_org_invitations_organization").on(table.organizationId),
+    index("idx_org_invitations_inviter").on(table.inviterUserId),
+    index("idx_org_invitations_invitee_email").on(table.inviteeEmail),
+    index("idx_org_invitations_invitee_user").on(table.inviteeUserId),
+    index("idx_org_invitations_status").on(table.status),
+    index("idx_org_invitations_expires_at").on(table.expiresAt),
+    index("idx_org_invitations_created_at").on(table.createdAt.desc()),
+    // Unique secure token for invitation links
+    unique("uq_org_invitations_token").on(table.invitationToken),
+    // Prevent duplicate pending invitations to same email for same org
+    unique("uq_org_invitations_pending").on(table.organizationId, table.inviteeEmail)
       .where(sql`status = 'pending'`),
   ],
 );

@@ -190,19 +190,28 @@ const (
 	RequestStatusCanceled RequestStatus = "canceled"
 )
 
-type OrganizationJoiningRequest struct {
-	ID                    string        `json:"id"`
-	RequesterUserID       string        `json:"requester_user_id"`
-	TargetOrganizationID  string        `json:"target_organization_id"`
-	Message               *string       `json:"message"`
-	Status                RequestStatus `json:"status"`
-	ReviewedBy            *string       `json:"reviewed_by"`
-	ReviewedAt            *time.Time    `json:"reviewed_at"`
-	ReviewNote            *string       `json:"review_note"`
-	CreatedAt             time.Time     `json:"created_at"`
-	ApprovedAt            *time.Time    `json:"approved_at"`
-	RejectedAt            *time.Time    `json:"rejected_at"`
-	CanceledAt            *time.Time    `json:"canceled_at"`
+type InvitationStatus string
+
+const (
+	InvitationStatusPending  InvitationStatus = "pending"
+	InvitationStatusAccepted InvitationStatus = "accepted"
+	InvitationStatusDeclined InvitationStatus = "declined"
+	InvitationStatusExpired  InvitationStatus = "expired"
+)
+
+type OrganizationInvitation struct {
+	ID               string           `json:"id"`
+	OrganizationID   string           `json:"organization_id"`
+	InviterUserID    string           `json:"inviter_user_id"`
+	InviteeEmail     string           `json:"invitee_email"`
+	InviteeUserID    *string          `json:"invitee_user_id"`
+	Status           InvitationStatus `json:"status"`
+	Message          *string          `json:"message"`
+	InvitationToken  string           `json:"invitation_token"`
+	ExpiresAt        time.Time        `json:"expires_at"`
+	CreatedAt        time.Time        `json:"created_at"`
+	AcceptedAt       *time.Time       `json:"accepted_at"`
+	DeclinedAt       *time.Time       `json:"declined_at"`
 }
 
 type APIKeyCreationRequest struct {

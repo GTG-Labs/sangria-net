@@ -2,175 +2,284 @@ package dbengine
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // ErrRequestNotFound is returned when a request does not exist.
 var ErrRequestNotFound = errors.New("request not found")
 
-// ErrDuplicateRequest is returned when a duplicate pending request exists.
-var ErrDuplicateRequest = errors.New("duplicate pending request exists")
-
 // ErrInvalidRequestStatus is returned when trying to perform an invalid status transition.
 var ErrInvalidRequestStatus = errors.New("invalid request status transition")
 
+// ErrInvitationNotFound is returned when an invitation does not exist.
+var ErrInvitationNotFound = errors.New("invitation not found")
+
+// ErrDuplicateInvitation is returned when a duplicate pending invitation exists.
+var ErrDuplicateInvitation = errors.New("duplicate pending invitation exists")
+
+// ErrInvalidToken is returned when an invitation token is invalid or expired.
+var ErrInvalidToken = errors.New("invalid or expired invitation token")
+
 // ---------------------------------------------------------------------------
-// Organization Joining Requests
+// Organization Invitations
 // ---------------------------------------------------------------------------
 
-// CreateOrganizationJoiningRequest creates a new request for a user to join an organization.
-// Prevents duplicate pending requests from the same user to the same organization.
-func CreateOrganizationJoiningRequest(ctx context.Context, pool *pgxpool.Pool, requesterUserID, targetOrganizationID string, message *string) (OrganizationJoiningRequest, error) {
-	var req OrganizationJoiningRequest
+// generateInvitationToken creates a cryptographically secure random token for invitations.
+func generateInvitationToken() (string, error) {
+	bytes := make([]byte, 32)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", fmt.Errorf("failed to generate random token: %w", err)
+	}
+	return hex.EncodeToString(bytes), nil
+}
 
-	err := pool.QueryRow(ctx, `
-		INSERT INTO organization_joining_requests (requester_user_id, target_organization_id, message)
-		VALUES ($1, $2, $3)
-		RETURNING id, requester_user_id, target_organization_id, message, status,
-		          reviewed_by, reviewed_at, review_note, created_at,
-		          approved_at, rejected_at, canceled_at`,
-		requesterUserID, targetOrganizationID, message,
+// CreateOrganizationInvitation creates a new invitation for an email to join an organization.
+// Prevents duplicate pending invitations to the same email for the same organization.
+func CreateOrganizationInvitation(ctx context.Context, pool *pgxpool.Pool, organizationID, inviterUserID, inviteeEmail string, message *string) (OrganizationInvitation, error) {
+	var invitation OrganizationInvitation
+
+	// Generate secure invitation token
+	token, err := generateInvitationToken()
+	if err != nil {
+		return OrganizationInvitation{}, fmt.Errorf("failed to generate invitation token: %w", err)
+	}
+
+	// Set expiration to 7 days from now
+	expiresAt := time.Now().Add(7 * 24 * time.Hour)
+
+	err = pool.QueryRow(ctx, `
+		INSERT INTO organization_invitations (organization_id, inviter_user_id, invitee_email, message, invitation_token, expires_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING id, organization_id, inviter_user_id, invitee_email, invitee_user_id, status,
+		          message, invitation_token, expires_at, created_at, accepted_at, declined_at`,
+		organizationID, inviterUserID, inviteeEmail, message, token, expiresAt,
 	).Scan(
-		&req.ID, &req.RequesterUserID, &req.TargetOrganizationID, &req.Message, &req.Status,
-		&req.ReviewedBy, &req.ReviewedAt, &req.ReviewNote, &req.CreatedAt,
-		&req.ApprovedAt, &req.RejectedAt, &req.CanceledAt,
+		&invitation.ID, &invitation.OrganizationID, &invitation.InviterUserID, &invitation.InviteeEmail,
+		&invitation.InviteeUserID, &invitation.Status, &invitation.Message, &invitation.InvitationToken,
+		&invitation.ExpiresAt, &invitation.CreatedAt, &invitation.AcceptedAt, &invitation.DeclinedAt,
 	)
 
 	if err != nil {
-		// Check for unique constraint violation (duplicate pending request)
-		if pgErr, ok := err.(*pgx.PgError); ok && pgErr.Code == "23505" {
-			return OrganizationJoiningRequest{}, ErrDuplicateRequest
+		// Check for unique constraint violation (duplicate pending invitation)
+		if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Code == "23505" {
+			return OrganizationInvitation{}, ErrDuplicateInvitation
 		}
-		return OrganizationJoiningRequest{}, fmt.Errorf("failed to create organization joining request: %w", err)
+		return OrganizationInvitation{}, fmt.Errorf("failed to create organization invitation: %w", err)
 	}
 
-	return req, nil
+	return invitation, nil
 }
 
-// GetOrganizationJoiningRequest retrieves a joining request by its ID.
-func GetOrganizationJoiningRequest(ctx context.Context, pool *pgxpool.Pool, requestID string) (OrganizationJoiningRequest, error) {
-	var req OrganizationJoiningRequest
+// GetOrganizationInvitationByToken retrieves an invitation by its token.
+func GetOrganizationInvitationByToken(ctx context.Context, pool *pgxpool.Pool, token string) (OrganizationInvitation, error) {
+	var invitation OrganizationInvitation
 
 	err := pool.QueryRow(ctx, `
-		SELECT id, requester_user_id, target_organization_id, message, status,
-		       reviewed_by, reviewed_at, review_note, created_at,
-		       approved_at, rejected_at, canceled_at
-		FROM organization_joining_requests WHERE id = $1`,
-		requestID,
+		SELECT id, organization_id, inviter_user_id, invitee_email, invitee_user_id, status,
+		       message, invitation_token, expires_at, created_at, accepted_at, declined_at
+		FROM organization_invitations WHERE invitation_token = $1`,
+		token,
 	).Scan(
-		&req.ID, &req.RequesterUserID, &req.TargetOrganizationID, &req.Message, &req.Status,
-		&req.ReviewedBy, &req.ReviewedAt, &req.ReviewNote, &req.CreatedAt,
-		&req.ApprovedAt, &req.RejectedAt, &req.CanceledAt,
+		&invitation.ID, &invitation.OrganizationID, &invitation.InviterUserID, &invitation.InviteeEmail,
+		&invitation.InviteeUserID, &invitation.Status, &invitation.Message, &invitation.InvitationToken,
+		&invitation.ExpiresAt, &invitation.CreatedAt, &invitation.AcceptedAt, &invitation.DeclinedAt,
 	)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		return OrganizationJoiningRequest{}, ErrRequestNotFound
+		return OrganizationInvitation{}, ErrInvitationNotFound
 	}
 
-	return req, err
+	return invitation, fmt.Errorf("fetching organization invitation by token: %w", err)
 }
 
-// ListPendingJoiningRequestsForOrganization returns all pending join requests for an organization.
-func ListPendingJoiningRequestsForOrganization(ctx context.Context, pool *pgxpool.Pool, organizationID string) ([]OrganizationJoiningRequest, error) {
+// GetOrganizationInvitation retrieves an invitation by its ID.
+func GetOrganizationInvitation(ctx context.Context, pool *pgxpool.Pool, invitationID string) (OrganizationInvitation, error) {
+	var invitation OrganizationInvitation
+
+	err := pool.QueryRow(ctx, `
+		SELECT id, organization_id, inviter_user_id, invitee_email, invitee_user_id, status,
+		       message, invitation_token, expires_at, created_at, accepted_at, declined_at
+		FROM organization_invitations WHERE id = $1`,
+		invitationID,
+	).Scan(
+		&invitation.ID, &invitation.OrganizationID, &invitation.InviterUserID, &invitation.InviteeEmail,
+		&invitation.InviteeUserID, &invitation.Status, &invitation.Message, &invitation.InvitationToken,
+		&invitation.ExpiresAt, &invitation.CreatedAt, &invitation.AcceptedAt, &invitation.DeclinedAt,
+	)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return OrganizationInvitation{}, ErrInvitationNotFound
+	}
+
+	return invitation, fmt.Errorf("fetching organization invitation by ID: %w", err)
+}
+
+// ListPendingInvitationsForOrganization returns all pending invitations for an organization.
+func ListPendingInvitationsForOrganization(ctx context.Context, pool *pgxpool.Pool, organizationID string) ([]OrganizationInvitation, error) {
 	rows, err := pool.Query(ctx, `
-		SELECT id, requester_user_id, target_organization_id, message, status,
-		       reviewed_by, reviewed_at, review_note, created_at,
-		       approved_at, rejected_at, canceled_at
-		FROM organization_joining_requests
-		WHERE target_organization_id = $1 AND status = 'pending'
+		SELECT id, organization_id, inviter_user_id, invitee_email, invitee_user_id, status,
+		       message, invitation_token, expires_at, created_at, accepted_at, declined_at
+		FROM organization_invitations
+		WHERE organization_id = $1 AND status = 'pending' AND expires_at > NOW()
 		ORDER BY created_at ASC`,
 		organizationID,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query pending joining requests: %w", err)
+		return nil, fmt.Errorf("failed to query pending invitations: %w", err)
 	}
 	defer rows.Close()
 
-	var requests []OrganizationJoiningRequest
+	var invitations []OrganizationInvitation
 	for rows.Next() {
-		var req OrganizationJoiningRequest
+		var invitation OrganizationInvitation
 		if err := rows.Scan(
-			&req.ID, &req.RequesterUserID, &req.TargetOrganizationID, &req.Message, &req.Status,
-			&req.ReviewedBy, &req.ReviewedAt, &req.ReviewNote, &req.CreatedAt,
-			&req.ApprovedAt, &req.RejectedAt, &req.CanceledAt,
+			&invitation.ID, &invitation.OrganizationID, &invitation.InviterUserID, &invitation.InviteeEmail,
+			&invitation.InviteeUserID, &invitation.Status, &invitation.Message, &invitation.InvitationToken,
+			&invitation.ExpiresAt, &invitation.CreatedAt, &invitation.AcceptedAt, &invitation.DeclinedAt,
 		); err != nil {
-			return nil, fmt.Errorf("failed to scan joining request: %w", err)
+			return nil, fmt.Errorf("failed to scan invitation: %w", err)
 		}
-		requests = append(requests, req)
+		invitations = append(invitations, invitation)
 	}
 
-	return requests, rows.Err()
+	return invitations, rows.Err()
 }
 
-// ApproveOrganizationJoiningRequest approves a pending join request and adds the user to the organization.
-func ApproveOrganizationJoiningRequest(ctx context.Context, pool *pgxpool.Pool, requestID, reviewerUserID string, reviewNote *string) error {
+// GetUserInvitations returns all invitations for a specific user email.
+func GetUserInvitations(ctx context.Context, pool *pgxpool.Pool, email string) ([]OrganizationInvitation, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT id, organization_id, inviter_user_id, invitee_email, invitee_user_id, status,
+		       message, invitation_token, expires_at, created_at, accepted_at, declined_at
+		FROM organization_invitations
+		WHERE invitee_email = $1
+		ORDER BY created_at DESC`,
+		email,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query user invitations: %w", err)
+	}
+	defer rows.Close()
+
+	var invitations []OrganizationInvitation
+	for rows.Next() {
+		var invitation OrganizationInvitation
+		if err := rows.Scan(
+			&invitation.ID, &invitation.OrganizationID, &invitation.InviterUserID, &invitation.InviteeEmail,
+			&invitation.InviteeUserID, &invitation.Status, &invitation.Message, &invitation.InvitationToken,
+			&invitation.ExpiresAt, &invitation.CreatedAt, &invitation.AcceptedAt, &invitation.DeclinedAt,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan invitation: %w", err)
+		}
+		invitations = append(invitations, invitation)
+	}
+
+	return invitations, rows.Err()
+}
+
+// AcceptInvitation accepts a pending invitation and adds the user to the organization.
+func AcceptInvitation(ctx context.Context, pool *pgxpool.Pool, token, userID string) error {
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback(ctx)
 
-	// Get the request details and lock it
-	var req OrganizationJoiningRequest
+	// Get the invitation details and lock it
+	var invitation OrganizationInvitation
 	err = tx.QueryRow(ctx, `
-		SELECT id, requester_user_id, target_organization_id, status
-		FROM organization_joining_requests
-		WHERE id = $1 FOR UPDATE`,
-		requestID,
-	).Scan(&req.ID, &req.RequesterUserID, &req.TargetOrganizationID, &req.Status)
+		SELECT id, organization_id, invitee_email, status, expires_at
+		FROM organization_invitations
+		WHERE invitation_token = $1 FOR UPDATE`,
+		token,
+	).Scan(&invitation.ID, &invitation.OrganizationID, &invitation.InviteeEmail, &invitation.Status, &invitation.ExpiresAt)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrRequestNotFound
+		return ErrInvalidToken
 	}
 	if err != nil {
-		return fmt.Errorf("failed to lock request: %w", err)
+		return fmt.Errorf("failed to lock invitation: %w", err)
 	}
 
-	if req.Status != RequestStatusPending {
-		return ErrInvalidRequestStatus
+	// Check if invitation is still valid
+	if invitation.Status != InvitationStatusPending {
+		return ErrInvalidToken
+	}
+	if time.Now().After(invitation.ExpiresAt) {
+		return ErrInvalidToken
 	}
 
 	// Add user to organization as non-admin member
-	err = AddUserToOrganizationTx(ctx, tx, req.RequesterUserID, req.TargetOrganizationID, false)
+	err = AddUserToOrganizationTx(ctx, tx, userID, invitation.OrganizationID, false)
 	if err != nil {
 		return fmt.Errorf("failed to add user to organization: %w", err)
 	}
 
-	// Update request status
+	// Update invitation status
 	_, err = tx.Exec(ctx, `
-		UPDATE organization_joining_requests
-		SET status = 'approved', reviewed_by = $1, reviewed_at = NOW(),
-		    review_note = $2, approved_at = NOW()
-		WHERE id = $3`,
-		reviewerUserID, reviewNote, requestID,
+		UPDATE organization_invitations
+		SET status = 'accepted', invitee_user_id = $1, accepted_at = NOW()
+		WHERE invitation_token = $2`,
+		userID, token,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to update request status: %w", err)
+		return fmt.Errorf("failed to update invitation status: %w", err)
 	}
 
 	return tx.Commit(ctx)
 }
 
-// RejectOrganizationJoiningRequest rejects a pending join request.
-func RejectOrganizationJoiningRequest(ctx context.Context, pool *pgxpool.Pool, requestID, reviewerUserID string, reviewNote *string) error {
+// DeclineInvitation declines a pending invitation.
+func DeclineInvitation(ctx context.Context, pool *pgxpool.Pool, token string) error {
 	result, err := pool.Exec(ctx, `
-		UPDATE organization_joining_requests
-		SET status = 'rejected', reviewed_by = $1, reviewed_at = NOW(),
-		    review_note = $2, rejected_at = NOW()
-		WHERE id = $3 AND status = 'pending'`,
-		reviewerUserID, reviewNote, requestID,
+		UPDATE organization_invitations
+		SET status = 'declined', declined_at = NOW()
+		WHERE invitation_token = $1 AND status = 'pending' AND expires_at > NOW()`,
+		token,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to reject request: %w", err)
+		return fmt.Errorf("failed to decline invitation: %w", err)
 	}
 	if result.RowsAffected() == 0 {
-		return ErrRequestNotFound
+		return ErrInvalidToken
 	}
 	return nil
+}
+
+// CancelInvitation allows an admin to cancel a pending invitation.
+func CancelInvitation(ctx context.Context, pool *pgxpool.Pool, invitationID string) error {
+	result, err := pool.Exec(ctx, `
+		UPDATE organization_invitations
+		SET status = 'expired'
+		WHERE id = $1 AND status = 'pending'`,
+		invitationID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to cancel invitation: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return ErrInvitationNotFound
+	}
+	return nil
+}
+
+// ExpireOldInvitations marks invitations as expired if they're past their expiry date.
+func ExpireOldInvitations(ctx context.Context, pool *pgxpool.Pool) (int, error) {
+	result, err := pool.Exec(ctx, `
+		UPDATE organization_invitations
+		SET status = 'expired'
+		WHERE status = 'pending' AND expires_at <= NOW()`)
+	if err != nil {
+		return 0, fmt.Errorf("failed to expire old invitations: %w", err)
+	}
+	return int(result.RowsAffected()), nil
 }
 
 // ---------------------------------------------------------------------------
@@ -233,8 +342,15 @@ func ListPendingAPIKeyRequestsForOrganization(ctx context.Context, pool *pgxpool
 	return requests, rows.Err()
 }
 
-// ApproveAPIKeyCreationRequest approves a pending API key request and creates the actual API key.
-func ApproveAPIKeyCreationRequest(ctx context.Context, pool *pgxpool.Pool, requestID, reviewerUserID string, reviewNote *string) (Merchant, string, error) {
+// TODO: ApproveAPIKeyCreationRequest needs to be integrated with auth.CreateAPIKey function
+// Currently disabled until CreateAPIKey can be adapted to work within existing transactions.
+// The function needs to:
+// 1. Create an API key using auth.CreateAPIKey within the transaction context
+// 2. Update the request with merchant_id = $4 and pass the merchant ID from API key creation
+// 3. Return the created Merchant and fullKey instead of placeholder error
+//
+// approveAPIKeyCreationRequest is currently unexported until integration is complete.
+func approveAPIKeyCreationRequest(ctx context.Context, pool *pgxpool.Pool, requestID, reviewerUserID string, reviewNote *string) (Merchant, string, error) {
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return Merchant{}, "", fmt.Errorf("failed to begin transaction: %w", err)

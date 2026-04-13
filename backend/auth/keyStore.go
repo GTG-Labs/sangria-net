@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	dbengine "sangria/backend/dbEngine"
 )
@@ -165,8 +166,27 @@ func AuthenticateAPIKey(ctx context.Context, pool *pgxpool.Pool, providedKey str
 	return nil, fmt.Errorf("invalid API key")
 }
 
-// RevokeAPIKey deactivates an API key.
-func RevokeAPIKey(ctx context.Context, pool *pgxpool.Pool, merchantID, organizationID string) error {
+// RevokeAPIKey deactivates an API key (admin-only).
+// Checks that the requesting user is an admin of the organization that owns the API key.
+func RevokeAPIKey(ctx context.Context, pool *pgxpool.Pool, merchantID, adminUserID string) error {
+	// First verify the admin has permission to delete this API key
+	var organizationID string
+	err := pool.QueryRow(ctx, `
+		SELECT m.organization_id
+		FROM merchants m
+		JOIN organization_members om ON om.organization_id = m.organization_id
+		WHERE m.id = $1 AND om.user_id = $2 AND om.is_admin = true`,
+		merchantID, adminUserID,
+	).Scan(&organizationID)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("API key not found or user is not an admin of the organization")
+	}
+	if err != nil {
+		return fmt.Errorf("failed to verify admin permissions: %w", err)
+	}
+
+	// Admin verified, now deactivate the API key
 	result, err := pool.Exec(ctx,
 		`UPDATE merchants SET is_active = false WHERE id = $1 AND organization_id = $2`,
 		merchantID, organizationID,

@@ -42,31 +42,53 @@ func CreateMerchantAPIKey(pool *pgxpool.Pool) fiber.Handler {
 			return c.Status(500).JSON(fiber.Map{"error": "failed to create user"})
 		}
 
-		// Ensure the user has a USDC LIABILITY account before creating the API key,
+		// TODO: This admin handler needs organization context implementation
+		// For now, get the user's first organization as a fallback
+		memberships, err := dbengine.GetUserOrganizations(c.Context(), pool, user.ID)
+		if err != nil {
+			slog.Error("get user organizations", "user_id", user.ID, "error", err)
+			return c.Status(500).JSON(fiber.Map{"error": "failed to get user organizations"})
+		}
+		if len(memberships) == 0 {
+			slog.Error("user has no organizations", "user_id", user.ID)
+			return c.Status(400).JSON(fiber.Map{"error": "user must belong to an organization"})
+		}
+
+		// Use the first organization (usually personal org for admin)
+		selectedOrgID := memberships[0].OrganizationID
+
+		// Ensure the organization has a USD LIABILITY account before creating the API key,
 		// so we don't end up with an active key but no liability account.
-		if _, err := dbengine.EnsureUSDLiabilityAccount(c.Context(), pool, user.ID); err != nil {
-			slog.Error("ensure USD liability account", "user_id", user.ID, "error", err)
+		if _, err := dbengine.EnsureUSDLiabilityAccount(c.Context(), pool, selectedOrgID); err != nil {
+			slog.Error("ensure USD liability account", "org_id", selectedOrgID, "user_id", user.ID, "error", err)
 			return c.Status(500).JSON(fiber.Map{"error": "failed to create liability account"})
 		}
 
-		merchant, fullKey, err := auth.CreateAPIKey(c.Context(), pool, user.ID, req.Name)
-		if err != nil {
-			if errors.Is(err, auth.ErrMaxAPIKeysReached) {
-				return c.Status(400).JSON(fiber.Map{"error": "maximum number of API keys reached (10)"})
-			}
-			slog.Error("create merchant API key", "user_id", user.ID, "error", err)
-			return c.Status(500).JSON(fiber.Map{"error": "failed to create merchant"})
-		}
+		// TODO: Update CreateAPIKey to use organization context
+		// merchant, fullKey, err := auth.CreateAPIKey(c.Context(), pool, selectedOrgID, req.Name)
 
-		// Return merchant record + raw key (only shown once).
-		return c.Status(201).JSON(fiber.Map{
-			"id":         merchant.ID,
-			"user_id":    merchant.UserID,
-			"name":       merchant.Name,
-			"key_id":     merchant.KeyID,
-			"api_key":    fullKey,
-			"is_active":  merchant.IsActive,
-			"created_at": merchant.CreatedAt,
-		})
+		// TEMPORARY: Return not implemented until CreateAPIKey is updated for org context
+		slog.Warn("CreateMerchantAPIKey: CreateAPIKey not updated for organization context", "org_id", selectedOrgID, "user_id", user.ID)
+		return c.Status(501).JSON(fiber.Map{"error": "API key creation with organization context not implemented yet"})
+
+		// TODO: Restore this code when CreateAPIKey is updated for organization context
+		// if err != nil {
+		// 	if errors.Is(err, auth.ErrMaxAPIKeysReached) {
+		// 		return c.Status(400).JSON(fiber.Map{"error": "maximum number of API keys reached (10)"})
+		// 	}
+		// 	slog.Error("create merchant API key", "user_id", user.ID, "error", err)
+		// 	return c.Status(500).JSON(fiber.Map{"error": "failed to create merchant"})
+		// }
+
+		// TODO: Return merchant record + raw key (only shown once).
+		// return c.Status(201).JSON(fiber.Map{
+		// 	"id":         merchant.ID,
+		// 	"organization_id": merchant.OrganizationID,
+		// 	"name":       merchant.Name,
+		// 	"key_id":     merchant.KeyID,
+		// 	"api_key":    fullKey,
+		// 	"is_active":  merchant.IsActive,
+		// 	"created_at": merchant.CreatedAt,
+		// })
 	}
 }
