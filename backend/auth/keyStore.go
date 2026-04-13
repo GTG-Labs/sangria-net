@@ -83,10 +83,10 @@ func CreateAPIKey(ctx context.Context, pool *pgxpool.Pool, organizationID, name 
 	return &merchant, fullKey, nil
 }
 
-// GetAPIKeysByOrganizationID retrieves all API keys for an organization.
-func GetAPIKeysByOrganizationID(ctx context.Context, pool *pgxpool.Pool, organizationID string) ([]dbengine.Merchant, error) {
+// GetAPIKeysByOrganizationID retrieves all API keys for an organization without exposing hashed keys.
+func GetAPIKeysByOrganizationID(ctx context.Context, pool *pgxpool.Pool, organizationID string) ([]dbengine.MerchantPublic, error) {
 	rows, err := pool.Query(ctx,
-		`SELECT id, organization_id, api_key, key_id, name, is_active, last_used_at, created_at
+		`SELECT id, organization_id, key_id, name, is_active, last_used_at, created_at
 		 FROM merchants WHERE organization_id = $1 ORDER BY created_at DESC`,
 		organizationID,
 	)
@@ -95,11 +95,11 @@ func GetAPIKeysByOrganizationID(ctx context.Context, pool *pgxpool.Pool, organiz
 	}
 	defer rows.Close()
 
-	var merchants []dbengine.Merchant
+	var merchants []dbengine.MerchantPublic
 	for rows.Next() {
-		var m dbengine.Merchant
+		var m dbengine.MerchantPublic
 		if err := rows.Scan(
-			&m.ID, &m.OrganizationID, &m.APIKey, &m.KeyID,
+			&m.ID, &m.OrganizationID, &m.KeyID,
 			&m.Name, &m.IsActive, &m.LastUsedAt, &m.CreatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan merchant: %w", err)

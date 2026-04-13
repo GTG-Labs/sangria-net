@@ -106,6 +106,17 @@ type Merchant struct {
 	CreatedAt      time.Time  `json:"created_at"`
 }
 
+// MerchantPublic represents a merchant API key without exposing the hashed key
+type MerchantPublic struct {
+	ID             string     `json:"id"`
+	OrganizationID string     `json:"organization_id"`
+	KeyID          string     `json:"key_id"`
+	Name           string     `json:"name"`
+	IsActive       bool       `json:"is_active"`
+	LastUsedAt     *time.Time `json:"last_used_at"`
+	CreatedAt      time.Time  `json:"created_at"`
+}
+
 type CryptoWallet struct {
 	ID         string    `json:"id"`
 	Address    string    `json:"address"`

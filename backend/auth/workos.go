@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
@@ -158,18 +159,32 @@ func CreateUser(pool *pgxpool.Pool) fiber.Handler {
 			owner = fmt.Sprintf("%s %s", user.FirstName, user.LastName)
 		}
 
-		// Step 1: Create/update user
-		u, err := dbengine.UpsertUser(c.Context(), pool, owner, user.ID)
+		// Use a single transaction for both user upsert and personal org creation
+		tx, err := pool.Begin(c.Context())
+		if err != nil {
+			slog.Error("begin transaction", "error", err)
+			return c.Status(500).JSON(fiber.Map{"error": "failed to begin transaction"})
+		}
+		defer tx.Rollback(c.Context())
+
+		// Step 1: Create/update user within transaction
+		u, err := dbengine.UpsertUserTx(c.Context(), tx, owner, user.ID)
 		if err != nil {
 			slog.Error("upsert user", "error", err)
 			return c.Status(500).JSON(fiber.Map{"error": "failed to create user"})
 		}
 
-		// Step 2: Ensure user has a personal organization
-		err = ensureUserPersonalOrganization(c.Context(), pool, user.ID, owner)
+		// Step 2: Ensure user has a personal organization within the same transaction
+		err = ensureUserPersonalOrganizationTx(c.Context(), tx, user.ID, owner)
 		if err != nil {
 			slog.Error("ensure personal organization", "error", err)
 			return c.Status(500).JSON(fiber.Map{"error": "failed to setup personal organization"})
+		}
+
+		// Commit the transaction
+		if err := tx.Commit(c.Context()); err != nil {
+			slog.Error("commit transaction", "error", err)
+			return c.Status(500).JSON(fiber.Map{"error": "failed to commit transaction"})
 		}
 
 		return c.Status(201).JSON(u)
@@ -179,16 +194,26 @@ func CreateUser(pool *pgxpool.Pool) fiber.Handler {
 // ensureUserPersonalOrganization creates a personal organization for the user if they don't have one
 // Each user gets their own personal organization where they are the admin
 func ensureUserPersonalOrganization(ctx context.Context, pool *pgxpool.Pool, userWorkosID, userName string) error {
-	// Start transaction to ensure atomicity
+	// Start transaction and use the transactional version
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback(ctx)
 
+	err = ensureUserPersonalOrganizationTx(ctx, tx, userWorkosID, userName)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+// ensureUserPersonalOrganizationTx creates a personal organization for the user within an existing transaction
+func ensureUserPersonalOrganizationTx(ctx context.Context, tx pgx.Tx, userWorkosID, userName string) error {
 	// Acquire a row lock on the user to serialize concurrent flows
 	var lockCheck bool
-	err = tx.QueryRow(ctx, `
+	err := tx.QueryRow(ctx, `
 		SELECT true FROM users WHERE workos_id = $1 FOR UPDATE`,
 		userWorkosID,
 	).Scan(&lockCheck)
@@ -224,7 +249,7 @@ func ensureUserPersonalOrganization(ctx context.Context, pool *pgxpool.Pool, use
 	// If user already has organizations, skip creating personal org
 	// (they might be returning users or have been invited to orgs)
 	if len(memberships) > 0 {
-		return tx.Commit(ctx)
+		return nil
 	}
 
 	// Create personal organization inside transaction
@@ -244,11 +269,6 @@ func ensureUserPersonalOrganization(ctx context.Context, pool *pgxpool.Pool, use
 	err = dbengine.AddUserToOrganizationTx(ctx, tx, userWorkosID, personalOrgID, true)
 	if err != nil {
 		return fmt.Errorf("failed to add user to personal organization: %w", err)
-	}
-
-	// Commit transaction
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("failed to commit personal organization transaction: %w", err)
 	}
 
 	return nil
