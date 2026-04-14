@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
@@ -158,12 +159,249 @@ func CreateUser(pool *pgxpool.Pool) fiber.Handler {
 			owner = fmt.Sprintf("%s %s", user.FirstName, user.LastName)
 		}
 
-		u, err := dbengine.UpsertUser(c.Context(), pool, owner, user.ID)
+		// Use a single transaction for both user upsert and personal org creation
+		tx, err := pool.Begin(c.Context())
+		if err != nil {
+			slog.Error("begin transaction", "error", err)
+			return c.Status(500).JSON(fiber.Map{"error": "failed to begin transaction"})
+		}
+		defer tx.Rollback(c.Context())
+
+		// Step 1: Create/update user within transaction
+		u, err := dbengine.UpsertUserTx(c.Context(), tx, owner, user.ID)
 		if err != nil {
 			slog.Error("upsert user", "error", err)
 			return c.Status(500).JSON(fiber.Map{"error": "failed to create user"})
 		}
 
+		// Step 2: Ensure user has a personal organization within the same transaction
+		err = ensureUserPersonalOrganizationTx(c.Context(), tx, user.ID, owner)
+		if err != nil {
+			slog.Error("ensure personal organization", "error", err)
+			return c.Status(500).JSON(fiber.Map{"error": "failed to setup personal organization"})
+		}
+
+		// Commit the transaction
+		if err := tx.Commit(c.Context()); err != nil {
+			slog.Error("commit transaction", "error", err)
+			return c.Status(500).JSON(fiber.Map{"error": "failed to commit transaction"})
+		}
+
 		return c.Status(201).JSON(u)
+	}
+}
+
+
+// ensureUserPersonalOrganizationTx creates a personal organization for the user within an existing transaction
+func ensureUserPersonalOrganizationTx(ctx context.Context, tx pgx.Tx, userWorkosID, userName string) error {
+	// Acquire a row lock on the user to serialize concurrent flows
+	var lockCheck bool
+	err := tx.QueryRow(ctx, `
+		SELECT true FROM users WHERE workos_id = $1 FOR UPDATE`,
+		userWorkosID,
+	).Scan(&lockCheck)
+	if err != nil {
+		return fmt.Errorf("failed to acquire user lock: %w", err)
+	}
+
+
+	// Check if user already has a personal organization
+	var existingPersonalOrgID string
+	err = tx.QueryRow(ctx,
+		`SELECT o.id
+		 FROM organizations o
+		 JOIN organization_members om ON om.organization_id = o.id
+		 WHERE om.user_id = $1 AND o.is_personal = true
+		 LIMIT 1`,
+		userWorkosID,
+	).Scan(&existingPersonalOrgID)
+	if err == nil && existingPersonalOrgID != "" {
+		// Personal org already exists, no need to create
+		return nil
+	}
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("failed to check existing personal organization: %w", err)
+	}
+
+	// Create personal organization inside transaction
+	var personalOrgID string
+	personalOrgName := fmt.Sprintf("%s's Personal Organization", userName)
+
+	err = tx.QueryRow(ctx, `
+		INSERT INTO organizations (name, is_personal, created_at)
+		VALUES ($1, true, NOW())
+		RETURNING id`,
+		personalOrgName).Scan(&personalOrgID)
+	if err != nil {
+		return fmt.Errorf("failed to create personal organization: %w", err)
+	}
+
+	// Add user to their personal organization as admin using transaction
+	err = dbengine.AddUserToOrganizationTx(ctx, tx, userWorkosID, personalOrgID, true)
+	if err != nil {
+		return fmt.Errorf("failed to add user to personal organization: %w", err)
+	}
+
+	return nil
+}
+
+// GetCurrentUser handles GET /internal/me endpoint
+func GetCurrentUser(pool *pgxpool.Pool) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		user, ok := c.Locals("workos_user").(WorkOSUser)
+		if !ok {
+			return c.Status(500).JSON(fiber.Map{"error": "internal server error"})
+		}
+
+		if user.ID == "" {
+			slog.Error("GetCurrentUser: session missing WorkOS ID")
+			return c.Status(500).JSON(fiber.Map{"error": "Invalid user session"})
+		}
+
+		// Get user's organizations
+		memberships, err := dbengine.GetUserOrganizations(c.Context(), pool, user.ID)
+		if err != nil {
+			slog.Error("get user organizations", "error", err)
+			return c.Status(500).JSON(fiber.Map{"error": "failed to fetch user organizations"})
+		}
+
+		// Check if user is a Sangria admin
+		isAdmin, err := dbengine.IsAdmin(c.Context(), pool, user.ID)
+		if err != nil {
+			slog.Error("check admin status", "error", err)
+			// Don't fail the request, just assume not admin
+			isAdmin = false
+		}
+
+		// Format organizations for frontend
+		var organizations []fiber.Map
+		for _, membership := range memberships {
+			// Get organization details
+			var orgName string
+			var isPersonal bool
+			err := pool.QueryRow(c.Context(),
+				`SELECT name, is_personal FROM organizations WHERE id = $1`,
+				membership.OrganizationID,
+			).Scan(&orgName, &isPersonal)
+			if err != nil {
+				slog.Error("get organization details", "error", err)
+				continue
+			}
+
+			organizations = append(organizations, fiber.Map{
+				"id":         membership.OrganizationID,
+				"name":       orgName,
+				"isPersonal": isPersonal,
+				"isAdmin":    membership.IsAdmin,
+			})
+		}
+
+		return c.JSON(fiber.Map{
+			"id":            user.ID,
+			"firstName":     user.FirstName,
+			"lastName":      user.LastName,
+			"email":         user.Email,
+			"isAdmin":       isAdmin,
+			"organizations": organizations,
+		})
+	}
+}
+
+// CreateOrganization handles POST /internal/organizations endpoint
+func CreateOrganization(pool *pgxpool.Pool) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		user, ok := c.Locals("workos_user").(WorkOSUser)
+		if !ok {
+			return c.Status(500).JSON(fiber.Map{"error": "internal server error"})
+		}
+
+		if user.ID == "" {
+			slog.Error("CreateOrganization: session missing WorkOS ID")
+			return c.Status(500).JSON(fiber.Map{"error": "Invalid user session"})
+		}
+
+		// Parse request body
+		var req struct {
+			Name string `json:"name"`
+		}
+
+		if err := c.Bind().JSON(&req); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid request body"})
+		}
+
+		// Validate organization name
+		if req.Name == "" {
+			return c.Status(400).JSON(fiber.Map{"error": "organization name is required"})
+		}
+
+		if len(req.Name) > 255 {
+			return c.Status(400).JSON(fiber.Map{"error": "organization name must be 255 characters or less"})
+		}
+
+		// Create organization with user as admin
+		orgID, err := dbengine.CreateOrganization(c.Context(), pool, user.ID, req.Name)
+		if err != nil {
+			slog.Error("create organization", "user_id", user.ID, "name", req.Name, "error", err)
+			return c.Status(500).JSON(fiber.Map{"error": "failed to create organization"})
+		}
+
+		return c.JSON(fiber.Map{
+			"id":         orgID,
+			"name":       req.Name,
+			"isPersonal": false,
+			"isAdmin":    true,
+		})
+	}
+}
+
+// GetOrganizationMembers handles GET /internal/organizations/:id/members endpoint
+func GetOrganizationMembers(pool *pgxpool.Pool) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		user, ok := c.Locals("workos_user").(WorkOSUser)
+		if !ok {
+			return c.Status(500).JSON(fiber.Map{"error": "internal server error"})
+		}
+
+		orgID := c.Params("id")
+		if orgID == "" {
+			return c.Status(400).JSON(fiber.Map{"error": "organization ID is required"})
+		}
+
+		// Verify the requesting user is a member of this organization
+		memberships, err := dbengine.GetUserOrganizations(c.Context(), pool, user.ID)
+		if err != nil {
+			slog.Error("get user organizations", "user_id", user.ID, "error", err)
+			return c.Status(500).JSON(fiber.Map{"error": "failed to verify permissions"})
+		}
+
+		isOrgMember := false
+		isOrgAdmin := false
+		for _, membership := range memberships {
+			if membership.OrganizationID == orgID {
+				isOrgMember = true
+				isOrgAdmin = membership.IsAdmin
+				break
+			}
+		}
+
+		if !isOrgMember {
+			return c.Status(403).JSON(fiber.Map{"error": "access denied - not a member of this organization"})
+		}
+
+		// Only admins can view organization members
+		if !isOrgAdmin {
+			return c.Status(403).JSON(fiber.Map{"error": "admin access required to view organization members"})
+		}
+
+		// Get organization members
+		orgMembers, err := dbengine.ListOrganizationMembers(c.Context(), pool, orgID)
+		if err != nil {
+			slog.Error("list organization members", "org_id", orgID, "error", err)
+			return c.Status(500).JSON(fiber.Map{"error": "failed to fetch organization members"})
+		}
+
+		return c.JSON(fiber.Map{
+			"members": orgMembers,
+		})
 	}
 }

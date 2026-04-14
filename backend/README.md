@@ -49,15 +49,18 @@ All routes are organized by auth type. The route prefix indicates the auth patte
 
 ### Dashboard endpoints — `/internal/*` (WorkOS JWT)
 
-These are called by the Sangria frontend dashboard. The user logs in via WorkOS and gets a JWT.
+These are called by the Sangria frontend dashboard. The user logs in via WorkOS and gets a JWT. All endpoints support organization context via `?org_id=` or `?organization_id=` query parameters.
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | POST | `/internal/users` | WorkOS JWT | Register/upsert user on login |
-| GET | `/internal/transactions` | WorkOS JWT | List merchant transactions (paginated) |
+| GET | `/internal/balance` | WorkOS JWT | Get organization USD balance |
+| GET | `/internal/transactions` | WorkOS JWT | List organization transactions (paginated) |
 | POST | `/internal/merchants` | WorkOS JWT | Create a merchant API key + USD liability account |
-| GET | `/internal/api-keys` | WorkOS JWT | List user's API keys |
+| GET | `/internal/api-keys` | WorkOS JWT | List organization's API keys |
 | DELETE | `/internal/api-keys/:id` | WorkOS JWT | Revoke an API key |
+| POST | `/internal/api-keys/:id/approve` | WorkOS JWT + Admin | Approve a pending API key (organization admin only) |
+| POST | `/internal/api-keys/:id/reject` | WorkOS JWT + Admin | Reject a pending API key (organization admin only) |
 | POST | `/internal/withdrawals` | WorkOS JWT | Request a merchant withdrawal (requires merchant_id) |
 | GET | `/internal/withdrawals` | WorkOS JWT | List withdrawals for a merchant (?merchant_id=) |
 | POST | `/internal/withdrawals/:id/cancel` | WorkOS JWT | Cancel a pending withdrawal (merchant self-service) |
@@ -98,6 +101,40 @@ Admin endpoints require both:
 
 Status codes: `401` (missing/invalid JWT), `403` (authenticated but not in admins table), `500` (internal lookup failure).
 
+## Organization System
+
+Sangria uses a multi-tenant organization system where users can belong to multiple organizations with different permission levels.
+
+### Organization Model
+
+- **Organizations**: Main business entities that own accounts, API keys, and transactions
+- **Organization Members**: Junction table linking users to organizations with admin status
+- **Personal Organizations**: Each user automatically gets a personal organization
+- **Organization Invitations**: Email-based invitation system for adding users to organizations
+
+### Organization Resolution
+
+All dashboard endpoints automatically resolve the organization context using this priority:
+
+1. **Explicit parameter**: `?org_id=` or `?organization_id=` (validated against user's memberships)
+2. **Single membership**: If user belongs to only one organization, use that
+3. **Personal organization**: If user has multiple memberships, default to their personal organization
+4. **Error**: If user has multiple memberships and no personal org, require explicit parameter
+
+### API Key Approval Workflow
+
+API keys have three statuses: `active`, `pending`, `inactive`.
+
+- **Organization admins**: Create API keys with `active` status immediately
+- **Organization members**: Create API keys with `pending` status requiring admin approval
+- **Cross-organization security**: Admins can only approve/reject keys within their own organizations
+
+API key creation flow:
+1. User creates API key via `POST /internal/merchants`
+2. If user is admin of target organization → Status: `active` (immediate use)
+3. If user is member of target organization → Status: `pending` (awaits approval)
+4. Organization admins can approve/reject pending keys via `/internal/api-keys/:id/approve|reject`
+
 ## Project structure
 
 ```
@@ -115,6 +152,7 @@ backend/
 ├── auth/
 │   ├── middleware.go              # WorkosAuthMiddleware, APIKeyAuthMiddleware, RequireAdmin
 │   ├── workos.go                  # JWKS cache, JWT validation, CreateUser handler
+│   ├── organization.go            # ResolveOrganizationContext helper (eliminates duplication)
 │   ├── apiKeyHandlers.go         # ListAPIKeys, DeleteAPIKey handlers
 │   ├── keyStore.go                # CreateAPIKey, AuthenticateAPIKey, RevokeAPIKey
 │   ├── merchantKeys.go           # API key generation, format validation
@@ -125,6 +163,7 @@ backend/
 │   └── withdrawals.go             # RequestWithdrawal, ListWithdrawals, CancelWithdrawal
 ├── adminHandlers/
 │   ├── merchants.go               # CreateMerchantAPIKey
+│   ├── apiKeyApproval.go          # ApproveAPIKey, RejectAPIKey (organization-scoped)
 │   ├── wallets.go                 # CreateWalletPool
 │   ├── treasury.go               # FundTreasury
 │   └── withdrawals.go             # ApproveWithdrawal, RejectWithdrawal, CompleteWithdrawal, FailWithdrawal
@@ -132,12 +171,13 @@ backend/
 │   ├── models.go                  # All Go types + enums
 │   ├── engine.go                  # DB connection pool
 │   ├── systemAccounts.go          # System account initialization
+│   ├── users.go                   # User CRUD, GetUserOrganizations, GetUserPersonalOrgID
+│   ├── requests.go                # Organization invitations (CreateOrganizationInvitation, AcceptInvitation, etc.)
 │   ├── merchants.go               # GetMerchantByID, EnsureUSDLiabilityAccount
 │   ├── cryptoWallets.go           # CreateCryptoWalletWithAccount, GetWalletByNetwork/Address
 │   ├── withdrawals.go             # CreateWithdrawal, Approve/Reject/Complete/FailWithdrawal
 │   ├── validation.go              # Shared input validation (ValidateAmountAndFee)
 │   ├── transaction.go             # Double-entry ledger (InsertTransaction, validateZeroNet)
-│   ├── users.go                   # User CRUD
 │   └── queries.go                 # Transaction queries (paginated)
 ├── cdpHandlers/
 │   └── wallet.go                  # CDP client, wallet creation, faucet funding

@@ -19,9 +19,16 @@ func GetMerchantBalance(pool *pgxpool.Pool) fiber.Handler {
 			return c.Status(500).JSON(fiber.Map{"error": "internal server error"})
 		}
 
-		balance, err := dbengine.GetAccountBalance(c.Context(), pool, user.ID)
+		// Resolve organization context
+		orgResult := auth.ResolveOrganizationContext(c.Context(), c, pool, user)
+		if orgResult.Error != "" {
+			return c.Status(orgResult.HTTPStatus).JSON(fiber.Map{"error": orgResult.Error})
+		}
+		selectedOrgID := orgResult.OrganizationID
+
+		balance, err := dbengine.GetAccountBalance(c.Context(), pool, selectedOrgID)
 		if err != nil {
-			slog.Error("fetch balance: query failed", "user_id", user.ID, "error", err)
+			slog.Error("fetch balance: query failed", "user_id", user.ID, "org_id", selectedOrgID, "error", err)
 			return c.Status(500).JSON(fiber.Map{
 				"error": "Failed to retrieve balance",
 			})
@@ -54,9 +61,16 @@ func GetMerchantTransactions(pool *pgxpool.Pool) fiber.Handler {
 			})
 		}
 
+		// Resolve organization context
+		orgResult := auth.ResolveOrganizationContext(c.Context(), c, pool, user)
+		if orgResult.Error != "" {
+			return c.Status(orgResult.HTTPStatus).JSON(fiber.Map{"error": orgResult.Error})
+		}
+		selectedOrgID := orgResult.OrganizationID
+
 		// Fetch paginated transactions with total count
 		transactions, nextCursor, total, err := dbengine.GetMerchantTransactionsPaginated(
-			c.Context(), pool, user.ID, limit, cursor,
+			c.Context(), pool, selectedOrgID, limit, cursor,
 		)
 		if err != nil {
 			slog.Error("fetch transactions: query failed", "user_id", user.ID, "error", err)

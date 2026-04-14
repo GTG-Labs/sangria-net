@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	dbengine "sangria/backend/dbEngine"
 )
@@ -16,8 +17,8 @@ var ErrMaxAPIKeysReached = errors.New("max active API keys reached")
 // ErrAPIKeyNotFound is returned when an API key does not exist or is not owned by the user.
 var ErrAPIKeyNotFound = errors.New("API key not found or not owned by user")
 
-// CreateAPIKey creates a new API key for a user.
-func CreateAPIKey(ctx context.Context, pool *pgxpool.Pool, userID, name string) (*dbengine.Merchant, string, error) {
+// CreateAPIKey creates a new API key for an organization with the specified status.
+func CreateAPIKey(ctx context.Context, pool *pgxpool.Pool, organizationID, name string, status dbengine.APIKeyStatus) (*dbengine.Merchant, string, error) {
 	// Generate new API key first
 	fullKey, keyID, err := GenerateAPIKey()
 	if err != nil {
@@ -37,39 +38,39 @@ func CreateAPIKey(ctx context.Context, pool *pgxpool.Pool, userID, name string) 
 	}
 	defer tx.Rollback(ctx)
 
-	// Lock the user row to prevent concurrent key creation
-	var lockedUserID string
+	// Lock the organization row to prevent concurrent key creation
+	var lockedOrgID string
 	err = tx.QueryRow(ctx,
-		`SELECT workos_id FROM users WHERE workos_id = $1 FOR UPDATE`,
-		userID,
-	).Scan(&lockedUserID)
+		`SELECT id FROM organizations WHERE id = $1 FOR UPDATE`,
+		organizationID,
+	).Scan(&lockedOrgID)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to lock user for key creation: %w", err)
+		return nil, "", fmt.Errorf("failed to lock organization for key creation: %w", err)
 	}
 
-	// Check active key count within transaction
-	var activeCount int
+	// Check total key count (active + pending) within transaction
+	var totalCount int
 	err = tx.QueryRow(ctx,
-		`SELECT COUNT(*) FROM merchants WHERE user_id = $1 AND is_active = true`,
-		userID,
-	).Scan(&activeCount)
+		`SELECT COUNT(*) FROM merchants WHERE organization_id = $1 AND status IN ('active', 'pending')`,
+		organizationID,
+	).Scan(&totalCount)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to check active API key count: %w", err)
+		return nil, "", fmt.Errorf("failed to check API key count: %w", err)
 	}
-	if activeCount >= 10 {
+	if totalCount >= 10 {
 		return nil, "", ErrMaxAPIKeysReached
 	}
 
-	// Insert new key
+	// Insert new key with specified status
 	var merchant dbengine.Merchant
 	err = tx.QueryRow(ctx,
-		`INSERT INTO merchants (user_id, api_key, key_id, name, is_active, created_at)
-		 VALUES ($1, $2, $3, $4, true, NOW())
-		 RETURNING id, user_id, api_key, key_id, name, is_active, last_used_at, created_at`,
-		userID, apiKeyHash, keyID, name,
+		`INSERT INTO merchants (organization_id, api_key, key_id, name, status, created_at)
+		 VALUES ($1, $2, $3, $4, $5, NOW())
+		 RETURNING id, organization_id, api_key, key_id, name, status, last_used_at, created_at`,
+		organizationID, apiKeyHash, keyID, name, status,
 	).Scan(
-		&merchant.ID, &merchant.UserID, &merchant.APIKey, &merchant.KeyID,
-		&merchant.Name, &merchant.IsActive, &merchant.LastUsedAt, &merchant.CreatedAt,
+		&merchant.ID, &merchant.OrganizationID, &merchant.APIKey, &merchant.KeyID,
+		&merchant.Name, &merchant.Status, &merchant.LastUsedAt, &merchant.CreatedAt,
 	)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to create merchant: %w", err)
@@ -82,24 +83,24 @@ func CreateAPIKey(ctx context.Context, pool *pgxpool.Pool, userID, name string) 
 	return &merchant, fullKey, nil
 }
 
-// GetAPIKeysByUserID retrieves all API keys for a user.
-func GetAPIKeysByUserID(ctx context.Context, pool *pgxpool.Pool, userID string) ([]dbengine.Merchant, error) {
+// GetAPIKeysByOrganizationID retrieves all API keys for an organization without exposing hashed keys.
+func GetAPIKeysByOrganizationID(ctx context.Context, pool *pgxpool.Pool, organizationID string) ([]dbengine.MerchantPublic, error) {
 	rows, err := pool.Query(ctx,
-		`SELECT id, user_id, api_key, key_id, name, is_active, last_used_at, created_at
-		 FROM merchants WHERE user_id = $1 ORDER BY created_at DESC`,
-		userID,
+		`SELECT id, organization_id, key_id, name, status, last_used_at, created_at
+		 FROM merchants WHERE organization_id = $1 ORDER BY created_at DESC`,
+		organizationID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query merchants: %w", err)
 	}
 	defer rows.Close()
 
-	var merchants []dbengine.Merchant
+	var merchants []dbengine.MerchantPublic
 	for rows.Next() {
-		var m dbengine.Merchant
+		var m dbengine.MerchantPublic
 		if err := rows.Scan(
-			&m.ID, &m.UserID, &m.APIKey, &m.KeyID,
-			&m.Name, &m.IsActive, &m.LastUsedAt, &m.CreatedAt,
+			&m.ID, &m.OrganizationID, &m.KeyID,
+			&m.Name, &m.Status, &m.LastUsedAt, &m.CreatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan merchant: %w", err)
 		}
@@ -127,9 +128,10 @@ func AuthenticateAPIKey(ctx context.Context, pool *pgxpool.Pool, providedKey str
 	}
 
 	// Query by key_id instead of scanning all keys (O(1) vs O(N))
+	// Only allow active keys to authenticate
 	rows, err := pool.Query(ctx,
-		`SELECT id, user_id, api_key, key_id, name, is_active, last_used_at, created_at
-		 FROM merchants WHERE key_id = $1 AND is_active = true LIMIT 5`,
+		`SELECT id, organization_id, api_key, key_id, name, status, last_used_at, created_at
+		 FROM merchants WHERE key_id = $1 AND status = 'active' LIMIT 5`,
 		keyID,
 	)
 	if err != nil {
@@ -140,8 +142,8 @@ func AuthenticateAPIKey(ctx context.Context, pool *pgxpool.Pool, providedKey str
 	for rows.Next() {
 		var merchant dbengine.Merchant
 		err := rows.Scan(
-			&merchant.ID, &merchant.UserID, &merchant.APIKey, &merchant.KeyID,
-			&merchant.Name, &merchant.IsActive, &merchant.LastUsedAt, &merchant.CreatedAt,
+			&merchant.ID, &merchant.OrganizationID, &merchant.APIKey, &merchant.KeyID,
+			&merchant.Name, &merchant.Status, &merchant.LastUsedAt, &merchant.CreatedAt,
 		)
 		if err != nil {
 			continue
@@ -165,11 +167,30 @@ func AuthenticateAPIKey(ctx context.Context, pool *pgxpool.Pool, providedKey str
 	return nil, fmt.Errorf("invalid API key")
 }
 
-// RevokeAPIKey deactivates an API key.
-func RevokeAPIKey(ctx context.Context, pool *pgxpool.Pool, merchantID, userID string) error {
+// RevokeAPIKey deactivates an API key (admin-only).
+// Checks that the requesting user is an admin of the organization that owns the API key.
+func RevokeAPIKey(ctx context.Context, pool *pgxpool.Pool, merchantID, adminUserID string) error {
+	// First verify the admin has permission to revoke this API key
+	var organizationID string
+	err := pool.QueryRow(ctx, `
+		SELECT m.organization_id
+		FROM merchants m
+		JOIN organization_members om ON om.organization_id = m.organization_id
+		WHERE m.id = $1 AND om.user_id = $2 AND om.is_admin = true`,
+		merchantID, adminUserID,
+	).Scan(&organizationID)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrAPIKeyNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("failed to verify admin permissions: %w", err)
+	}
+
+	// Admin verified, now deactivate the API key
 	result, err := pool.Exec(ctx,
-		`UPDATE merchants SET is_active = false WHERE id = $1 AND user_id = $2`,
-		merchantID, userID,
+		`UPDATE merchants SET status = 'inactive' WHERE id = $1 AND organization_id = $2`,
+		merchantID, organizationID,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to revoke API key: %w", err)

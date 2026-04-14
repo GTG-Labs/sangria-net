@@ -29,13 +29,20 @@ const (
 	AccountTypeExpense   AccountType = "EXPENSE"
 )
 
+type Organization struct {
+	ID         string    `json:"id"`
+	Name       string    `json:"name"`
+	IsPersonal bool      `json:"is_personal"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
 type Account struct {
-	ID        string      `json:"id"`
-	Name      string      `json:"name"`
-	Type      AccountType `json:"type"`
-	Currency  Currency    `json:"currency"`
-	UserID    *string     `json:"user_id"`
-	CreatedAt time.Time   `json:"created_at"`
+	ID             string      `json:"id"`
+	Name           string      `json:"name"`
+	Type           AccountType `json:"type"`
+	Currency       Currency    `json:"currency"`
+	OrganizationID *string     `json:"organization_id"`
+	CreatedAt      time.Time   `json:"created_at"`
 }
 
 type User struct {
@@ -43,6 +50,13 @@ type User struct {
 	Owner     string    `json:"owner"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type OrganizationMember struct {
+	UserID         string    `json:"user_id"`
+	OrganizationID string    `json:"organization_id"`
+	IsAdmin        bool      `json:"is_admin"`
+	JoinedAt       time.Time `json:"joined_at"`
 }
 
 type TransactionStatus string
@@ -92,26 +106,34 @@ const (
 	NetworkSolanaDevnet Network = "solana-devnet"   // solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1
 )
 
-type Card struct {
-	ID         string     `json:"id"`
-	UserID     string     `json:"user_id"`
-	APIKey     string     `json:"api_key"`
-	KeyID      string     `json:"key_id"`
-	Name       string     `json:"name"`
-	IsActive   bool       `json:"is_active"`
-	LastUsedAt *time.Time `json:"last_used_at"`
-	CreatedAt  time.Time  `json:"created_at"`
-}
+type APIKeyStatus string
+
+const (
+	APIKeyStatusActive   APIKeyStatus = "active"   // Approved and working
+	APIKeyStatusPending  APIKeyStatus = "pending"  // Awaiting admin approval
+	APIKeyStatusInactive APIKeyStatus = "inactive" // Rejected or revoked
+)
 
 type Merchant struct {
-	ID         string     `json:"id"`
-	UserID     string     `json:"user_id"`
-	APIKey     string     `json:"api_key"`
-	KeyID      string     `json:"key_id"`
-	Name       string     `json:"name"`
-	IsActive   bool       `json:"is_active"`
-	LastUsedAt *time.Time `json:"last_used_at"`
-	CreatedAt  time.Time  `json:"created_at"`
+	ID             string       `json:"id"`
+	OrganizationID string       `json:"organization_id"`
+	APIKey         string       `json:"api_key"`
+	KeyID          string       `json:"key_id"`
+	Name           string       `json:"name"`
+	Status         APIKeyStatus `json:"status"`
+	LastUsedAt     *time.Time   `json:"last_used_at"`
+	CreatedAt      time.Time    `json:"created_at"`
+}
+
+// MerchantPublic represents a merchant API key without exposing the hashed key
+type MerchantPublic struct {
+	ID             string       `json:"id"`
+	OrganizationID string       `json:"organization_id"`
+	KeyID          string       `json:"key_id"`
+	Name           string       `json:"name"`
+	Status         APIKeyStatus `json:"status"`
+	LastUsedAt     *time.Time   `json:"last_used_at"`
+	CreatedAt      time.Time    `json:"created_at"`
 }
 
 type CryptoWallet struct {
@@ -185,5 +207,42 @@ type Withdrawal struct {
 	FailedAt                *time.Time       `json:"failed_at"`
 	ReversedAt              *time.Time       `json:"reversed_at"`
 	CanceledAt              *time.Time       `json:"canceled_at"`
+}
+
+// ---------------------------------------------------------------------------
+// Request Management Types
+// ---------------------------------------------------------------------------
+
+type RequestStatus string
+
+const (
+	RequestStatusPending  RequestStatus = "pending"
+	RequestStatusApproved RequestStatus = "approved"
+	RequestStatusRejected RequestStatus = "rejected"
+	RequestStatusCanceled RequestStatus = "canceled"
+)
+
+type InvitationStatus string
+
+const (
+	InvitationStatusPending  InvitationStatus = "pending"
+	InvitationStatusAccepted InvitationStatus = "accepted"
+	InvitationStatusDeclined InvitationStatus = "declined"
+	InvitationStatusExpired  InvitationStatus = "expired"
+)
+
+type OrganizationInvitation struct {
+	ID               string           `json:"id"`
+	OrganizationID   string           `json:"organization_id"`
+	InviterUserID    string           `json:"inviter_user_id"`
+	InviteeEmail     string           `json:"invitee_email"`
+	InviteeUserID    *string          `json:"invitee_user_id"`
+	Status           InvitationStatus `json:"status"`
+	Message          *string          `json:"message"`
+	InvitationToken  string           `json:"invitation_token"`
+	ExpiresAt        time.Time        `json:"expires_at"`
+	CreatedAt        time.Time        `json:"created_at"`
+	AcceptedAt       *time.Time       `json:"accepted_at"`
+	DeclinedAt       *time.Time       `json:"declined_at"`
 }
 

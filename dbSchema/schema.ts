@@ -9,7 +9,9 @@ import {
   check,
   index,
   unique,
+  uniqueIndex,
   text,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -27,6 +29,25 @@ export const accountTypeEnum = pgEnum("account_type", [
   "REVENUE",
   "EXPENSE",
 ]);
+
+// ---------------------------------------------------------------------------
+// Organizations — the main business entities that own accounts and API keys
+// ---------------------------------------------------------------------------
+export const organizations = pgTable(
+  "organizations",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    name: varchar({ length: 255 }).notNull(),
+    isPersonal: boolean("is_personal").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("organizations_name_idx").on(table.name),
+  ],
+);
+
 // this is the pure WorkOS ID users
 export const users = pgTable("users", {
   workosId: text("workos_id").primaryKey(),
@@ -38,6 +59,32 @@ export const users = pgTable("users", {
     .notNull()
     .defaultNow(),
 });
+
+// ---------------------------------------------------------------------------
+// Organization Members — junction table for many-to-many user-organization relationships
+// ---------------------------------------------------------------------------
+export const organizationMembers = pgTable(
+  "organization_members",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.workosId),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id),
+    isAdmin: boolean("is_admin").notNull().default(false),
+    joinedAt: timestamp("joined_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    // Composite primary key - user can only be in each organization once
+    primaryKey({ columns: [table.userId, table.organizationId] }),
+    index("idx_organization_members_user_id").on(table.userId),
+    index("idx_organization_members_organization_id").on(table.organizationId),
+    index("idx_organization_members_is_admin").on(table.isAdmin),
+  ],
+);
 
 // ---------------------------------------------------------------------------
 // Admins — access control list for Sangria staff
@@ -62,13 +109,13 @@ export const accounts = pgTable(
     name: varchar({ length: 255 }).notNull(),
     type: accountTypeEnum().notNull(),
     currency: currencyEnum().notNull(),
-    userId: text("user_id").references(() => users.workosId),
+    organizationId: uuid("organization_id").references(() => organizations.id),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (table) => [
-    index("idx_accounts_user_id").on(table.userId),
+    index("idx_accounts_organization_id").on(table.organizationId),
     index("idx_accounts_type").on(table.type),
   ],
 );
@@ -131,6 +178,17 @@ export const withdrawalStatusEnum = pgEnum("withdrawal_status", [
 ]);
 
 // ---------------------------------------------------------------------------
+// Invitation Management Enums
+// ---------------------------------------------------------------------------
+
+export const invitationStatusEnum = pgEnum("invitation_status", [
+  "pending", // invitation sent, awaiting user response
+  "accepted", // user accepted the invitation
+  "declined", // user declined the invitation
+  "expired", // invitation expired before response
+]);
+
+// ---------------------------------------------------------------------------
 // x402 Enums
 // ---------------------------------------------------------------------------
 
@@ -143,54 +201,29 @@ export const networkEnum = pgEnum("network", [
 ]);
 
 // ---------------------------------------------------------------------------
-// Cards — API keys for companies/developers integrating the Sangria user SDK
-// ---------------------------------------------------------------------------
-
-export const cards = pgTable(
-  "cards",
-  {
-    id: uuid().primaryKey().defaultRandom(),
-    userId: text("user_id")
-      .notNull()
-      .references(() => users.workosId),
-    apiKey: text("api_key").notNull(),
-    keyId: varchar("key_id", { length: 8 }).notNull(),
-    name: varchar({ length: 255 }).notNull(),
-    isActive: boolean("is_active").notNull().default(true),
-    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (table) => [
-    index("idx_cards_user_id").on(table.userId),
-    index("idx_cards_key_id").on(table.keyId),
-    unique("uq_cards_api_key").on(table.apiKey),
-  ],
-);
-
-// ---------------------------------------------------------------------------
 // Merchants — API keys for businesses receiving payments through x402
 // ---------------------------------------------------------------------------
+
+export const apiKeyStatusEnum = pgEnum("api_key_status", ["active", "pending", "inactive"]);
 
 export const merchants = pgTable(
   "merchants",
   {
     id: uuid().primaryKey().defaultRandom(),
-    userId: text("user_id")
+    organizationId: uuid("organization_id")
       .notNull()
-      .references(() => users.workosId),
+      .references(() => organizations.id),
     apiKey: text("api_key").notNull(),
     keyId: varchar("key_id", { length: 8 }).notNull(),
     name: varchar({ length: 255 }).notNull(),
-    isActive: boolean("is_active").notNull().default(true),
+    status: apiKeyStatusEnum().notNull().default("pending"),
     lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (table) => [
-    index("idx_merchants_user_id").on(table.userId),
+    index("idx_merchants_organization_id").on(table.organizationId),
     index("idx_merchants_key_id").on(table.keyId),
     unique("uq_merchants_api_key").on(table.apiKey),
   ],
@@ -289,4 +322,48 @@ export const withdrawals = pgTable(
     check("chk_withdrawals_amount_positive", sql`${table.amount} > 0`),
   ],
 );
+
+// ---------------------------------------------------------------------------
+// Organization Invitations — admins inviting users to join organizations
+// ---------------------------------------------------------------------------
+
+export const organizationInvitations = pgTable(
+  "organization_invitations",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id),
+    inviterUserId: text("inviter_user_id")
+      .notNull()
+      .references(() => users.workosId), // Admin who sent the invitation
+    inviteeEmail: varchar("invitee_email", { length: 255 }).notNull(), // Email being invited
+    inviteeUserId: text("invitee_user_id").references(() => users.workosId), // Set when user accepts
+    status: invitationStatusEnum().notNull().default("pending"),
+    message: text(), // Optional welcome message from admin
+    invitationToken: varchar("invitation_token", { length: 255 }).notNull(), // Secure token for email link
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(), // 7 days from creation
+
+    // Timestamps
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    declinedAt: timestamp("declined_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("idx_org_invitations_organization").on(table.organizationId),
+    index("idx_org_invitations_inviter").on(table.inviterUserId),
+    index("idx_org_invitations_invitee_email").on(table.inviteeEmail),
+    index("idx_org_invitations_invitee_user").on(table.inviteeUserId),
+    index("idx_org_invitations_status").on(table.status),
+    index("idx_org_invitations_expires_at").on(table.expiresAt),
+    index("idx_org_invitations_created_at").on(table.createdAt.desc()),
+    // Unique secure token for invitation links
+    unique("uq_org_invitations_token").on(table.invitationToken),
+    // Prevent duplicate pending invitations to same email for same org (case-insensitive)
+    uniqueIndex("uq_org_invitations_pending").on(table.organizationId, sql`lower(${table.inviteeEmail})`).where(sql`status = 'pending'`),
+  ],
+);
+
 
