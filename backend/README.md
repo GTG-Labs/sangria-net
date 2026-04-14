@@ -8,6 +8,7 @@ HTTP API server for x402 crypto payments, merchant management, and double-entry 
 - A running Postgres instance with the schema already pushed (see [`dbSchema/README.md`](../dbSchema/README.md))
 - WorkOS account (for user authentication)
 - Coinbase CDP account (for crypto wallet creation)
+- SendGrid account (for invitation emails)
 
 ## Setup
 
@@ -26,6 +27,7 @@ The server starts on the port specified by the `PORT` environment variable (requ
 | `WORKOS_API_KEY` | Yes | WorkOS API key |
 | `WORKOS_CLIENT_ID` | Yes | WorkOS client ID |
 | `WORKOS_TOKEN_ISSUER` | Yes | JWT issuer for validation (e.g., `https://api.workos.com/user_management/<client_id>`) |
+| `SENDGRID_API_KEY` | Yes | SendGrid API key for sending invitation emails |
 | `ALLOWED_ORIGINS` | No | CORS allowed origins, comma-separated (default: `http://localhost:3000`) |
 | `CDP_API_KEY` | Yes | Coinbase Developer Platform API key |
 | `CDP_API_SECRET` | Yes | CDP API secret |
@@ -46,6 +48,7 @@ All routes are organized by auth type. The route prefix indicates the auth patte
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | GET | `/` | None | Health check |
+| POST | `/webhooks/workos` | None | WorkOS webhook endpoint (invitation.accepted) |
 
 ### Dashboard endpoints — `/internal/*` (WorkOS JWT)
 
@@ -64,6 +67,9 @@ These are called by the Sangria frontend dashboard. The user logs in via WorkOS 
 | POST | `/internal/withdrawals` | WorkOS JWT | Request a merchant withdrawal (requires merchant_id) |
 | GET | `/internal/withdrawals` | WorkOS JWT | List withdrawals for a merchant (?merchant_id=) |
 | POST | `/internal/withdrawals/:id/cancel` | WorkOS JWT | Cancel a pending withdrawal (merchant self-service) |
+| GET | `/internal/organizations/:id/members` | WorkOS JWT | List organization members |
+| DELETE | `/internal/organizations/:id/members/:userId` | WorkOS JWT + Admin | Remove a member from organization (admin only) |
+| POST | `/internal/organizations/:id/invitations` | WorkOS JWT + Admin | Send SendGrid invitation to join organization |
 
 ### SDK endpoints — `/v1/*` (API key)
 
@@ -110,7 +116,7 @@ Sangria uses a multi-tenant organization system where users can belong to multip
 - **Organizations**: Main business entities that own accounts, API keys, and transactions
 - **Organization Members**: Junction table linking users to organizations with admin status
 - **Personal Organizations**: Each user automatically gets a personal organization
-- **Organization Invitations**: Email-based invitation system for adding users to organizations
+- **Organization Invitations**: SendGrid-based invitation system for adding users to organizations
 
 ### Organization Resolution
 
@@ -166,13 +172,15 @@ backend/
 │   ├── apiKeyApproval.go          # ApproveAPIKey, RejectAPIKey (organization-scoped)
 │   ├── wallets.go                 # CreateWalletPool
 │   ├── treasury.go               # FundTreasury
-│   └── withdrawals.go             # ApproveWithdrawal, RejectWithdrawal, CompleteWithdrawal, FailWithdrawal
+│   ├── withdrawals.go             # ApproveWithdrawal, RejectWithdrawal, CompleteWithdrawal, FailWithdrawal
+│   ├── invitations.go             # CreateOrganizationInvitation (SendGrid integration)
+│   └── webhooks.go                # HandleWorkOSWebhook (invitation.accepted)
 ├── dbEngine/
 │   ├── models.go                  # All Go types + enums
 │   ├── engine.go                  # DB connection pool
 │   ├── systemAccounts.go          # System account initialization
 │   ├── users.go                   # User CRUD, GetUserOrganizations, GetUserPersonalOrgID
-│   ├── requests.go                # Organization invitations (CreateOrganizationInvitation, AcceptInvitation, etc.)
+│   ├── requests.go                # Organization member management (AddUserToOrganization, ListOrganizationMembers, etc.)
 │   ├── merchants.go               # GetMerchantByID, EnsureUSDLiabilityAccount
 │   ├── cryptoWallets.go           # CreateCryptoWalletWithAccount, GetWalletByNetwork/Address
 │   ├── withdrawals.go             # CreateWithdrawal, Approve/Reject/Complete/FailWithdrawal
@@ -255,6 +263,47 @@ The current flow requires manual admin action for bank transfers. This is tempor
 4. Provider sends a webhook — success triggers `CompleteWithdrawal`, failure triggers `FailWithdrawal`
 
 The admin endpoints (approve, reject, complete, fail) remain as manual override controls for when automation breaks, a transfer gets stuck, or compliance needs to intervene.
+
+## Organization Invitation System
+
+Sangria uses a hybrid approach for organization invitations:
+
+### Architecture
+- **Authentication**: WorkOS handles user authentication and JWT tokens
+- **Email Delivery**: SendGrid sends beautiful HTML invitation emails
+- **Business Logic**: Sangria manages invitation tokens, organization membership, and approval workflow
+
+### Invitation Flow
+1. Organization admin creates invitation via dashboard (`POST /internal/organizations/:id/invitations`)
+2. System generates secure invitation token and stores in `organization_invitations` table
+3. SendGrid sends HTML email with invitation link to recipient
+4. When recipient clicks link, they authenticate via WorkOS
+5. Upon login, system processes any accepted invitations for their email address
+6. User is automatically added to the inviting organization as a member
+
+### Permission Model
+- **View Members**: All organization members can view the member list
+- **Invite Members**: Only organization admins can send invitations
+- **Remove Members**: Only organization admins can remove other members
+- **Self-removal**: Members can leave organizations (except personal organizations)
+
+## Member Management
+
+Organization members have two permission levels:
+
+### Admin Permissions
+- Create API keys with `active` status (immediate use)
+- Approve/reject pending API keys from organization members
+- Invite new members to organization
+- Remove existing members from organization
+- All member permissions (below)
+
+### Member Permissions
+- Create API keys with `pending` status (requires admin approval)
+- View organization balance and transactions
+- Request withdrawals from organization accounts
+- View all organization members
+- Cancel their own pending withdrawals
 
 ## Schema-first workflow
 

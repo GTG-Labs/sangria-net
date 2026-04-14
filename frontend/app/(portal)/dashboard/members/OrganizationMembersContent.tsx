@@ -1,0 +1,323 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { User, UserPlus, Crown, Mail, Building, Users, Trash2 } from "lucide-react";
+import { useOrganization } from "@/contexts/OrganizationContext";
+
+interface Member {
+  user_id: string;
+  organization_id: string;
+  is_admin: boolean;
+  joined_at: string;
+  user_email: string; // Actually contains the user's display name (FirstName LastName) or email as fallback
+  actual_email?: string; // The actual email address from WorkOS (if provided)
+}
+
+export default function OrganizationMembersContent() {
+  const { selectedOrg, selectedOrgId, userInfo } = useOrganization();
+  const [members, setMembers] = useState<Member[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isInviting, setIsInviting] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteMessage, setInviteMessage] = useState("");
+  const [removingMembers, setRemovingMembers] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (selectedOrgId) {
+      // Reset all form states when switching organizations
+      setIsInviting(false);
+      setInviteEmail("");
+      setInviteMessage("");
+
+      // Fetch members for the new organization
+      fetchMembers();
+    }
+  }, [selectedOrgId]);
+
+  const fetchMembers = async () => {
+    if (!selectedOrgId) return;
+
+    try {
+      const response = await fetch(`/api/backend/organizations/${selectedOrgId}/members`);
+      if (response.ok) {
+        const data = await response.json();
+        setMembers(data.members || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch members:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleInvite = async () => {
+    if (!inviteEmail.trim() || !selectedOrgId) return;
+
+    try {
+      const response = await fetch(`/api/backend/organizations/${selectedOrgId}/invitations`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: inviteEmail.trim(),
+          message: inviteMessage.trim() || null,
+        }),
+      });
+
+      if (response.ok) {
+        setInviteEmail("");
+        setInviteMessage("");
+        setIsInviting(false);
+        fetchMembers(); // Refresh the members list
+      } else {
+        const error = await response.json();
+        alert(`Failed to invite user: ${error.error}`);
+      }
+    } catch (err) {
+      console.error("Error inviting user:", err);
+      alert("Failed to invite user");
+    }
+  };
+
+  const handleRemoveMember = async (memberUserId: string, memberName: string) => {
+    if (!selectedOrgId || !confirm(`Are you sure you want to remove ${memberName} from this organization?`)) {
+      return;
+    }
+
+    setRemovingMembers(prev => new Set(prev).add(memberUserId));
+
+    try {
+      const response = await fetch(`/api/backend/organizations/${selectedOrgId}/members/${memberUserId}`, {
+        method: "DELETE",
+      });
+
+      if (response.ok) {
+        fetchMembers(); // Refresh the members list
+      } else {
+        const error = await response.json();
+        alert(`Failed to remove member: ${error.error}`);
+      }
+    } catch (err) {
+      console.error("Error removing member:", err);
+      alert("Failed to remove member");
+    } finally {
+      setRemovingMembers(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(memberUserId);
+        return newSet;
+      });
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-gray-500">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!selectedOrgId) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <Building className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Select an Organization</h3>
+          <p className="text-gray-600">
+            Please select an organization from the dropdown to view its members.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Organization Members</h1>
+          <p className="text-gray-600 mt-1">
+            {selectedOrg ? `Managing members for ${selectedOrg.name}` : "Manage your team members and their permissions"}
+          </p>
+        </div>
+        {selectedOrg?.isAdmin && (
+          <button
+            onClick={() => setIsInviting(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <UserPlus className="h-4 w-4" />
+            Add Member
+          </button>
+        )}
+      </div>
+
+      {/* Organization Context Display */}
+      {selectedOrg && (
+        <div className="flex items-center gap-2 text-sm text-gray-600 bg-gray-50 px-4 py-3 rounded-lg">
+          <Users className="w-4 h-4" />
+          <span>
+            Organization: <strong>{selectedOrg.name}</strong>
+          </span>
+          {selectedOrg.isAdmin && (
+            <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
+              <Crown className="w-3 h-3 inline mr-1" />
+              Admin
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Invite Form - Only show for admins */}
+      {isInviting && selectedOrg?.isAdmin && (
+        <div className="bg-white border border-gray-200 rounded-lg p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            Invite New Member
+          </h3>
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="inviteEmail" className="block text-sm font-medium text-gray-700 mb-2">
+                Email Address
+              </label>
+              <input
+                type="email"
+                id="inviteEmail"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                placeholder="Enter email address"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label htmlFor="inviteMessage" className="block text-sm font-medium text-gray-700 mb-2">
+                Welcome Message (Optional)
+              </label>
+              <textarea
+                id="inviteMessage"
+                value={inviteMessage}
+                onChange={(e) => setInviteMessage(e.target.value)}
+                placeholder="Add a personal welcome message..."
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleInvite}
+                disabled={!inviteEmail.trim()}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Send Invitation
+              </button>
+              <button
+                onClick={() => {
+                  setIsInviting(false);
+                  setInviteEmail("");
+                  setInviteMessage("");
+                }}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Members List */}
+      <div className="bg-white border border-gray-200 rounded-lg">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900">
+            Members ({members.length})
+          </h3>
+        </div>
+
+        {members.length === 0 ? (
+          <div className="text-center py-12">
+            <User className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">No members yet</h3>
+            <p className="text-gray-600 mb-6">
+              Invite team members to collaborate on this organization.
+            </p>
+            {selectedOrg?.isAdmin && (
+              <button
+                onClick={() => setIsInviting(true)}
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Add First Member
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-200">
+            {members.map((member, index) => (
+              <div key={`${member.user_id}-${member.user_email}-${index}`} className="px-6 py-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
+                      <User className="h-5 w-5 text-gray-600" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-gray-900">
+                          {member.user_email || member.user_id || 'Unknown User'}
+                        </span>
+                        {member.is_admin && (
+                          <Crown className="h-4 w-4 text-yellow-500" />
+                        )}
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        {member.actual_email && member.actual_email !== member.user_email && (
+                          <div className="flex items-center gap-1 mb-1">
+                            <Mail className="h-3 w-3" />
+                            <span>{member.actual_email}</span>
+                          </div>
+                        )}
+                        <p>
+                          Joined {
+                            member.joined_at
+                              ? new Date(member.joined_at).toLocaleDateString()
+                              : 'Unknown Date'
+                          }
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {member.is_admin ? (
+                      <span className="text-xs px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full">
+                        Admin
+                      </span>
+                    ) : (
+                      <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded-full">
+                        Member
+                      </span>
+                    )}
+
+                    {/* Remove member button - only show for admins and not for the current user */}
+                    {selectedOrg?.isAdmin &&
+                     member.user_id !== userInfo?.id && (
+                      <button
+                        onClick={() => handleRemoveMember(member.user_id, member.user_email)}
+                        disabled={removingMembers.has(member.user_id)}
+                        className="p-1 text-red-600 hover:text-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Remove member from organization"
+                      >
+                        {removingMembers.has(member.user_id) ? (
+                          <div className="w-4 h-4 animate-spin rounded-full border-2 border-red-600 border-t-transparent" />
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

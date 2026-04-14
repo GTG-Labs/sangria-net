@@ -3,6 +3,7 @@ package dbengine
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -98,6 +99,52 @@ func GetUserPersonalOrgID(ctx context.Context, pool *pgxpool.Pool, userID string
 		userID,
 	).Scan(&orgID)
 	return orgID, err
+}
+
+// GetUserPersonalOrgIDTx returns the organization ID of the user's personal org within a transaction, if one exists.
+func GetUserPersonalOrgIDTx(ctx context.Context, tx pgx.Tx, userID string) (string, error) {
+	var orgID string
+	err := tx.QueryRow(ctx,
+		`SELECT o.id
+		 FROM organizations o
+		 JOIN organization_members om ON om.organization_id = o.id
+		 WHERE om.user_id = $1 AND o.is_personal = true
+		 LIMIT 1`,
+		userID,
+	).Scan(&orgID)
+	return orgID, err
+}
+
+// CreateOrganization creates a new organization and adds the creator as an admin
+func CreateOrganization(ctx context.Context, pool *pgxpool.Pool, creatorUserID, orgName string) (string, error) {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// Create the organization
+	var orgID string
+	err = tx.QueryRow(ctx, `
+		INSERT INTO organizations (name, is_personal, created_at)
+		VALUES ($1, false, NOW())
+		RETURNING id`,
+		orgName).Scan(&orgID)
+	if err != nil {
+		return "", fmt.Errorf("failed to create organization: %w", err)
+	}
+
+	// Add creator as admin to the organization
+	err = AddUserToOrganizationTx(ctx, tx, creatorUserID, orgID, true)
+	if err != nil {
+		return "", fmt.Errorf("failed to add creator to organization: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return "", fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return orgID, nil
 }
 
 // IsAdmin returns true if the given WorkOS user ID has an entry in the admins table.

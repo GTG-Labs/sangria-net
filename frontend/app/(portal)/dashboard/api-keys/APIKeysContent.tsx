@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Copy, Plus, Trash2, AlertCircle } from "lucide-react";
+import { Copy, Plus, Trash2, AlertCircle, Check, X, Users, Crown } from "lucide-react";
 import ArcadeButton from "@/components/ArcadeButton";
+import { useOrganization } from "@/contexts/OrganizationContext";
 
 interface APIKey {
   id: string;
@@ -15,7 +16,9 @@ interface APIKey {
   created_at: string;
 }
 
+
 export default function APIKeysContent() {
+  const { selectedOrg, selectedOrgId, userInfo } = useOrganization();
   const [apiKeys, setApiKeys] = useState<APIKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [createLoading, setCreateLoading] = useState(false);
@@ -25,11 +28,13 @@ export default function APIKeysContent() {
   const [showNewKey, setShowNewKey] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [approvalLoading, setApprovalLoading] = useState<Set<string>>(new Set());
 
   const resetCreateForm = () => {
     setNewKeyName("");
     setShowCreateForm(false);
   };
+
 
   const fetchAPIKeys = async (showLoading = true) => {
     if (showLoading) {
@@ -37,7 +42,8 @@ export default function APIKeysContent() {
     }
 
     try {
-      const response = await fetch("/api/backend/api-keys");
+      const orgParam = selectedOrgId ? `?org_id=${selectedOrgId}` : "";
+      const response = await fetch(`/api/backend/api-keys${orgParam}`);
 
       if (response.ok) {
         const keys = await response.json();
@@ -71,7 +77,8 @@ export default function APIKeysContent() {
     setError(null);
 
     try {
-      const response = await fetch("/api/backend/api-keys", {
+      const orgParam = selectedOrgId ? `?org_id=${selectedOrgId}` : "";
+      const response = await fetch(`/api/backend/merchants${orgParam}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -81,10 +88,11 @@ export default function APIKeysContent() {
         }),
       });
 
-      if (response.ok) {
+      if (response.ok || response.status === 202) {
         const result: APIKey = await response.json();
 
         // The actual API key string is in result.api_key (based on backend response)
+        // This is available for both active (201) and pending (202) keys
         if (result.api_key) {
           setNewKeyResult(result.api_key);
           setShowNewKey(true);
@@ -131,6 +139,58 @@ export default function APIKeysContent() {
     }
   };
 
+  const approveAPIKey = async (keyId: string) => {
+    setApprovalLoading(prev => new Set(prev).add(keyId));
+
+    try {
+      const response = await fetch(`/api/backend/api-keys/${keyId}/approve`, {
+        method: "POST",
+      });
+
+      if (response.ok) {
+        // Refresh the list to show the updated status
+        await fetchAPIKeys(false);
+      } else {
+        const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+        setError(errorData.error || "Failed to approve API key");
+      }
+    } catch {
+      setError("Failed to approve API key");
+    } finally {
+      setApprovalLoading(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(keyId);
+        return newSet;
+      });
+    }
+  };
+
+  const rejectAPIKey = async (keyId: string) => {
+    setApprovalLoading(prev => new Set(prev).add(keyId));
+
+    try {
+      const response = await fetch(`/api/backend/api-keys/${keyId}/reject`, {
+        method: "POST",
+      });
+
+      if (response.ok) {
+        // Refresh the list to show the updated status
+        await fetchAPIKeys(false);
+      } else {
+        const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+        setError(errorData.error || "Failed to reject API key");
+      }
+    } catch {
+      setError("Failed to reject API key");
+    } finally {
+      setApprovalLoading(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(keyId);
+        return newSet;
+      });
+    }
+  };
+
   const copyToClipboard = async (text: string, keyId?: string) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -144,8 +204,20 @@ export default function APIKeysContent() {
   const copyNewKey = () => copyToClipboard(newKeyResult!);
 
   useEffect(() => {
-    fetchAPIKeys();
-  }, []);
+    if (selectedOrgId) {
+      // Reset all form and alert states when switching organizations
+      setShowCreateForm(false);
+      setNewKeyName("");
+      setNewKeyResult(null);
+      setShowNewKey(false);
+      setError(null);
+      setCopiedKey(null);
+      setApprovalLoading(new Set());
+
+      // Fetch API keys for the new organization
+      fetchAPIKeys();
+    }
+  }, [selectedOrgId]);
 
   if (loading) {
     return (
@@ -159,19 +231,57 @@ export default function APIKeysContent() {
 
   return (
     <div className="mx-auto max-w-6xl">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-2xl sm:text-4xl font-semibold tracking-tight text-gray-900">
-            API Keys
-          </h1>
-          <p className="mt-2 text-gray-500">
-            Manage your API keys for authenticating with Sangria services.
-          </p>
+      <div className="flex flex-col gap-4 mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+          <div className="flex-1">
+            <h1 className="text-2xl sm:text-4xl font-semibold tracking-tight text-gray-900">
+              API Keys
+            </h1>
+            <p className="mt-2 text-gray-500">
+              Manage your API keys for authenticating with Sangria services.
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <ArcadeButton onClick={() => setShowCreateForm(true)} size="sm" variant="blue">
+              <Plus className="w-3.5 h-3.5 mr-1.5 inline" />
+              Create API Key
+            </ArcadeButton>
+          </div>
         </div>
-        <ArcadeButton onClick={() => setShowCreateForm(true)} size="sm" variant="blue">
-          <Plus className="w-3.5 h-3.5 mr-1.5 inline" />
-          Create API Key
-        </ArcadeButton>
+
+        {userInfo && selectedOrg && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <Users className="w-4 h-4" />
+              <span>
+                Organization: <strong>{selectedOrg.name}</strong>
+              </span>
+              {selectedOrg.isAdmin && (
+                <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
+                  <Crown className="w-3 h-3 inline mr-1" />
+                  Admin
+                </span>
+              )}
+            </div>
+
+            {/* Info box about API key approval process */}
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-800">
+                {selectedOrg.isAdmin ? (
+                  <>
+                    <strong>Admin privileges:</strong> Your API keys are automatically activated upon creation.
+                    You can also approve or reject pending keys from other team members.
+                  </>
+                ) : (
+                  <>
+                    <strong>Member privileges:</strong> New API keys require admin approval before they become active.
+                    Contact your organization admin to approve pending keys.
+                  </>
+                )}
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       {error && (
@@ -357,15 +467,53 @@ export default function APIKeysContent() {
                       {new Date(key.created_at).toLocaleDateString()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      {key.status === 'active' && (
-                        <button
-                          onClick={() => revokeAPIKey(key.id)}
-                          className="text-red-600 hover:text-red-800"
-                          title="Revoke this API key"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
+                      <div className="flex items-center justify-end gap-2">
+                        {/* Admin approval actions for pending keys */}
+                        {key.status === 'pending' && selectedOrg?.isAdmin && (
+                          <>
+                            <button
+                              onClick={() => approveAPIKey(key.id)}
+                              disabled={approvalLoading.has(key.id)}
+                              className="p-1 text-green-600 hover:text-green-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                              title="Approve this API key"
+                            >
+                              {approvalLoading.has(key.id) ? (
+                                <div className="w-4 h-4 animate-spin rounded-full border-2 border-green-600 border-t-transparent" />
+                              ) : (
+                                <Check className="w-4 h-4" />
+                              )}
+                            </button>
+                            <button
+                              onClick={() => rejectAPIKey(key.id)}
+                              disabled={approvalLoading.has(key.id)}
+                              className="p-1 text-red-600 hover:text-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                              title="Reject this API key"
+                            >
+                              {approvalLoading.has(key.id) ? (
+                                <div className="w-4 h-4 animate-spin rounded-full border-2 border-red-600 border-t-transparent" />
+                              ) : (
+                                <X className="w-4 h-4" />
+                              )}
+                            </button>
+                          </>
+                        )}
+
+                        {/* Revoke action for active keys */}
+                        {key.status === 'active' && (
+                          <button
+                            onClick={() => revokeAPIKey(key.id)}
+                            className="p-1 text-red-600 hover:text-red-800"
+                            title="Revoke this API key"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+
+                        {/* Show status message for pending keys (non-admin users) */}
+                        {key.status === 'pending' && !selectedOrg?.isAdmin && (
+                          <span className="text-xs text-yellow-600 font-medium">Awaiting approval</span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

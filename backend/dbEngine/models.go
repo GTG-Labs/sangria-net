@@ -57,6 +57,31 @@ type OrganizationMember struct {
 	OrganizationID string    `json:"organization_id"`
 	IsAdmin        bool      `json:"is_admin"`
 	JoinedAt       time.Time `json:"joined_at"`
+	UserEmail      string    `json:"user_email"` // Contains the display name (FirstName LastName) or email as fallback
+	ActualEmail    string    `json:"actual_email,omitempty"` // The actual email address from WorkOS
+}
+
+type InvitationStatus string
+
+const (
+	InvitationStatusPending  InvitationStatus = "pending"
+	InvitationStatusAccepted InvitationStatus = "accepted"
+	InvitationStatusDeclined InvitationStatus = "declined"
+	InvitationStatusExpired  InvitationStatus = "expired"
+)
+
+type OrganizationInvitation struct {
+	ID              string            `json:"id"`
+	OrganizationID  string            `json:"organization_id"`
+	InviterUserID   string            `json:"inviter_user_id"`
+	InviteeEmail    string            `json:"invitee_email"`
+	InviteeUserID   *string           `json:"invitee_user_id"`
+	Status          InvitationStatus  `json:"status"`
+	Message         *string           `json:"message"`
+	InvitationToken string            `json:"invitation_token"`
+	ExpiresAt       time.Time         `json:"expires_at"`
+	CreatedAt       time.Time         `json:"created_at"`
+	AcceptedAt      *time.Time        `json:"accepted_at"`
 }
 
 type TransactionStatus string
@@ -222,27 +247,4 @@ const (
 	RequestStatusCanceled RequestStatus = "canceled"
 )
 
-type InvitationStatus string
-
-const (
-	InvitationStatusPending  InvitationStatus = "pending"
-	InvitationStatusAccepted InvitationStatus = "accepted"
-	InvitationStatusDeclined InvitationStatus = "declined"
-	InvitationStatusExpired  InvitationStatus = "expired"
-)
-
-type OrganizationInvitation struct {
-	ID               string           `json:"id"`
-	OrganizationID   string           `json:"organization_id"`
-	InviterUserID    string           `json:"inviter_user_id"`
-	InviteeEmail     string           `json:"invitee_email"`
-	InviteeUserID    *string          `json:"invitee_user_id"`
-	Status           InvitationStatus `json:"status"`
-	Message          *string          `json:"message"`
-	InvitationToken  string           `json:"invitation_token"`
-	ExpiresAt        time.Time        `json:"expires_at"`
-	CreatedAt        time.Time        `json:"created_at"`
-	AcceptedAt       *time.Time       `json:"accepted_at"`
-	DeclinedAt       *time.Time       `json:"declined_at"`
-}
 

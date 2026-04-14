@@ -187,6 +187,13 @@ func CreateUser(pool *pgxpool.Pool) fiber.Handler {
 			return c.Status(500).JSON(fiber.Map{"error": "failed to commit transaction"})
 		}
 
+		// Step 3: Process any accepted invitations for this user's email
+		err = dbengine.ProcessAcceptedInvitations(c.Context(), pool, user.ID, user.Email)
+		if err != nil {
+			slog.Error("process accepted invitations", "user_id", user.ID, "email", user.Email, "error", err)
+			// Don't fail the user creation, just log the error
+		}
+
 		return c.Status(201).JSON(u)
 	}
 }
@@ -375,6 +382,56 @@ func GetOrganizationMembers(pool *pgxpool.Pool) fiber.Handler {
 		}
 
 		isOrgMember := false
+		for _, membership := range memberships {
+			if membership.OrganizationID == orgID {
+				isOrgMember = true
+				break
+			}
+		}
+
+		if !isOrgMember {
+			return c.Status(403).JSON(fiber.Map{"error": "access denied - not a member of this organization"})
+		}
+
+		// All organization members can view other members
+		// (Previously only admins could view, but this has been relaxed for better team transparency)
+
+		// Get organization members
+		orgMembers, err := dbengine.ListOrganizationMembers(c.Context(), pool, orgID)
+		if err != nil {
+			slog.Error("list organization members", "org_id", orgID, "error", err)
+			return c.Status(500).JSON(fiber.Map{"error": "failed to fetch organization members"})
+		}
+
+		return c.JSON(fiber.Map{
+			"members": orgMembers,
+		})
+	}
+}
+
+// RemoveOrganizationMember handles DELETE /internal/organizations/:id/members/:userId endpoint
+// Only admins can remove members from the organization
+func RemoveOrganizationMember(pool *pgxpool.Pool) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		user, ok := c.Locals("workos_user").(WorkOSUser)
+		if !ok {
+			return c.Status(500).JSON(fiber.Map{"error": "internal server error"})
+		}
+
+		orgID := c.Params("id")
+		memberUserID := c.Params("userId")
+		if orgID == "" || memberUserID == "" {
+			return c.Status(400).JSON(fiber.Map{"error": "organization ID and user ID are required"})
+		}
+
+		// Verify the requesting user is a member of this organization
+		memberships, err := dbengine.GetUserOrganizations(c.Context(), pool, user.ID)
+		if err != nil {
+			slog.Error("get user organizations", "user_id", user.ID, "error", err)
+			return c.Status(500).JSON(fiber.Map{"error": "failed to verify permissions"})
+		}
+
+		isOrgMember := false
 		isOrgAdmin := false
 		for _, membership := range memberships {
 			if membership.OrganizationID == orgID {
@@ -388,20 +445,31 @@ func GetOrganizationMembers(pool *pgxpool.Pool) fiber.Handler {
 			return c.Status(403).JSON(fiber.Map{"error": "access denied - not a member of this organization"})
 		}
 
-		// Only admins can view organization members
+		// Only admins can remove members
 		if !isOrgAdmin {
-			return c.Status(403).JSON(fiber.Map{"error": "admin access required to view organization members"})
+			return c.Status(403).JSON(fiber.Map{"error": "admin access required to remove members"})
 		}
 
-		// Get organization members
-		orgMembers, err := dbengine.ListOrganizationMembers(c.Context(), pool, orgID)
-		if err != nil {
-			slog.Error("list organization members", "org_id", orgID, "error", err)
-			return c.Status(500).JSON(fiber.Map{"error": "failed to fetch organization members"})
+		// Prevent removing yourself (to avoid locking out all admins)
+		if memberUserID == user.ID {
+			return c.Status(400).JSON(fiber.Map{"error": "cannot remove yourself from the organization"})
 		}
+
+		// Remove the member from the organization
+		err = dbengine.RemoveUserFromOrganization(c.Context(), pool, memberUserID, orgID)
+		if err != nil {
+			slog.Error("remove user from organization", "user_id", memberUserID, "org_id", orgID, "admin_user", user.ID, "error", err)
+			return c.Status(500).JSON(fiber.Map{"error": "failed to remove member from organization"})
+		}
+
+		slog.Info("Member removed from organization",
+			"removed_user_id", memberUserID,
+			"org_id", orgID,
+			"admin_user", user.ID,
+		)
 
 		return c.JSON(fiber.Map{
-			"members": orgMembers,
+			"message": "Member removed from organization successfully",
 		})
 	}
 }

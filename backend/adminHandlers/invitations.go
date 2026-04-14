@@ -1,0 +1,428 @@
+package adminHandlers
+
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+	"log/slog"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/gofiber/fiber/v3"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/sendgrid/sendgrid-go"
+	"github.com/sendgrid/sendgrid-go/helpers/mail"
+
+	"sangria/backend/auth"
+	dbengine "sangria/backend/dbEngine"
+)
+
+// generateSecureToken generates a cryptographically secure random token
+func generateSecureToken() (string, error) {
+	bytes := make([]byte, 32) // 256-bit token
+	_, err := rand.Read(bytes)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate secure token: %w", err)
+	}
+	return hex.EncodeToString(bytes), nil
+}
+
+// sendInvitationEmail sends a beautiful invitation email via SendGrid
+func sendInvitationEmail(inviteeEmail, inviterName, orgName, invitationURL, customMessage string) error {
+	// Get SendGrid API key from environment
+	apiKey := os.Getenv("SENDGRID_API_KEY")
+	if apiKey == "" {
+		return fmt.Errorf("SENDGRID_API_KEY environment variable not set")
+	}
+
+	// Create SendGrid client
+	client := sendgrid.NewSendClient(apiKey)
+
+	// Set up sender (you should update this to your verified sender email)
+	fromEmail := os.Getenv("SENDGRID_FROM_EMAIL")
+	if fromEmail == "" {
+		fromEmail = "noreply@yourdomain.com" // Update this to your domain
+	}
+	from := mail.NewEmail("Sangria Team", fromEmail)
+
+	// Set up recipient
+	to := mail.NewEmail("", inviteeEmail)
+
+	// Create email subject
+	subject := fmt.Sprintf("You're invited to join %s", orgName)
+
+	// Create beautiful HTML email template
+	htmlContent := fmt.Sprintf(`
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Join %s</title>
+</head>
+<body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background: linear-gradient(135deg, #667eea 0%%, #764ba2 100%%); padding: 40px 20px; text-align: center; border-radius: 10px 10px 0 0;">
+        <h1 style="color: white; margin: 0; font-size: 28px;">🎉 You're Invited!</h1>
+        <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 18px;">Join %s and start collaborating</p>
+    </div>
+
+    <div style="background: white; padding: 40px 30px; border: 1px solid #e1e5e9; border-top: none; border-radius: 0 0 10px 10px;">
+        <p style="font-size: 16px; margin-bottom: 20px;">Hi there! 👋</p>
+
+        <p style="font-size: 16px; margin-bottom: 20px;">
+            <strong>%s</strong> has invited you to join <strong>%s</strong> on Sangria.
+        </p>
+
+        %s
+
+        <div style="text-align: center; margin: 40px 0;">
+            <a href="%s"
+               style="background: linear-gradient(135deg, #667eea 0%%, #764ba2 100%%);
+                      color: white;
+                      text-decoration: none;
+                      padding: 15px 30px;
+                      border-radius: 8px;
+                      font-size: 16px;
+                      font-weight: 600;
+                      display: inline-block;
+                      box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);">
+                🚀 Accept Invitation
+            </a>
+        </div>
+
+        <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; border-left: 4px solid #667eea; margin: 30px 0;">
+            <p style="margin: 0; font-size: 14px; color: #666;">
+                <strong>What happens next?</strong><br>
+                1. Click the button above to visit Sangria<br>
+                2. Sign in with your email address<br>
+                3. You'll be automatically added to the organization
+            </p>
+        </div>
+
+        <div style="margin-top: 40px; padding-top: 30px; border-top: 1px solid #e1e5e9;">
+            <p style="font-size: 14px; color: #666; margin: 0;">
+                This invitation will expire in 7 days. If you have any questions, please contact the person who invited you.
+            </p>
+        </div>
+    </div>
+
+    <div style="text-align: center; margin-top: 30px;">
+        <p style="font-size: 12px; color: #999; margin: 0;">
+            Powered by Sangria • Built for teams that ship fast
+        </p>
+    </div>
+</body>
+</html>`,
+		orgName, orgName, inviterName, orgName,
+		func() string {
+			if customMessage != "" {
+				return fmt.Sprintf(`<div style="background: #e7f3ff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #2196F3;">
+					<p style="margin: 0; font-style: italic; color: #1565C0;">"%s"</p>
+				</div>`, customMessage)
+			}
+			return ""
+		}(),
+		invitationURL)
+
+	// Create plain text version
+	plainContent := fmt.Sprintf(`You're invited to join %s!
+
+Hi there!
+
+%s has invited you to join %s on Sangria.
+
+%s
+
+Accept your invitation by visiting: %s
+
+What happens next?
+1. Click the link above to visit Sangria
+2. Sign in with your email address
+3. You'll be automatically added to the organization
+
+This invitation will expire in 7 days.
+
+---
+Powered by Sangria • Built for teams that ship fast`,
+		orgName, inviterName, orgName,
+		func() string {
+			if customMessage != "" {
+				return fmt.Sprintf("Personal message: \"%s\"\n\n", customMessage)
+			}
+			return ""
+		}(),
+		invitationURL)
+
+	// Create the email message
+	message := mail.NewSingleEmail(from, subject, to, plainContent, htmlContent)
+
+	// Send the email
+	response, err := client.Send(message)
+	if err != nil {
+		return fmt.Errorf("failed to send email: %w", err)
+	}
+
+	if response.StatusCode >= 400 {
+		return fmt.Errorf("sendgrid API error: status %d, body: %s", response.StatusCode, response.Body)
+	}
+
+	return nil
+}
+
+// CreateOrganizationInvitation handles POST /organizations/:id/invitations
+func CreateOrganizationInvitation(pool *pgxpool.Pool) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		// Get authenticated user from middleware context
+		user, ok := c.Locals("workos_user").(auth.WorkOSUser)
+		if !ok {
+			return c.Status(500).JSON(fiber.Map{"error": "internal server error"})
+		}
+
+		orgID := c.Params("id")
+		if orgID == "" {
+			return c.Status(400).JSON(fiber.Map{"error": "organization ID is required"})
+		}
+
+		// Parse request body
+		var req struct {
+			Email   string  `json:"email"`
+			Message *string `json:"message"`
+		}
+		if err := c.Bind().JSON(&req); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid request body"})
+		}
+
+		// Validate email format
+		req.Email = strings.TrimSpace(strings.ToLower(req.Email))
+		if req.Email == "" {
+			return c.Status(400).JSON(fiber.Map{"error": "email is required"})
+		}
+
+		if !isValidEmail(req.Email) {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid email format"})
+		}
+
+		// Verify the requesting user is an admin of this organization
+		memberships, err := dbengine.GetUserOrganizations(c.Context(), pool, user.ID)
+		if err != nil {
+			slog.Error("get user organizations", "user_id", user.ID, "error", err)
+			return c.Status(500).JSON(fiber.Map{"error": "failed to verify permissions"})
+		}
+
+		isOrgAdmin := false
+		for _, membership := range memberships {
+			if membership.OrganizationID == orgID && membership.IsAdmin {
+				isOrgAdmin = true
+				break
+			}
+		}
+
+		if !isOrgAdmin {
+			return c.Status(403).JSON(fiber.Map{"error": "admin access required to invite members"})
+		}
+
+		// Generate secure invitation token
+		invitationToken, err := generateSecureToken()
+		if err != nil {
+			slog.Error("generate invitation token", "error", err)
+			return c.Status(500).JSON(fiber.Map{"error": "failed to generate invitation token"})
+		}
+
+		// Create invitation in database
+		message := ""
+		if req.Message != nil {
+			message = *req.Message
+		}
+
+		invitationID, err := dbengine.CreateInvitation(c.Context(), pool, orgID, user.ID, req.Email, message, invitationToken)
+		if err != nil {
+			slog.Error("create invitation", "org_id", orgID, "user_id", user.ID, "email", req.Email, "error", err)
+
+			// Handle duplicate invitation errors
+			if strings.Contains(err.Error(), "duplicate") || strings.Contains(err.Error(), "unique") {
+				return c.Status(400).JSON(fiber.Map{"error": "Invitation already exists for this email"})
+			}
+
+			return c.Status(500).JSON(fiber.Map{"error": "failed to create invitation"})
+		}
+
+		// Get organization name for the email
+		var orgName string
+		err = pool.QueryRow(c.Context(),
+			`SELECT name FROM organizations WHERE id = $1`,
+			orgID,
+		).Scan(&orgName)
+		if err != nil {
+			slog.Error("get organization name", "org_id", orgID, "error", err)
+			orgName = "Unknown Organization" // fallback
+		}
+
+		// Get inviter's name/email for the email
+		var inviterName string
+		err = pool.QueryRow(c.Context(),
+			`SELECT owner FROM users WHERE workos_id = $1`,
+			user.ID,
+		).Scan(&inviterName)
+		if err != nil {
+			slog.Error("get inviter name", "user_id", user.ID, "error", err)
+			inviterName = "A team member" // fallback
+		}
+
+		// Build invitation acceptance URL that includes our token
+		baseURL := os.Getenv("FRONTEND_URL")
+		if baseURL == "" {
+			baseURL = "http://localhost:3000" // fallback for development
+		}
+		invitationURL := fmt.Sprintf("%s/accept-invitation?token=%s", baseURL, invitationToken)
+
+		// Send beautiful invitation email via SendGrid
+		customMessage := ""
+		if req.Message != nil {
+			customMessage = *req.Message
+		}
+
+		err = sendInvitationEmail(req.Email, inviterName, orgName, invitationURL, customMessage)
+		if err != nil {
+			slog.Error("send invitation email", "org_id", orgID, "user_id", user.ID, "email", req.Email, "error", err)
+
+			// Fallback: log the invitation URL for manual sending
+			slog.Info("📧 EMAIL FAILED - Send this invitation URL manually",
+				"invitation_id", invitationID,
+				"email", req.Email,
+				"org_name", orgName,
+				"invitation_url", invitationURL,
+				"error", err.Error(),
+			)
+
+			return c.Status(500).JSON(fiber.Map{
+				"error": "failed to send invitation email - check SendGrid configuration",
+				"invitation_url": invitationURL, // Provide URL as fallback
+			})
+		}
+
+		slog.Info("✅ Beautiful invitation email sent successfully",
+			"invitation_id", invitationID,
+			"email", req.Email,
+			"org_name", orgName,
+			"inviter", inviterName,
+			"invitation_url", invitationURL,
+		)
+
+		return c.Status(201).JSON(fiber.Map{
+			"message":        "Beautiful invitation email sent successfully! 🎉",
+			"invitation_id":  invitationID,
+			"email":          req.Email,
+			"organization":   orgName,
+			"provider":       "sendgrid",
+		})
+	}
+}
+
+// isValidEmail performs basic email validation
+func isValidEmail(email string) bool {
+	// Basic email validation - contains @ and at least one dot after @
+	if email == "" {
+		return false
+	}
+
+	atIndex := strings.Index(email, "@")
+	if atIndex == -1 || atIndex == 0 || atIndex == len(email)-1 {
+		return false
+	}
+
+	// Check for at least one dot after @
+	domainPart := email[atIndex+1:]
+	if !strings.Contains(domainPart, ".") {
+		return false
+	}
+
+	// Check for valid characters (basic check)
+	validChars := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.@_+-"
+	for _, char := range email {
+		found := false
+		for _, valid := range validChars {
+			if char == valid {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+
+	return true
+}
+
+// AcceptOrganizationInvitation handles POST /accept-invitation
+// NO AUTH REQUIRED - the secure token is the authentication
+func AcceptOrganizationInvitation(pool *pgxpool.Pool) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		// Parse request body - get user email and invitation token
+		var req struct {
+			Token string `json:"token"`
+			Email string `json:"email"`
+		}
+		if err := c.Bind().JSON(&req); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid request body"})
+		}
+
+		if req.Token == "" {
+			return c.Status(400).JSON(fiber.Map{"error": "invitation token is required"})
+		}
+
+		if req.Email == "" {
+			return c.Status(400).JSON(fiber.Map{"error": "email is required"})
+		}
+
+		// Validate email format
+		req.Email = strings.TrimSpace(strings.ToLower(req.Email))
+		if !isValidEmail(req.Email) {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid email format"})
+		}
+
+		// Get invitation details
+		invitation, err := dbengine.GetInvitationByToken(c.Context(), pool, req.Token)
+		if err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				return c.Status(404).JSON(fiber.Map{"error": "invitation not found or expired"})
+			}
+			slog.Error("get invitation by token", "token", req.Token, "error", err)
+			return c.Status(500).JSON(fiber.Map{"error": "failed to get invitation"})
+		}
+
+		// Verify the email matches the invitation
+		if invitation.InviteeEmail != req.Email {
+			return c.Status(403).JSON(fiber.Map{"error": "email does not match invitation"})
+		}
+
+		// Check if invitation is still valid
+		if invitation.Status != dbengine.InvitationStatusPending {
+			return c.Status(400).JSON(fiber.Map{"error": "invitation is no longer pending"})
+		}
+
+		// Check if invitation has expired
+		if invitation.ExpiresAt.Before(time.Now()) {
+			return c.Status(400).JSON(fiber.Map{"error": "invitation has expired"})
+		}
+
+		// Just mark the invitation as accepted - don't create user yet
+		err = dbengine.MarkInvitationAccepted(c.Context(), pool, req.Token)
+		if err != nil {
+			slog.Error("mark invitation accepted", "token", req.Token, "error", err)
+			return c.Status(500).JSON(fiber.Map{"error": "failed to accept invitation"})
+		}
+
+		slog.Info("Invitation accepted successfully - user will be created when they sign in with WorkOS",
+			"invitation_id", invitation.ID,
+			"email", req.Email,
+			"organization_id", invitation.OrganizationID,
+		)
+
+		return c.Status(200).JSON(fiber.Map{
+			"message":         "Invitation accepted successfully! You'll be added to the organization when you sign in.",
+			"organization_id": invitation.OrganizationID,
+		})
+	}
+}

@@ -2,314 +2,180 @@ package dbengine
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"strings"
-	"time"
+	"log/slog"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// ErrRequestNotFound is returned when a request does not exist.
-var ErrRequestNotFound = errors.New("request not found")
-
-// ErrInvalidRequestStatus is returned when trying to perform an invalid status transition.
-var ErrInvalidRequestStatus = errors.New("invalid request status transition")
-
-// ErrInvitationNotFound is returned when an invitation does not exist.
-var ErrInvitationNotFound = errors.New("invitation not found")
-
-// ErrDuplicateInvitation is returned when a duplicate pending invitation exists.
-var ErrDuplicateInvitation = errors.New("duplicate pending invitation exists")
-
-// ErrInvalidToken is returned when an invitation token is invalid or expired.
-var ErrInvalidToken = errors.New("invalid or expired invitation token")
+// ErrUserNotFound is returned when a user does not exist.
+var ErrUserNotFound = errors.New("user not found")
 
 // ---------------------------------------------------------------------------
-// Organization Invitations
-// TODO: HTTP handlers and routes for these DB functions have not been implemented yet.
-// See routes/jwt.go for the planned endpoints.
+// Organization Invitations - Database Functions
 // ---------------------------------------------------------------------------
 
-// generateInvitationToken creates a cryptographically secure random token for invitations.
-func generateInvitationToken() (string, error) {
-	bytes := make([]byte, 32)
-	if _, err := rand.Read(bytes); err != nil {
-		return "", fmt.Errorf("failed to generate random token: %w", err)
-	}
-	return hex.EncodeToString(bytes), nil
-}
-
-// CreateOrganizationInvitation creates a new invitation for an email to join an organization.
-// Prevents duplicate pending invitations to the same email for the same organization.
-func CreateOrganizationInvitation(ctx context.Context, pool *pgxpool.Pool, organizationID, inviterUserID, inviteeEmail string, message *string) (OrganizationInvitation, error) {
-	var invitation OrganizationInvitation
-
-	// Generate secure invitation token
-	token, err := generateInvitationToken()
-	if err != nil {
-		return OrganizationInvitation{}, fmt.Errorf("failed to generate invitation token: %w", err)
-	}
-
-	// Set expiration to 7 days from now
-	expiresAt := time.Now().Add(7 * 24 * time.Hour)
-
-	err = pool.QueryRow(ctx, `
-		INSERT INTO organization_invitations (organization_id, inviter_user_id, invitee_email, message, invitation_token, expires_at)
-		VALUES ($1, $2, LOWER($3), $4, $5, $6)
-		RETURNING id, organization_id, inviter_user_id, invitee_email, invitee_user_id, status,
-		          message, invitation_token, expires_at, created_at, accepted_at, declined_at`,
-		organizationID, inviterUserID, inviteeEmail, message, token, expiresAt,
-	).Scan(
-		&invitation.ID, &invitation.OrganizationID, &invitation.InviterUserID, &invitation.InviteeEmail,
-		&invitation.InviteeUserID, &invitation.Status, &invitation.Message, &invitation.InvitationToken,
-		&invitation.ExpiresAt, &invitation.CreatedAt, &invitation.AcceptedAt, &invitation.DeclinedAt,
-	)
-
-	if err != nil {
-		// Check for unique constraint violation (duplicate pending invitation)
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			return OrganizationInvitation{}, ErrDuplicateInvitation
-		}
-		return OrganizationInvitation{}, fmt.Errorf("failed to create organization invitation: %w", err)
-	}
-
-	return invitation, nil
-}
-
-// GetOrganizationInvitationByToken retrieves an invitation by its token.
-func GetOrganizationInvitationByToken(ctx context.Context, pool *pgxpool.Pool, token string) (OrganizationInvitation, error) {
-	var invitation OrganizationInvitation
-
+// CreateInvitation creates a new organization invitation with a secure token
+func CreateInvitation(ctx context.Context, pool *pgxpool.Pool, orgID, inviterUserID, inviteeEmail, message, token string) (string, error) {
+	var invitationID string
 	err := pool.QueryRow(ctx, `
-		SELECT id, organization_id, inviter_user_id, invitee_email, invitee_user_id, status,
-		       message, invitation_token, expires_at, created_at, accepted_at, declined_at
-		FROM organization_invitations WHERE invitation_token = $1`,
+		INSERT INTO organization_invitations
+		(organization_id, inviter_user_id, invitee_email, message, invitation_token, expires_at)
+		VALUES ($1, $2, $3, $4, $5, NOW() + INTERVAL '7 days')
+		RETURNING id`,
+		orgID, inviterUserID, inviteeEmail, message, token,
+	).Scan(&invitationID)
+
+	if err != nil {
+		return "", fmt.Errorf("failed to create invitation: %w", err)
+	}
+	return invitationID, nil
+}
+
+// GetInvitationByToken retrieves an invitation by its token
+func GetInvitationByToken(ctx context.Context, pool *pgxpool.Pool, token string) (*OrganizationInvitation, error) {
+	var invitation OrganizationInvitation
+	err := pool.QueryRow(ctx, `
+		SELECT id, organization_id, inviter_user_id, invitee_email, invitee_user_id,
+		       status, message, invitation_token, expires_at, created_at, accepted_at
+		FROM organization_invitations
+		WHERE invitation_token = $1`,
 		token,
 	).Scan(
-		&invitation.ID, &invitation.OrganizationID, &invitation.InviterUserID, &invitation.InviteeEmail,
-		&invitation.InviteeUserID, &invitation.Status, &invitation.Message, &invitation.InvitationToken,
-		&invitation.ExpiresAt, &invitation.CreatedAt, &invitation.AcceptedAt, &invitation.DeclinedAt,
+		&invitation.ID, &invitation.OrganizationID, &invitation.InviterUserID,
+		&invitation.InviteeEmail, &invitation.InviteeUserID, &invitation.Status,
+		&invitation.Message, &invitation.InvitationToken, &invitation.ExpiresAt,
+		&invitation.CreatedAt, &invitation.AcceptedAt,
 	)
 
-	if errors.Is(err, pgx.ErrNoRows) {
-		return OrganizationInvitation{}, ErrInvitationNotFound
-	}
 	if err != nil {
-		return OrganizationInvitation{}, fmt.Errorf("fetching organization invitation by token: %w", err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("invitation not found")
+		}
+		return nil, fmt.Errorf("failed to get invitation: %w", err)
 	}
-
-	return invitation, nil
+	return &invitation, nil
 }
 
-// GetOrganizationInvitation retrieves an invitation by its ID.
-func GetOrganizationInvitation(ctx context.Context, pool *pgxpool.Pool, invitationID string) (OrganizationInvitation, error) {
-	var invitation OrganizationInvitation
-
-	err := pool.QueryRow(ctx, `
-		SELECT id, organization_id, inviter_user_id, invitee_email, invitee_user_id, status,
-		       message, invitation_token, expires_at, created_at, accepted_at, declined_at
-		FROM organization_invitations WHERE id = $1`,
-		invitationID,
-	).Scan(
-		&invitation.ID, &invitation.OrganizationID, &invitation.InviterUserID, &invitation.InviteeEmail,
-		&invitation.InviteeUserID, &invitation.Status, &invitation.Message, &invitation.InvitationToken,
-		&invitation.ExpiresAt, &invitation.CreatedAt, &invitation.AcceptedAt, &invitation.DeclinedAt,
+// MarkInvitationAccepted marks an invitation as accepted without creating a user
+func MarkInvitationAccepted(ctx context.Context, pool *pgxpool.Pool, token string) error {
+	_, err := pool.Exec(ctx, `
+		UPDATE organization_invitations
+		SET status = 'accepted', accepted_at = NOW()
+		WHERE invitation_token = $1 AND status = 'pending'`,
+		token,
 	)
 
-	if errors.Is(err, pgx.ErrNoRows) {
-		return OrganizationInvitation{}, ErrInvitationNotFound
-	}
 	if err != nil {
-		return OrganizationInvitation{}, fmt.Errorf("fetching organization invitation by ID: %w", err)
+		return fmt.Errorf("failed to mark invitation as accepted: %w", err)
 	}
 
-	return invitation, nil
+	return nil
 }
 
-// ListPendingInvitationsForOrganization returns all pending invitations for an organization.
-func ListPendingInvitationsForOrganization(ctx context.Context, pool *pgxpool.Pool, organizationID string) ([]OrganizationInvitation, error) {
+// ProcessAcceptedInvitations checks for accepted invitations for this user and adds them to organizations
+func ProcessAcceptedInvitations(ctx context.Context, pool *pgxpool.Pool, userID, userEmail string) error {
+	// Find all accepted invitations for this email that haven't been processed
 	rows, err := pool.Query(ctx, `
-		SELECT id, organization_id, inviter_user_id, invitee_email, invitee_user_id, status,
-		       message, invitation_token, expires_at, created_at, accepted_at, declined_at
+		SELECT organization_id, id
 		FROM organization_invitations
-		WHERE organization_id = $1 AND status = 'pending' AND expires_at > NOW()
-		ORDER BY created_at ASC`,
+		WHERE invitee_email = $1 AND status = 'accepted' AND invitee_user_id IS NULL`,
+		userEmail,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to query accepted invitations: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var orgID, invitationID string
+		if err := rows.Scan(&orgID, &invitationID); err != nil {
+			return fmt.Errorf("failed to scan invitation: %w", err)
+		}
+
+		// Add user to organization
+		err = AddUserToOrganization(ctx, pool, userID, orgID, false)
+		if err != nil {
+			return fmt.Errorf("failed to add user to organization %s: %w", orgID, err)
+		}
+
+		// Mark invitation as fully processed
+		_, err = pool.Exec(ctx, `
+			UPDATE organization_invitations
+			SET invitee_user_id = $1
+			WHERE id = $2`,
+			userID, invitationID,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to update invitation %s: %w", invitationID, err)
+		}
+
+		slog.Info("Processed accepted invitation",
+			"user_id", userID,
+			"email", userEmail,
+			"organization_id", orgID,
+			"invitation_id", invitationID,
+		)
+	}
+
+	return nil
+}
+
+
+
+
+// ---------------------------------------------------------------------------
+// Organization Member Management Functions
+// ---------------------------------------------------------------------------
+
+// ListOrganizationMembers returns all members of an organization.
+func ListOrganizationMembers(ctx context.Context, pool *pgxpool.Pool, organizationID string) ([]OrganizationMember, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT om.user_id, om.organization_id, om.is_admin, om.joined_at, u.owner
+		FROM organization_members om
+		JOIN users u ON u.workos_id = om.user_id
+		WHERE om.organization_id = $1
+		ORDER BY om.joined_at DESC`,
 		organizationID,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query pending invitations: %w", err)
+		return nil, fmt.Errorf("failed to query organization members: %w", err)
 	}
 	defer rows.Close()
 
-	var invitations []OrganizationInvitation
+	var members []OrganizationMember
 	for rows.Next() {
-		var invitation OrganizationInvitation
+		var member OrganizationMember
 		if err := rows.Scan(
-			&invitation.ID, &invitation.OrganizationID, &invitation.InviterUserID, &invitation.InviteeEmail,
-			&invitation.InviteeUserID, &invitation.Status, &invitation.Message, &invitation.InvitationToken,
-			&invitation.ExpiresAt, &invitation.CreatedAt, &invitation.AcceptedAt, &invitation.DeclinedAt,
+			&member.UserID, &member.OrganizationID, &member.IsAdmin, &member.JoinedAt, &member.UserEmail,
 		); err != nil {
-			return nil, fmt.Errorf("failed to scan invitation: %w", err)
+			return nil, fmt.Errorf("failed to scan organization member: %w", err)
 		}
-		invitations = append(invitations, invitation)
+		members = append(members, member)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("querying organization invitations: %w", err)
+		return nil, fmt.Errorf("querying organization members: %w", err)
 	}
-	return invitations, nil
+	return members, nil
 }
 
-// GetUserInvitations returns all invitations for a specific user email.
-func GetUserInvitations(ctx context.Context, pool *pgxpool.Pool, email string) ([]OrganizationInvitation, error) {
-	rows, err := pool.Query(ctx, `
-		SELECT id, organization_id, inviter_user_id, invitee_email, invitee_user_id, status,
-		       message, invitation_token, expires_at, created_at, accepted_at, declined_at
-		FROM organization_invitations
-		WHERE LOWER(invitee_email) = LOWER($1)
-		ORDER BY created_at DESC`,
-		email,
+// RemoveUserFromOrganization removes a user from an organization.
+func RemoveUserFromOrganization(ctx context.Context, pool *pgxpool.Pool, userID, organizationID string) error {
+	result, err := pool.Exec(ctx,
+		`DELETE FROM organization_members WHERE user_id = $1 AND organization_id = $2`,
+		userID, organizationID,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query user invitations: %w", err)
-	}
-	defer rows.Close()
-
-	var invitations []OrganizationInvitation
-	for rows.Next() {
-		var invitation OrganizationInvitation
-		if err := rows.Scan(
-			&invitation.ID, &invitation.OrganizationID, &invitation.InviterUserID, &invitation.InviteeEmail,
-			&invitation.InviteeUserID, &invitation.Status, &invitation.Message, &invitation.InvitationToken,
-			&invitation.ExpiresAt, &invitation.CreatedAt, &invitation.AcceptedAt, &invitation.DeclinedAt,
-		); err != nil {
-			return nil, fmt.Errorf("failed to scan invitation: %w", err)
-		}
-		invitations = append(invitations, invitation)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("querying organization invitations: %w", err)
-	}
-	return invitations, nil
-}
-
-// AcceptInvitation accepts a pending invitation and adds the user to the organization.
-// Verifies that the user's email matches the invitation's target email.
-func AcceptInvitation(ctx context.Context, pool *pgxpool.Pool, token, userID, userEmail string) error {
-	tx, err := pool.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer tx.Rollback(ctx)
-
-	// Get the invitation details and lock it
-	var invitation OrganizationInvitation
-	err = tx.QueryRow(ctx, `
-		SELECT id, organization_id, invitee_email, status, expires_at
-		FROM organization_invitations
-		WHERE invitation_token = $1 FOR UPDATE`,
-		token,
-	).Scan(&invitation.ID, &invitation.OrganizationID, &invitation.InviteeEmail, &invitation.Status, &invitation.ExpiresAt)
-
-	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrInvalidToken
-	}
-	if err != nil {
-		return fmt.Errorf("failed to lock invitation: %w", err)
-	}
-
-	// Check if invitation is still valid
-	if invitation.Status != InvitationStatusPending {
-		return ErrInvalidToken
-	}
-	if time.Now().After(invitation.ExpiresAt) {
-		return ErrInvalidToken
-	}
-
-	// Verify that the user's email matches the invitation target email (case-insensitive)
-	if !strings.EqualFold(userEmail, invitation.InviteeEmail) {
-		return ErrInvalidToken
-	}
-
-	// Add user to organization as non-admin member
-	err = AddUserToOrganizationTx(ctx, tx, userID, invitation.OrganizationID, false)
-	if err != nil {
-		return fmt.Errorf("failed to add user to organization: %w", err)
-	}
-
-	// Update invitation status
-	_, err = tx.Exec(ctx, `
-		UPDATE organization_invitations
-		SET status = 'accepted', invitee_user_id = $1, accepted_at = NOW()
-		WHERE invitation_token = $2`,
-		userID, token,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to update invitation status: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("failed to commit invitation acceptance: %w", err)
-	}
-	return nil
-}
-
-// DeclineInvitation declines a pending invitation.
-func DeclineInvitation(ctx context.Context, pool *pgxpool.Pool, token string) error {
-	result, err := pool.Exec(ctx, `
-		UPDATE organization_invitations
-		SET status = 'declined', declined_at = NOW()
-		WHERE invitation_token = $1 AND status = 'pending' AND expires_at > NOW()`,
-		token,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to decline invitation: %w", err)
+		return fmt.Errorf("failed to remove user from organization: %w", err)
 	}
 	if result.RowsAffected() == 0 {
-		return ErrInvalidToken
+		return fmt.Errorf("user not found in organization")
 	}
 	return nil
 }
-
-// CancelInvitation allows an admin to cancel a pending invitation.
-// Note: Canceled invitations are marked as 'expired' for consistency with
-// the InvitationStatus enum defined in dbSchema/schema.ts, where both
-// expired and canceled invitations share the same terminal status value.
-func CancelInvitation(ctx context.Context, pool *pgxpool.Pool, invitationID string) error {
-	result, err := pool.Exec(ctx, `
-		UPDATE organization_invitations
-		SET status = 'expired'
-		WHERE id = $1 AND status = 'pending'`,
-		invitationID,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to cancel invitation: %w", err)
-	}
-	if result.RowsAffected() == 0 {
-		return ErrInvitationNotFound
-	}
-	return nil
-}
-
-// ExpireOldInvitations marks invitations as expired if they're past their expiry date.
-func ExpireOldInvitations(ctx context.Context, pool *pgxpool.Pool) (int, error) {
-	result, err := pool.Exec(ctx, `
-		UPDATE organization_invitations
-		SET status = 'expired'
-		WHERE status = 'pending' AND expires_at <= NOW()`)
-	if err != nil {
-		return 0, fmt.Errorf("failed to expire old invitations: %w", err)
-	}
-	return int(result.RowsAffected()), nil
-}
-
 
 // AddUserToOrganizationTx adds a user to an organization within an existing transaction.
 func AddUserToOrganizationTx(ctx context.Context, tx pgx.Tx, userID, organizationID string, isAdmin bool) error {

@@ -88,7 +88,7 @@ Defined in `schema.ts`. All tables use UUID primary keys with `defaultRandom()`.
 
 Primary key: `(user_id, organization_id)` — users can only be in each organization once.
 
-**organization_invitations** — email-based org invitations
+**organization_invitations** — WorkOS-managed invitations (table exists for schema completeness but invitations are handled by WorkOS)
 
 | Column | Type | Notes |
 |---|---|---|
@@ -105,7 +105,7 @@ Primary key: `(user_id, organization_id)` — users can only be in each organiza
 | accepted_at | timestamp (tz) | When invitation was accepted |
 | declined_at | timestamp (tz) | When invitation was declined |
 
-Constraints: Unique token, prevent duplicate pending invitations to same email per org.
+**Note**: Invitations are now handled entirely by WorkOS. This table remains in the schema for historical data but new invitations use WorkOS APIs and webhooks.
 
 **admins** — access control list for Sangria staff
 
