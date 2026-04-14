@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -14,6 +15,11 @@ import (
 
 // validateAPIKeyAdminPermissions validates that the user is an admin of the organization that owns the API key
 func validateAPIKeyAdminPermissions(c fiber.Ctx, pool *pgxpool.Pool, user auth.WorkOSUser, keyID string) (string, error) {
+	// Validate keyID format - must be a valid UUID
+	if _, err := uuid.Parse(keyID); err != nil {
+		return "", fiber.NewError(400, "invalid API key ID format")
+	}
+
 	// Check if user is admin of any organization
 	memberships, err := dbengine.GetUserOrganizations(c.Context(), pool, user.ID)
 	if err != nil {

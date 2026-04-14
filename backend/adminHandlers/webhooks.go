@@ -1,10 +1,14 @@
 package adminHandlers
 
 import (
+	"encoding/json"
+	"io"
 	"log/slog"
+	"os"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/workos/workos-go/v4/pkg/webhooks"
 
 	dbengine "sangria/backend/dbEngine"
 )
@@ -25,9 +29,33 @@ type WorkOSWebhookEvent struct {
 // HandleWorkOSWebhook processes incoming WorkOS webhooks
 func HandleWorkOSWebhook(pool *pgxpool.Pool) fiber.Handler {
 	return func(c fiber.Ctx) error {
-		// Parse webhook payload
+		// Get raw request body and signature header
+		rawBody := c.Body()
+		signature := c.Get("WorkOS-Signature")
+
+		if signature == "" {
+			slog.Error("missing WorkOS-Signature header")
+			return c.Status(400).JSON(fiber.Map{"error": "missing signature header"})
+		}
+
+		// Get webhook secret from environment
+		webhookSecret := os.Getenv("WORKOS_WEBHOOK_SECRET")
+		if webhookSecret == "" {
+			slog.Error("WORKOS_WEBHOOK_SECRET not configured")
+			return c.Status(500).JSON(fiber.Map{"error": "webhook validation not configured"})
+		}
+
+		// Initialize WorkOS webhook client and validate signature
+		webhookClient := webhooks.NewClient(webhookSecret)
+		validatedPayload, err := webhookClient.ValidatePayload(string(rawBody), signature)
+		if err != nil {
+			slog.Error("invalid webhook signature", "error", err)
+			return c.Status(400).JSON(fiber.Map{"error": "invalid webhook signature"})
+		}
+
+		// Parse validated webhook payload
 		var event WorkOSWebhookEvent
-		if err := c.Bind().JSON(&event); err != nil {
+		if err := json.Unmarshal([]byte(validatedPayload), &event); err != nil {
 			slog.Error("failed to parse webhook payload", "error", err)
 			return c.Status(400).JSON(fiber.Map{"error": "invalid webhook payload"})
 		}
@@ -81,7 +109,6 @@ func handleInvitationAccepted(c fiber.Ctx, pool *pgxpool.Pool, event WorkOSWebho
 
 	slog.Info("processing invitation acceptance",
 		"user_id", userID,
-		"user_email", userEmail,
 		"organization_id", organizationID,
 		"event_id", event.ID,
 	)
@@ -129,7 +156,6 @@ func handleInvitationAccepted(c fiber.Ctx, pool *pgxpool.Pool, event WorkOSWebho
 
 	slog.Info("successfully processed invitation acceptance",
 		"user_id", userID,
-		"user_email", userEmail,
 		"organization_id", organizationID,
 		"event_id", event.ID,
 	)

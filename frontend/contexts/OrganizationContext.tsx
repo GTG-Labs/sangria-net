@@ -59,9 +59,9 @@ export function OrganizationProvider({ children }: OrganizationProviderProps) {
         if (user.organizations && user.organizations.length > 0) {
           const personalOrg = user.organizations.find((org: any) => org.isPersonal);
           const defaultOrg = personalOrg ? personalOrg.id : user.organizations[0].id;
-          if (!selectedOrgId) {
-            setSelectedOrgId(defaultOrg);
-          }
+
+          // Use functional state updater to avoid stale closure
+          setSelectedOrgId(prev => prev || defaultOrg);
         }
       }
     } catch (err) {

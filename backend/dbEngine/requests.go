@@ -114,7 +114,6 @@ func ProcessAcceptedInvitations(ctx context.Context, pool *pgxpool.Pool, userID,
 
 		slog.Info("Processed accepted invitation",
 			"user_id", userID,
-			"email", userEmail,
 			"organization_id", orgID,
 			"invitation_id", invitationID,
 		)

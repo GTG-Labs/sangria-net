@@ -4,7 +4,9 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"html"
 	"log/slog"
+	"net/mail"
 	"os"
 	"strings"
 	"time"
@@ -17,6 +19,25 @@ import (
 	"sangria/backend/auth"
 	dbengine "sangria/backend/dbEngine"
 )
+
+// maskEmail masks an email address for logging purposes, preserving first char and domain
+func maskEmail(email string) string {
+	parts := strings.Split(email, "@")
+	if len(parts) != 2 {
+		return "invalid-email"
+	}
+
+	local := parts[0]
+	domain := parts[1]
+
+	if len(local) <= 1 {
+		return "*@" + domain
+	}
+
+	// Show first character and mask the rest
+	masked := string(local[0]) + strings.Repeat("*", len(local)-1)
+	return masked + "@" + domain
+}
 
 // generateSecureToken generates a cryptographically secure random token
 func generateSecureToken() (string, error) {
@@ -118,8 +139,8 @@ func sendInvitationEmail(inviteeEmail, inviterName, orgName, invitationURL, cust
 		func() string {
 			if customMessage != "" {
 				return fmt.Sprintf(`<div style="background: #e7f3ff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #2196F3;">
-					<p style="margin: 0; font-style: italic; color: #1565C0;">"%s"</p>
-				</div>`, customMessage)
+            <p style="margin: 0; font-style: italic; color: #1565C0;">"%s"</p>
+        </div>`, html.EscapeString(customMessage))
 			}
 			return ""
 		}(),
@@ -297,13 +318,13 @@ func CreateOrganizationInvitation(pool *pgxpool.Pool) fiber.Handler {
 
 			return c.Status(500).JSON(fiber.Map{
 				"error": "failed to send invitation email - check SendGrid configuration",
-				"invitation_url": invitationURL, // Provide URL as fallback
+				"invitation_id": invitationID, // Admin can look up in logs if needed
 			})
 		}
 
 		slog.Info("✅ Beautiful invitation email sent successfully",
 			"invitation_id", invitationID,
-			"email", req.Email,
+			"email", maskEmail(req.Email),
 			"org_name", orgName,
 			"inviter", inviterName,
 			"invitation_url", invitationURL,
@@ -319,40 +340,15 @@ func CreateOrganizationInvitation(pool *pgxpool.Pool) fiber.Handler {
 	}
 }
 
-// isValidEmail performs basic email validation
+// isValidEmail validates email format using stdlib net/mail parser
 func isValidEmail(email string) bool {
-	// Basic email validation - contains @ and at least one dot after @
 	if email == "" {
 		return false
 	}
 
-	atIndex := strings.Index(email, "@")
-	if atIndex == -1 || atIndex == 0 || atIndex == len(email)-1 {
-		return false
-	}
-
-	// Check for at least one dot after @
-	domainPart := email[atIndex+1:]
-	if !strings.Contains(domainPart, ".") {
-		return false
-	}
-
-	// Check for valid characters (basic check)
-	validChars := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.@_+-"
-	for _, char := range email {
-		found := false
-		for _, valid := range validChars {
-			if char == valid {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false
-		}
-	}
-
-	return true
+	// Use stdlib parser which handles RFC 5322 compliance
+	_, err := mail.ParseAddress(email)
+	return err == nil
 }
 
 // AcceptOrganizationInvitation handles POST /accept-invitation
