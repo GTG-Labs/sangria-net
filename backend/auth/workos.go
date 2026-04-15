@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
@@ -170,7 +169,7 @@ func CreateUser(pool *pgxpool.Pool) fiber.Handler {
 		}
 
 		// Step 2: Ensure user has a personal organization within the same transaction
-		err = ensureUserPersonalOrganizationTx(c.Context(), tx, user.ID, owner)
+		err = dbengine.EnsurePersonalOrganizationTx(c.Context(), tx, user.ID, owner)
 		if err != nil {
 			slog.Error("ensure personal organization", "error", err)
 			return c.Status(500).JSON(fiber.Map{"error": "failed to setup personal organization"})
@@ -191,60 +190,6 @@ func CreateUser(pool *pgxpool.Pool) fiber.Handler {
 
 		return c.Status(201).JSON(u)
 	}
-}
-
-
-// ensureUserPersonalOrganizationTx creates a personal organization for the user within an existing transaction
-func ensureUserPersonalOrganizationTx(ctx context.Context, tx pgx.Tx, userWorkosID, userName string) error {
-	// Acquire a row lock on the user to serialize concurrent flows
-	var lockCheck bool
-	err := tx.QueryRow(ctx, `
-		SELECT true FROM users WHERE workos_id = $1 FOR UPDATE`,
-		userWorkosID,
-	).Scan(&lockCheck)
-	if err != nil {
-		return fmt.Errorf("failed to acquire user lock: %w", err)
-	}
-
-
-	// Check if user already has a personal organization
-	var existingPersonalOrgID string
-	err = tx.QueryRow(ctx,
-		`SELECT o.id
-		 FROM organizations o
-		 JOIN organization_members om ON om.organization_id = o.id
-		 WHERE om.user_id = $1 AND o.is_personal = true
-		 LIMIT 1`,
-		userWorkosID,
-	).Scan(&existingPersonalOrgID)
-	if err == nil && existingPersonalOrgID != "" {
-		// Personal org already exists, no need to create
-		return nil
-	}
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return fmt.Errorf("failed to check existing personal organization: %w", err)
-	}
-
-	// Create personal organization inside transaction
-	var personalOrgID string
-	personalOrgName := fmt.Sprintf("%s's Personal Organization", userName)
-
-	err = tx.QueryRow(ctx, `
-		INSERT INTO organizations (name, is_personal, created_at)
-		VALUES ($1, true, NOW())
-		RETURNING id`,
-		personalOrgName).Scan(&personalOrgID)
-	if err != nil {
-		return fmt.Errorf("failed to create personal organization: %w", err)
-	}
-
-	// Add user to their personal organization as admin using transaction
-	err = dbengine.AddUserToOrganizationTx(ctx, tx, userWorkosID, personalOrgID, true)
-	if err != nil {
-		return fmt.Errorf("failed to add user to personal organization: %w", err)
-	}
-
-	return nil
 }
 
 // GetCurrentUser handles GET /internal/me endpoint

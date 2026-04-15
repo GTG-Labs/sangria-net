@@ -2,6 +2,8 @@ package dbengine
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -88,5 +90,52 @@ func IsAdmin(ctx context.Context, pool *pgxpool.Pool, workosID string) (bool, er
 		workosID,
 	).Scan(&exists)
 	return exists, err
+}
+
+// EnsurePersonalOrganizationTx creates a personal organization for the user if one
+// doesn't already exist. Must be called within an existing transaction. Acquires a
+// row lock on the user to serialize concurrent signup flows.
+func EnsurePersonalOrganizationTx(ctx context.Context, tx pgx.Tx, userWorkosID, userName string) error {
+	// Acquire a row lock on the user to serialize concurrent flows
+	var lockCheck bool
+	err := tx.QueryRow(ctx,
+		`SELECT true FROM users WHERE workos_id = $1 FOR UPDATE`,
+		userWorkosID,
+	).Scan(&lockCheck)
+	if err != nil {
+		return fmt.Errorf("failed to acquire user lock: %w", err)
+	}
+
+	// Check if user already has a personal organization
+	_, err = GetUserPersonalOrgIDTx(ctx, tx, userWorkosID)
+	if err == nil {
+		// Personal org already exists, nothing to do
+		return nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("failed to check existing personal organization: %w", err)
+	}
+
+	// Create personal organization inside transaction
+	var personalOrgID string
+	personalOrgName := fmt.Sprintf("%s's Personal Organization", userName)
+
+	err = tx.QueryRow(ctx,
+		`INSERT INTO organizations (name, is_personal, created_at)
+		 VALUES ($1, true, NOW())
+		 RETURNING id`,
+		personalOrgName,
+	).Scan(&personalOrgID)
+	if err != nil {
+		return fmt.Errorf("failed to create personal organization: %w", err)
+	}
+
+	// Add user to their personal organization as admin
+	err = AddUserToOrganizationTx(ctx, tx, userWorkosID, personalOrgID, true)
+	if err != nil {
+		return fmt.Errorf("failed to add user to personal organization: %w", err)
+	}
+
+	return nil
 }
 
