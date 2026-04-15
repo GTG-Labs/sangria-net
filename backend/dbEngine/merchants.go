@@ -233,6 +233,7 @@ func RevokeMerchantAPIKey(ctx context.Context, pool *pgxpool.Pool, merchantID, a
 		`UPDATE merchants SET status = 'inactive'
 		 FROM organization_members om
 		 WHERE merchants.id = $1
+		   AND merchants.status IN ('active', 'pending')
 		   AND merchants.organization_id = om.organization_id
 		   AND om.user_id = $2
 		   AND om.is_admin = true`,

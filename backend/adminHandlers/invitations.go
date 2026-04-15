@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sendgrid/sendgrid-go"
 	sgmail "github.com/sendgrid/sendgrid-go/helpers/mail"
@@ -276,8 +277,9 @@ func CreateOrganizationInvitation(pool *pgxpool.Pool) fiber.Handler {
 				return c.Status(403).JSON(fiber.Map{"error": "admin access required to invite members"})
 			}
 
-			// Handle duplicate invitation errors
-			if strings.Contains(err.Error(), "duplicate") || strings.Contains(err.Error(), "unique") {
+			// Handle duplicate invitation errors (unique_violation from DB)
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 				return c.Status(400).JSON(fiber.Map{"error": "Invitation already exists for this email"})
 			}
 
@@ -411,12 +413,8 @@ func AcceptOrganizationInvitation(pool *pgxpool.Pool) fiber.Handler {
 			}
 		}
 
-		// Check if invitation has expired
-		if invitation.ExpiresAt.Before(time.Now()) {
-			return c.Status(400).JSON(fiber.Map{"error": "invitation has expired"})
-		}
-
 		// Check if invitation is already accepted (idempotent behavior for React Strict Mode)
+		// This runs before the expiry check so accepted invitations remain valid past expiry.
 		if invitation.Status == dbengine.InvitationStatusAccepted {
 			slog.Info("Invitation already accepted (idempotent response)",
 				"invitation_id", invitation.ID,
@@ -428,6 +426,11 @@ func AcceptOrganizationInvitation(pool *pgxpool.Pool) fiber.Handler {
 				"message":         "Invitation already accepted! You'll be added to the organization when you sign in.",
 				"organization_id": invitation.OrganizationID,
 			})
+		}
+
+		// Check if invitation has expired
+		if invitation.ExpiresAt.Before(time.Now()) {
+			return c.Status(400).JSON(fiber.Map{"error": "invitation has expired"})
 		}
 
 		// Check if invitation is still valid

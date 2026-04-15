@@ -10,7 +10,7 @@ interface Member {
   is_admin: boolean;
   joined_at: string;
   display_name: string; // Contains the user's display name (FirstName LastName) or email as fallback
-  actual_email?: string; // The actual email address from WorkOS (if provided)
+  email?: string; // The email address from WorkOS (if provided)
 }
 
 export default function OrganizationMembersContent() {
@@ -289,10 +289,10 @@ export default function OrganizationMembersContent() {
                         )}
                       </div>
                       <div className="text-sm text-gray-500">
-                        {member.actual_email && member.actual_email !== member.display_name && (
+                        {member.email && member.email !== member.display_name && (
                           <div className="flex items-center gap-1 mb-1">
                             <Mail className="h-3 w-3" />
-                            <span>{member.actual_email}</span>
+                            <span>{member.email}</span>
                           </div>
                         )}
                         <p>

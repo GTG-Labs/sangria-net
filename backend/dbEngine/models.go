@@ -58,7 +58,7 @@ type OrganizationMember struct {
 	IsAdmin        bool      `json:"is_admin"`
 	JoinedAt       time.Time `json:"joined_at"`
 	DisplayName    string    `json:"display_name"` // Contains the display name (FirstName LastName) or email as fallback
-	ActualEmail    string    `json:"actual_email,omitempty"` // The actual email address from WorkOS
+	Email          string    `json:"email,omitempty"` // The email address from WorkOS
 }
 
 // UserOrganization represents a user's membership in an organization with org details included.

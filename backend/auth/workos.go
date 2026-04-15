@@ -347,26 +347,19 @@ func RemoveOrganizationMember(pool *pgxpool.Pool) fiber.Handler {
 			return c.Status(400).JSON(fiber.Map{"error": "organization ID and user ID are required"})
 		}
 
-		// Only admins can remove members
-		isAdmin, err := dbengine.IsOrganizationAdmin(c.Context(), pool, user.ID, orgID)
-		if err != nil {
-			slog.Error("check org admin status", "user_id", user.ID, "org_id", orgID, "error", err)
-			return c.Status(500).JSON(fiber.Map{"error": "failed to verify permissions"})
-		}
-		if !isAdmin {
-			return c.Status(403).JSON(fiber.Map{"error": "admin access required to remove members"})
-		}
-
 		// Prevent removing yourself (to avoid locking out all admins)
 		if memberUserID == user.ID {
 			return c.Status(400).JSON(fiber.Map{"error": "cannot remove yourself from the organization"})
 		}
 
-		// Remove the member from the organization
-		err = dbengine.RemoveUserFromOrganization(c.Context(), pool, memberUserID, orgID)
+		// Atomically remove the member, but only if the requesting user is an admin
+		rowsAffected, err := dbengine.RemoveOrganizationMemberAsAdmin(c.Context(), pool, memberUserID, orgID, user.ID)
 		if err != nil {
 			slog.Error("remove user from organization", "user_id", memberUserID, "org_id", orgID, "admin_user", user.ID, "error", err)
 			return c.Status(500).JSON(fiber.Map{"error": "failed to remove member from organization"})
+		}
+		if rowsAffected == 0 {
+			return c.Status(404).JSON(fiber.Map{"error": "member not found or admin access required"})
 		}
 
 		slog.Info("Member removed from organization",

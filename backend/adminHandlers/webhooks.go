@@ -47,7 +47,7 @@ func HandleWorkOSWebhook(pool *pgxpool.Pool) fiber.Handler {
 
 		// Initialize WorkOS webhook client and validate signature
 		webhookClient := webhooks.NewClient(webhookSecret)
-		validatedPayload, err := webhookClient.ValidatePayload(string(rawBody), signature)
+		validatedPayload, err := webhookClient.ValidatePayload(signature, string(rawBody))
 		if err != nil {
 			slog.Error("invalid webhook signature", "error", err)
 			return c.Status(400).JSON(fiber.Map{"error": "invalid webhook signature"})

@@ -1,13 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { ChevronDown, Building, Users, Plus } from "lucide-react";
 import { useOrganization } from "@/contexts/OrganizationContext";
 
 export default function OrganizationDropdown() {
   const { userInfo, selectedOrgId, selectedOrg, setSelectedOrgId, refreshUserInfo } = useOrganization();
   const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("touchstart", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+    };
+  }, [isOpen]);
   const [isCreating, setIsCreating] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [newOrgName, setNewOrgName] = useState("");
   const [createError, setCreateError] = useState("");
 
@@ -17,9 +36,10 @@ export default function OrganizationDropdown() {
   };
 
   const handleCreateOrganization = async () => {
-    if (!newOrgName.trim()) return;
+    if (!newOrgName.trim() || isSubmitting) return;
 
     setCreateError("");
+    setIsSubmitting(true);
 
     try {
       const response = await fetch("/api/backend/organizations", {
@@ -44,6 +64,8 @@ export default function OrganizationDropdown() {
     } catch (err) {
       console.error("Error creating organization:", err);
       setCreateError("Failed to create organization");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -56,7 +78,7 @@ export default function OrganizationDropdown() {
   }
 
   return (
-    <div className="relative px-2 py-2">
+    <div ref={dropdownRef} className="relative px-2 py-2">
       {/* Organization Dropdown Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
@@ -147,7 +169,7 @@ export default function OrganizationDropdown() {
                 <div className="flex items-center gap-2 mt-2">
                   <button
                     onClick={handleCreateOrganization}
-                    disabled={!newOrgName.trim()}
+                    disabled={!newOrgName.trim() || isSubmitting}
                     className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     Create

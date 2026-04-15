@@ -14,6 +14,7 @@ import (
 // Sentinel errors for better error handling
 var (
 	ErrInvitationNotFound = errors.New("invitation not found")
+	ErrMemberNotFound     = errors.New("user not found in organization")
 )
 
 // ================================
@@ -100,6 +101,25 @@ func AddUserToOrganizationTx(ctx context.Context, tx pgx.Tx, userID, organizatio
 	return err
 }
 
+// RemoveOrganizationMemberAsAdmin atomically removes a member from an organization,
+// but only if the requesting user is an admin of that organization.
+// Returns ErrMemberNotFound if the member doesn't exist or the admin check fails.
+func RemoveOrganizationMemberAsAdmin(ctx context.Context, pool *pgxpool.Pool, memberUserID, organizationID, adminUserID string) (int64, error) {
+	result, err := pool.Exec(ctx,
+		`DELETE FROM organization_members
+		 WHERE user_id = $1 AND organization_id = $2
+		   AND EXISTS (
+		     SELECT 1 FROM organization_members
+		     WHERE user_id = $3 AND organization_id = $2 AND is_admin = true
+		   )`,
+		memberUserID, organizationID, adminUserID,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("failed to remove member from organization: %w", err)
+	}
+	return result.RowsAffected(), nil
+}
+
 // RemoveUserFromOrganization removes a user from an organization.
 func RemoveUserFromOrganization(ctx context.Context, pool *pgxpool.Pool, userID, organizationID string) error {
 	result, err := pool.Exec(ctx,
@@ -110,7 +130,7 @@ func RemoveUserFromOrganization(ctx context.Context, pool *pgxpool.Pool, userID,
 		return fmt.Errorf("failed to remove user from organization: %w", err)
 	}
 	if result.RowsAffected() == 0 {
-		return fmt.Errorf("user not found in organization")
+		return ErrMemberNotFound
 	}
 	return nil
 }
@@ -400,6 +420,10 @@ func ProcessAcceptedInvitations(ctx context.Context, pool *pgxpool.Pool, userID,
 			orgID        string
 			invitationID string
 		}{orgID, invitationID})
+	}
+
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("reading invitations: %w", err)
 	}
 
 	// Process each invitation without transactions to avoid connection conflicts
