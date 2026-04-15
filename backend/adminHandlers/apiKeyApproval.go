@@ -1,11 +1,9 @@
 package adminHandlers
 
 import (
-	"errors"
 	"log/slog"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"sangria/backend/auth"
@@ -27,62 +25,13 @@ func ApproveAPIKey(pool *pgxpool.Pool) fiber.Handler {
 			return c.Status(400).JSON(fiber.Map{"error": "API key ID is required"})
 		}
 
-		// Check if user is admin of any organization (basic check - could be more specific)
-		memberships, err := dbengine.GetUserOrganizations(c.Context(), pool, user.ID)
-		if err != nil {
-			slog.Error("get user organizations", "user_id", user.ID, "error", err)
-			return c.Status(500).JSON(fiber.Map{"error": "failed to get user organizations"})
-		}
-
-		isAdmin := false
-		for _, membership := range memberships {
-			if membership.IsAdmin {
-				isAdmin = true
-				break
-			}
-		}
-
-		if !isAdmin {
-			return c.Status(403).JSON(fiber.Map{"error": "admin access required"})
-		}
-
-		// Get the merchant's organization ID to verify admin scope
-		var merchantOrgID string
-		err = pool.QueryRow(c.Context(),
-			`SELECT organization_id FROM merchants WHERE id = $1 AND status = 'pending'`,
-			keyID,
-		).Scan(&merchantOrgID)
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return c.Status(404).JSON(fiber.Map{"error": "pending API key not found"})
-			}
-			slog.Error("get merchant organization", "key_id", keyID, "user_id", user.ID, "error", err)
-			return c.Status(500).JSON(fiber.Map{"error": "failed to verify API key"})
-		}
-
-		// Verify user is admin of the specific organization that owns this key
-		isOrgAdmin := false
-		for _, membership := range memberships {
-			if membership.OrganizationID == merchantOrgID && membership.IsAdmin {
-				isOrgAdmin = true
-				break
-			}
-		}
-		if !isOrgAdmin {
-			return c.Status(403).JSON(fiber.Map{"error": "admin access required for this organization"})
-		}
-
-		// Update the API key status to active
-		result, err := pool.Exec(c.Context(),
-			`UPDATE merchants SET status = 'active' WHERE id = $1 AND status = 'pending' AND organization_id = $2`,
-			keyID, merchantOrgID,
-		)
+		rowsAffected, err := dbengine.UpdatePendingMerchantStatus(c.Context(), pool, keyID, user.ID, dbengine.APIKeyStatusActive)
 		if err != nil {
 			slog.Error("approve API key", "key_id", keyID, "user_id", user.ID, "error", err)
 			return c.Status(500).JSON(fiber.Map{"error": "failed to approve API key"})
 		}
 
-		if result.RowsAffected() == 0 {
+		if rowsAffected == 0 {
 			return c.Status(404).JSON(fiber.Map{"error": "pending API key not found"})
 		}
 
@@ -107,62 +56,13 @@ func RejectAPIKey(pool *pgxpool.Pool) fiber.Handler {
 			return c.Status(400).JSON(fiber.Map{"error": "API key ID is required"})
 		}
 
-		// Check if user is admin of any organization (basic check - could be more specific)
-		memberships, err := dbengine.GetUserOrganizations(c.Context(), pool, user.ID)
-		if err != nil {
-			slog.Error("get user organizations", "user_id", user.ID, "error", err)
-			return c.Status(500).JSON(fiber.Map{"error": "failed to get user organizations"})
-		}
-
-		isAdmin := false
-		for _, membership := range memberships {
-			if membership.IsAdmin {
-				isAdmin = true
-				break
-			}
-		}
-
-		if !isAdmin {
-			return c.Status(403).JSON(fiber.Map{"error": "admin access required"})
-		}
-
-		// Get the merchant's organization ID to verify admin scope
-		var merchantOrgID string
-		err = pool.QueryRow(c.Context(),
-			`SELECT organization_id FROM merchants WHERE id = $1 AND status = 'pending'`,
-			keyID,
-		).Scan(&merchantOrgID)
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return c.Status(404).JSON(fiber.Map{"error": "pending API key not found"})
-			}
-			slog.Error("get merchant organization", "key_id", keyID, "user_id", user.ID, "error", err)
-			return c.Status(500).JSON(fiber.Map{"error": "failed to verify API key"})
-		}
-
-		// Verify user is admin of the specific organization that owns this key
-		isOrgAdmin := false
-		for _, membership := range memberships {
-			if membership.OrganizationID == merchantOrgID && membership.IsAdmin {
-				isOrgAdmin = true
-				break
-			}
-		}
-		if !isOrgAdmin {
-			return c.Status(403).JSON(fiber.Map{"error": "admin access required for this organization"})
-		}
-
-		// Update the API key status to inactive
-		result, err := pool.Exec(c.Context(),
-			`UPDATE merchants SET status = 'inactive' WHERE id = $1 AND status = 'pending' AND organization_id = $2`,
-			keyID, merchantOrgID,
-		)
+		rowsAffected, err := dbengine.UpdatePendingMerchantStatus(c.Context(), pool, keyID, user.ID, dbengine.APIKeyStatusInactive)
 		if err != nil {
 			slog.Error("reject API key", "key_id", keyID, "user_id", user.ID, "error", err)
 			return c.Status(500).JSON(fiber.Map{"error": "failed to reject API key"})
 		}
 
-		if result.RowsAffected() == 0 {
+		if rowsAffected == 0 {
 			return c.Status(404).JSON(fiber.Map{"error": "pending API key not found"})
 		}
 

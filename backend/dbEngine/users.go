@@ -3,6 +3,7 @@ package dbengine
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -49,47 +50,17 @@ func GetUserByWorkosID(ctx context.Context, pool *pgxpool.Pool, workosID string)
 	return u, err
 }
 
-// AddUserToOrganization adds a user to an organization with specified admin status
-func AddUserToOrganization(ctx context.Context, pool *pgxpool.Pool, userID, organizationID string, isAdmin bool) error {
-	_, err := pool.Exec(ctx,
-		`INSERT INTO organization_members (user_id, organization_id, is_admin, joined_at)
-		 VALUES ($1, $2, $3, NOW())
-		 ON CONFLICT (user_id, organization_id) DO UPDATE
-		 	SET is_admin = EXCLUDED.is_admin`,
-		userID, organizationID, isAdmin,
-	)
-	return err
+
+
+// queryRowInterface defines the interface for executing a single-row query
+type queryRowInterface interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
-// GetUserOrganizations returns all organizations for a user with their admin status.
-func GetUserOrganizations(ctx context.Context, pool *pgxpool.Pool, userID string) ([]OrganizationMember, error) {
-	rows, err := pool.Query(ctx,
-		`SELECT user_id, organization_id, is_admin, joined_at
-		 FROM organization_members
-		 WHERE user_id = $1
-		 ORDER BY joined_at ASC`,
-		userID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var memberships []OrganizationMember
-	for rows.Next() {
-		var m OrganizationMember
-		if err := rows.Scan(&m.UserID, &m.OrganizationID, &m.IsAdmin, &m.JoinedAt); err != nil {
-			return nil, err
-		}
-		memberships = append(memberships, m)
-	}
-	return memberships, rows.Err()
-}
-
-// GetUserPersonalOrgID returns the organization ID of the user's personal org, if one exists.
-func GetUserPersonalOrgID(ctx context.Context, pool *pgxpool.Pool, userID string) (string, error) {
+// getUserPersonalOrgIDQuery is a helper that executes the personal org lookup query
+func getUserPersonalOrgIDQuery(ctx context.Context, q queryRowInterface, userID string) (string, error) {
 	var orgID string
-	err := pool.QueryRow(ctx,
+	err := q.QueryRow(ctx,
 		`SELECT o.id
 		 FROM organizations o
 		 JOIN organization_members om ON om.organization_id = o.id
@@ -99,6 +70,17 @@ func GetUserPersonalOrgID(ctx context.Context, pool *pgxpool.Pool, userID string
 	).Scan(&orgID)
 	return orgID, err
 }
+
+// GetUserPersonalOrgID returns the organization ID of the user's personal org, if one exists.
+func GetUserPersonalOrgID(ctx context.Context, pool *pgxpool.Pool, userID string) (string, error) {
+	return getUserPersonalOrgIDQuery(ctx, pool, userID)
+}
+
+// GetUserPersonalOrgIDTx returns the organization ID of the user's personal org within a transaction, if one exists.
+func GetUserPersonalOrgIDTx(ctx context.Context, tx pgx.Tx, userID string) (string, error) {
+	return getUserPersonalOrgIDQuery(ctx, tx, userID)
+}
+
 
 // IsAdmin returns true if the given WorkOS user ID has an entry in the admins table.
 func IsAdmin(ctx context.Context, pool *pgxpool.Pool, workosID string) (bool, error) {
@@ -110,19 +92,50 @@ func IsAdmin(ctx context.Context, pool *pgxpool.Pool, workosID string) (bool, er
 	return exists, err
 }
 
-// IsOrganizationAdmin returns true if the given user is an admin of the specified organization.
-func IsOrganizationAdmin(ctx context.Context, pool *pgxpool.Pool, userID, organizationID string) (bool, error) {
-	var isAdmin bool
-	err := pool.QueryRow(ctx,
-		`SELECT is_admin FROM organization_members
-		 WHERE user_id = $1 AND organization_id = $2`,
-		userID, organizationID,
-	).Scan(&isAdmin)
+// EnsurePersonalOrganizationTx creates a personal organization for the user if one
+// doesn't already exist. Must be called within an existing transaction. Acquires a
+// row lock on the user to serialize concurrent signup flows.
+func EnsurePersonalOrganizationTx(ctx context.Context, tx pgx.Tx, userWorkosID, userName string) error {
+	// Acquire a row lock on the user to serialize concurrent flows
+	var lockCheck bool
+	err := tx.QueryRow(ctx,
+		`SELECT true FROM users WHERE workos_id = $1 FOR UPDATE`,
+		userWorkosID,
+	).Scan(&lockCheck)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return false, nil // User is not a member of the organization
-		}
-		return false, err
+		return fmt.Errorf("failed to acquire user lock: %w", err)
 	}
-	return isAdmin, nil
+
+	// Check if user already has a personal organization
+	_, err = GetUserPersonalOrgIDTx(ctx, tx, userWorkosID)
+	if err == nil {
+		// Personal org already exists, nothing to do
+		return nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("failed to check existing personal organization: %w", err)
+	}
+
+	// Create personal organization inside transaction
+	var personalOrgID string
+	personalOrgName := fmt.Sprintf("%s's Personal Organization", userName)
+
+	err = tx.QueryRow(ctx,
+		`INSERT INTO organizations (name, is_personal, created_at)
+		 VALUES ($1, true, NOW())
+		 RETURNING id`,
+		personalOrgName,
+	).Scan(&personalOrgID)
+	if err != nil {
+		return fmt.Errorf("failed to create personal organization: %w", err)
+	}
+
+	// Add user to their personal organization as admin
+	err = AddUserToOrganizationTx(ctx, tx, userWorkosID, personalOrgID, true)
+	if err != nil {
+		return fmt.Errorf("failed to add user to personal organization: %w", err)
+	}
+
+	return nil
 }
+

@@ -30,7 +30,7 @@ func GetMerchantBalance(pool *pgxpool.Pool) fiber.Handler {
 		if err != nil {
 			slog.Error("fetch balance: query failed", "user_id", user.ID, "org_id", selectedOrgID, "error", err)
 			return c.Status(500).JSON(fiber.Map{
-				"error": "Failed to retrieve balance",
+				"error": "failed to retrieve balance",
 			})
 		}
 
@@ -75,7 +75,7 @@ func GetMerchantTransactions(pool *pgxpool.Pool) fiber.Handler {
 		if err != nil {
 			slog.Error("fetch transactions: query failed", "user_id", user.ID, "error", err)
 			return c.Status(500).JSON(fiber.Map{
-				"error": "Failed to retrieve transactions",
+				"error": "failed to retrieve transactions",
 			})
 		}
 

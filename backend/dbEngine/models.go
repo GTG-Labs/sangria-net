@@ -57,6 +57,40 @@ type OrganizationMember struct {
 	OrganizationID string    `json:"organization_id"`
 	IsAdmin        bool      `json:"is_admin"`
 	JoinedAt       time.Time `json:"joined_at"`
+	DisplayName    string    `json:"display_name"` // Contains the display name (FirstName LastName) or email as fallback
+	Email          string    `json:"email,omitempty"` // The email address from WorkOS
+}
+
+// UserOrganization represents a user's membership in an organization with org details included.
+type UserOrganization struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	IsPersonal bool   `json:"is_personal"`
+	IsAdmin    bool   `json:"is_admin"`
+}
+
+type InvitationStatus string
+
+const (
+	InvitationStatusPending  InvitationStatus = "pending"
+	InvitationStatusAccepted InvitationStatus = "accepted"
+	InvitationStatusDeclined InvitationStatus = "declined"
+	InvitationStatusExpired  InvitationStatus = "expired"
+)
+
+type OrganizationInvitation struct {
+	ID              string            `json:"id"`
+	OrganizationID  string            `json:"organization_id"`
+	InviterUserID   string            `json:"inviter_user_id"`
+	InviteeEmail    string            `json:"invitee_email"`
+	InviteeUserID   *string           `json:"invitee_user_id"`
+	Status          InvitationStatus  `json:"status"`
+	Message         *string           `json:"message"`
+	InvitationToken string            `json:"invitation_token"`
+	ExpiresAt       time.Time         `json:"expires_at"`
+	CreatedAt       time.Time         `json:"created_at"`
+	AcceptedAt      *time.Time        `json:"accepted_at"`
+	DeclinedAt      *time.Time        `json:"declined_at"`
 }
 
 type TransactionStatus string
@@ -222,27 +256,4 @@ const (
 	RequestStatusCanceled RequestStatus = "canceled"
 )
 
-type InvitationStatus string
-
-const (
-	InvitationStatusPending  InvitationStatus = "pending"
-	InvitationStatusAccepted InvitationStatus = "accepted"
-	InvitationStatusDeclined InvitationStatus = "declined"
-	InvitationStatusExpired  InvitationStatus = "expired"
-)
-
-type OrganizationInvitation struct {
-	ID               string           `json:"id"`
-	OrganizationID   string           `json:"organization_id"`
-	InviterUserID    string           `json:"inviter_user_id"`
-	InviteeEmail     string           `json:"invitee_email"`
-	InviteeUserID    *string          `json:"invitee_user_id"`
-	Status           InvitationStatus `json:"status"`
-	Message          *string          `json:"message"`
-	InvitationToken  string           `json:"invitation_token"`
-	ExpiresAt        time.Time        `json:"expires_at"`
-	CreatedAt        time.Time        `json:"created_at"`
-	AcceptedAt       *time.Time       `json:"accepted_at"`
-	DeclinedAt       *time.Time       `json:"declined_at"`
-}
 

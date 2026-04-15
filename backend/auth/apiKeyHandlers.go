@@ -26,7 +26,7 @@ func ListAPIKeys(pool *pgxpool.Pool) fiber.Handler {
 		apiKeys, err := GetAPIKeysByOrganizationID(c.Context(), pool, selectedOrgID)
 		if err != nil {
 			slog.Error("list API keys: query failed", "user_id", user.ID, "org_id", selectedOrgID, "error", err)
-			return c.Status(500).JSON(fiber.Map{"error": "Failed to retrieve API keys"})
+			return c.Status(500).JSON(fiber.Map{"error": "failed to retrieve API keys"})
 		}
 
 		return c.JSON(apiKeys)
