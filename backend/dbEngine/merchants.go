@@ -96,6 +96,45 @@ func GetMerchantUSDLiabilityAccount(ctx context.Context, pool *pgxpool.Pool, mer
 	return a, err
 }
 
+// GetPendingMerchantOrgForAdmin returns the organization ID for a pending merchant,
+// but only if the given user is an admin of that organization.
+// Returns ErrNoRows if the merchant doesn't exist, isn't pending, or the user isn't an admin.
+func GetPendingMerchantOrgForAdmin(ctx context.Context, pool *pgxpool.Pool, merchantID, userID string) (string, error) {
+	var orgID string
+	err := pool.QueryRow(ctx, `
+		SELECT m.organization_id
+		FROM merchants m
+		JOIN organization_members om ON m.organization_id = om.organization_id
+		WHERE m.id = $1 AND m.status = 'pending'
+		AND om.user_id = $2 AND om.is_admin = true`,
+		merchantID, userID,
+	).Scan(&orgID)
+	if err != nil {
+		return "", err
+	}
+	return orgID, nil
+}
+
+// UpdatePendingMerchantStatus atomically updates a pending merchant's status,
+// but only if the given user is an admin of the merchant's organization.
+// Returns the number of rows affected (0 means not found or not authorized).
+func UpdatePendingMerchantStatus(ctx context.Context, pool *pgxpool.Pool, merchantID, userID string, newStatus APIKeyStatus) (int64, error) {
+	result, err := pool.Exec(ctx,
+		`UPDATE merchants SET status = $1
+		 FROM organization_members om
+		 WHERE merchants.id = $2
+		   AND merchants.status = 'pending'
+		   AND merchants.organization_id = om.organization_id
+		   AND om.user_id = $3
+		   AND om.is_admin = true`,
+		newStatus, merchantID, userID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 // UpdateMerchantLastUsedAt updates the last_used_at timestamp for a merchant.
 func UpdateMerchantLastUsedAt(ctx context.Context, pool *pgxpool.Pool, merchantID string) error {
 	_, err := pool.Exec(ctx,

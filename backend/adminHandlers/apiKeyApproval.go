@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"sangria/backend/auth"
+	dbengine "sangria/backend/dbEngine"
 )
 
 // validateAPIKeyAdminPermissions validates that the user is an admin of the organization that owns the API key
@@ -19,16 +20,7 @@ func validateAPIKeyAdminPermissions(c fiber.Ctx, pool *pgxpool.Pool, user auth.W
 		return "", fiber.NewError(400, "invalid API key ID format")
 	}
 
-	// Get the organization ID for this API key and check if user is admin in one query
-	var merchantOrgID string
-	err := pool.QueryRow(c.Context(), `
-		SELECT m.organization_id
-		FROM merchants m
-		JOIN organization_members om ON m.organization_id = om.organization_id
-		WHERE m.id = $1 AND m.status = 'pending'
-		AND om.user_id = $2 AND om.is_admin = true
-	`, keyID, user.ID).Scan(&merchantOrgID)
-
+	merchantOrgID, err := dbengine.GetPendingMerchantOrgForAdmin(c.Context(), pool, keyID, user.ID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", fiber.NewError(404, "API key not found or insufficient permissions")
@@ -55,24 +47,13 @@ func ApproveAPIKey(pool *pgxpool.Pool) fiber.Handler {
 			return c.Status(400).JSON(fiber.Map{"error": "API key ID is required"})
 		}
 
-		// Update the API key status to active with atomic permission check
-		// The UPDATE only succeeds if the user is still an org admin at execution time
-		result, err := pool.Exec(c.Context(),
-			`UPDATE merchants SET status = 'active'
-			 FROM organization_members om
-			 WHERE merchants.id = $1
-			   AND merchants.status = 'pending'
-			   AND merchants.organization_id = om.organization_id
-			   AND om.user_id = $2
-			   AND om.is_admin = true`,
-			keyID, user.ID,
-		)
+		rowsAffected, err := dbengine.UpdatePendingMerchantStatus(c.Context(), pool, keyID, user.ID, dbengine.APIKeyStatusActive)
 		if err != nil {
 			slog.Error("approve API key", "key_id", keyID, "user_id", user.ID, "error", err)
 			return c.Status(500).JSON(fiber.Map{"error": "failed to approve API key"})
 		}
 
-		if result.RowsAffected() == 0 {
+		if rowsAffected == 0 {
 			return c.Status(404).JSON(fiber.Map{"error": "pending API key not found"})
 		}
 
@@ -97,24 +78,13 @@ func RejectAPIKey(pool *pgxpool.Pool) fiber.Handler {
 			return c.Status(400).JSON(fiber.Map{"error": "API key ID is required"})
 		}
 
-		// Update the API key status to inactive with atomic permission check
-		// The UPDATE only succeeds if the user is still an org admin at execution time
-		result, err := pool.Exec(c.Context(),
-			`UPDATE merchants SET status = 'inactive'
-			 FROM organization_members om
-			 WHERE merchants.id = $1
-			   AND merchants.status = 'pending'
-			   AND merchants.organization_id = om.organization_id
-			   AND om.user_id = $2
-			   AND om.is_admin = true`,
-			keyID, user.ID,
-		)
+		rowsAffected, err := dbengine.UpdatePendingMerchantStatus(c.Context(), pool, keyID, user.ID, dbengine.APIKeyStatusInactive)
 		if err != nil {
 			slog.Error("reject API key", "key_id", keyID, "user_id", user.ID, "error", err)
 			return c.Status(500).JSON(fiber.Map{"error": "failed to reject API key"})
 		}
 
-		if result.RowsAffected() == 0 {
+		if rowsAffected == 0 {
 			return c.Status(404).JSON(fiber.Map{"error": "pending API key not found"})
 		}
 
