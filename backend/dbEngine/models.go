@@ -59,6 +59,15 @@ type OrganizationMember struct {
 	JoinedAt       time.Time `json:"joined_at"`
 }
 
+// UserOrganization combines organization details with the user's membership info.
+// Used by GetCurrentUser to avoid N+1 queries.
+type UserOrganization struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	IsPersonal bool   `json:"is_personal"`
+	IsAdmin    bool   `json:"is_admin"`
+}
+
 type TransactionStatus string
 
 const (

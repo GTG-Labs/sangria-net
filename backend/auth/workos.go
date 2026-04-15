@@ -258,8 +258,8 @@ func GetCurrentUser(pool *pgxpool.Pool) fiber.Handler {
 			return c.Status(500).JSON(fiber.Map{"error": "Invalid user session"})
 		}
 
-		// Get user's organizations
-		memberships, err := dbengine.GetUserOrganizations(c.Context(), pool, user.ID)
+		// Get user's organizations with details in a single query
+		organizations, err := dbengine.GetUserOrganizationsWithDetails(c.Context(), pool, user.ID)
 		if err != nil {
 			slog.Error("get user organizations", "error", err)
 			return c.Status(500).JSON(fiber.Map{"error": "failed to fetch user organizations"})
@@ -271,29 +271,6 @@ func GetCurrentUser(pool *pgxpool.Pool) fiber.Handler {
 			slog.Error("check admin status", "error", err)
 			// Don't fail the request, just assume not admin
 			isAdmin = false
-		}
-
-		// Format organizations for frontend
-		var organizations []fiber.Map
-		for _, membership := range memberships {
-			// Get organization details
-			var orgName string
-			var isPersonal bool
-			err := pool.QueryRow(c.Context(),
-				`SELECT name, is_personal FROM organizations WHERE id = $1`,
-				membership.OrganizationID,
-			).Scan(&orgName, &isPersonal)
-			if err != nil {
-				slog.Error("get organization details", "error", err)
-				continue
-			}
-
-			organizations = append(organizations, fiber.Map{
-				"id":         membership.OrganizationID,
-				"name":       orgName,
-				"isPersonal": isPersonal,
-				"isAdmin":    membership.IsAdmin,
-			})
 		}
 
 		return c.JSON(fiber.Map{

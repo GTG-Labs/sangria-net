@@ -49,13 +49,15 @@ func GetUserByWorkosID(ctx context.Context, pool *pgxpool.Pool, workosID string)
 	return u, err
 }
 
-// AddUserToOrganization adds a user to an organization with specified admin status
+// AddUserToOrganization adds a user to an organization with specified admin status.
+// On conflict (user already a member), can only promote to admin, never demote.
+// Use an explicit demotion function if you need to remove admin privileges.
 func AddUserToOrganization(ctx context.Context, pool *pgxpool.Pool, userID, organizationID string, isAdmin bool) error {
 	_, err := pool.Exec(ctx,
 		`INSERT INTO organization_members (user_id, organization_id, is_admin, joined_at)
 		 VALUES ($1, $2, $3, NOW())
 		 ON CONFLICT (user_id, organization_id) DO UPDATE
-		 	SET is_admin = EXCLUDED.is_admin`,
+		 	SET is_admin = organization_members.is_admin OR EXCLUDED.is_admin`,
 		userID, organizationID, isAdmin,
 	)
 	return err

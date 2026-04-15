@@ -63,3 +63,30 @@ func ListOrganizationMembers(ctx context.Context, pool *pgxpool.Pool, organizati
 	}
 	return members, rows.Err()
 }
+
+// GetUserOrganizationsWithDetails returns all organizations a user belongs to
+// with org name, personal flag, and admin status in a single query.
+func GetUserOrganizationsWithDetails(ctx context.Context, pool *pgxpool.Pool, userID string) ([]UserOrganization, error) {
+	rows, err := pool.Query(ctx,
+		`SELECT o.id, o.name, o.is_personal, om.is_admin
+		 FROM organization_members om
+		 JOIN organizations o ON o.id = om.organization_id
+		 WHERE om.user_id = $1
+		 ORDER BY om.joined_at ASC`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var orgs []UserOrganization
+	for rows.Next() {
+		var o UserOrganization
+		if err := rows.Scan(&o.ID, &o.Name, &o.IsPersonal, &o.IsAdmin); err != nil {
+			return nil, err
+		}
+		orgs = append(orgs, o)
+	}
+	return orgs, rows.Err()
+}

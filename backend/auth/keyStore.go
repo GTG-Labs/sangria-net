@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	dbengine "sangria/backend/dbEngine"
 )
@@ -168,29 +167,17 @@ func AuthenticateAPIKey(ctx context.Context, pool *pgxpool.Pool, providedKey str
 }
 
 // RevokeAPIKey deactivates an API key (admin-only).
-// Checks that the requesting user is an admin of the organization that owns the API key.
+// Permission check and mutation run in a single statement to avoid TOCTOU races
+// (e.g., admin privileges being removed between the check and the update).
 func RevokeAPIKey(ctx context.Context, pool *pgxpool.Pool, merchantID, adminUserID string) error {
-	// First verify the admin has permission to revoke this API key
-	var organizationID string
-	err := pool.QueryRow(ctx, `
-		SELECT m.organization_id
-		FROM merchants m
-		JOIN organization_members om ON om.organization_id = m.organization_id
-		WHERE m.id = $1 AND om.user_id = $2 AND om.is_admin = true`,
+	result, err := pool.Exec(ctx, `
+		UPDATE merchants SET status = 'inactive'
+		FROM organization_members om
+		WHERE merchants.id = $1
+		  AND om.organization_id = merchants.organization_id
+		  AND om.user_id = $2
+		  AND om.is_admin = true`,
 		merchantID, adminUserID,
-	).Scan(&organizationID)
-
-	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrAPIKeyNotFound
-	}
-	if err != nil {
-		return fmt.Errorf("failed to verify admin permissions: %w", err)
-	}
-
-	// Admin verified, now deactivate the API key
-	result, err := pool.Exec(ctx,
-		`UPDATE merchants SET status = 'inactive' WHERE id = $1 AND organization_id = $2`,
-		merchantID, organizationID,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to revoke API key: %w", err)
