@@ -200,6 +200,13 @@ func GetCurrentUser(pool *pgxpool.Pool) fiber.Handler {
 			return c.Status(500).JSON(fiber.Map{"error": "internal server error"})
 		}
 
+		// Process any accepted invitations before fetching orgs, so newly
+		// accepted orgs appear immediately in the response.
+		if err := dbengine.ProcessAcceptedInvitations(c.Context(), pool, user.ID, user.Email); err != nil {
+			slog.Error("process accepted invitations", "user_id", user.ID, "error", err)
+			// Non-fatal — continue loading the user's data
+		}
+
 		// Get user's organizations with details in a single query
 		userOrgs, err := dbengine.GetUserOrganizationsWithDetails(c.Context(), pool, user.ID)
 		if err != nil {
