@@ -11,6 +11,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// Sentinel errors for better error handling
+var (
+	ErrInvitationNotFound = errors.New("invitation not found")
+)
+
 // ================================
 // Organization Management
 // ================================
@@ -165,6 +170,10 @@ func GetUserOrganizations(ctx context.Context, pool *pgxpool.Pool, userID string
 		organizations = append(organizations, org)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows iteration error: %w", err)
+	}
+
 	return organizations, nil
 }
 
@@ -207,6 +216,55 @@ func CreateInvitation(ctx context.Context, pool *pgxpool.Pool, orgID, inviterUse
 	return invitationID, nil
 }
 
+// CreateInvitationWithAdminCheck creates a new organization invitation with atomic admin verification.
+// This prevents TOCTOU vulnerabilities by checking admin status in the same transaction as the insert.
+func CreateInvitationWithAdminCheck(ctx context.Context, pool *pgxpool.Pool, orgID, inviterUserID, inviteeEmail, message, token string) (string, error) {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// Verify the inviter is an admin of the organization atomically
+	var isAdmin bool
+	err = tx.QueryRow(ctx, `
+		SELECT is_admin FROM organization_members
+		WHERE user_id = $1 AND organization_id = $2`,
+		inviterUserID, orgID,
+	).Scan(&isAdmin)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", fmt.Errorf("user is not a member of the organization")
+		}
+		return "", fmt.Errorf("failed to verify admin status: %w", err)
+	}
+
+	if !isAdmin {
+		return "", fmt.Errorf("user is not an admin of the organization")
+	}
+
+	// Create the invitation in the same transaction
+	var invitationID string
+	err = tx.QueryRow(ctx, `
+		INSERT INTO organization_invitations
+		(organization_id, inviter_user_id, invitee_email, message, invitation_token, expires_at)
+		VALUES ($1, $2, $3, $4, $5, NOW() + INTERVAL '7 days')
+		RETURNING id`,
+		orgID, inviterUserID, inviteeEmail, message, token,
+	).Scan(&invitationID)
+
+	if err != nil {
+		return "", fmt.Errorf("failed to create invitation: %w", err)
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		return "", fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return invitationID, nil
+}
+
 // GetInvitationByToken retrieves an invitation by its token
 func GetInvitationByToken(ctx context.Context, pool *pgxpool.Pool, token string) (*OrganizationInvitation, error) {
 	var invitation OrganizationInvitation
@@ -225,7 +283,7 @@ func GetInvitationByToken(ctx context.Context, pool *pgxpool.Pool, token string)
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("invitation not found")
+			return nil, fmt.Errorf("invitation not found: %w", ErrInvitationNotFound)
 		}
 		return nil, fmt.Errorf("failed to get invitation: %w", err)
 	}

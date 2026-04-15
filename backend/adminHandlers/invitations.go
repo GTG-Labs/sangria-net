@@ -3,6 +3,7 @@ package adminHandlers
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"html"
 	"log/slog"
@@ -247,25 +248,6 @@ func CreateOrganizationInvitation(pool *pgxpool.Pool) fiber.Handler {
 			return c.Status(400).JSON(fiber.Map{"error": "invalid email format"})
 		}
 
-		// Verify the requesting user is an admin of this organization
-		memberships, err := dbengine.GetUserOrganizations(c.Context(), pool, user.ID)
-		if err != nil {
-			slog.Error("get user organizations", "user_id", user.ID, "error", err)
-			return c.Status(500).JSON(fiber.Map{"error": "failed to verify permissions"})
-		}
-
-		isOrgAdmin := false
-		for _, membership := range memberships {
-			if membership.OrganizationID == orgID && membership.IsAdmin {
-				isOrgAdmin = true
-				break
-			}
-		}
-
-		if !isOrgAdmin {
-			return c.Status(403).JSON(fiber.Map{"error": "admin access required to invite members"})
-		}
-
 		// Generate secure invitation token
 		invitationToken, err := generateSecureToken()
 		if err != nil {
@@ -273,15 +255,20 @@ func CreateOrganizationInvitation(pool *pgxpool.Pool) fiber.Handler {
 			return c.Status(500).JSON(fiber.Map{"error": "failed to generate invitation token"})
 		}
 
-		// Create invitation in database
+		// Create invitation in database with atomic admin check
 		message := ""
 		if req.Message != nil {
 			message = *req.Message
 		}
 
-		invitationID, err := dbengine.CreateInvitation(c.Context(), pool, orgID, user.ID, req.Email, message, invitationToken)
+		invitationID, err := dbengine.CreateInvitationWithAdminCheck(c.Context(), pool, orgID, user.ID, req.Email, message, invitationToken)
 		if err != nil {
 			slog.Error("create invitation", "org_id", orgID, "user_id", user.ID, "email", maskEmail(req.Email), "error", err)
+
+			// Handle permission errors
+			if strings.Contains(err.Error(), "not a member") || strings.Contains(err.Error(), "not an admin") {
+				return c.Status(403).JSON(fiber.Map{"error": "admin access required to invite members"})
+			}
 
 			// Handle duplicate invitation errors
 			if strings.Contains(err.Error(), "duplicate") || strings.Contains(err.Error(), "unique") {
@@ -316,7 +303,15 @@ func CreateOrganizationInvitation(pool *pgxpool.Pool) fiber.Handler {
 		// Build invitation acceptance URL that includes our token
 		baseURL := os.Getenv("FRONTEND_URL")
 		if baseURL == "" {
-			baseURL = "http://localhost:3000" // fallback for development
+			slog.Error("FRONTEND_URL environment variable not set - cannot create invitation URL", "org_id", orgID, "user_id", user.ID)
+
+			// Clean up the invitation since we can't send it
+			cleanupErr := dbengine.DeleteInvitation(c.Context(), pool, invitationID)
+			if cleanupErr != nil {
+				slog.Error("failed to clean up invitation after FRONTEND_URL error", "invitation_id", invitationID, "error", cleanupErr)
+			}
+
+			return c.Status(500).JSON(fiber.Map{"error": "FRONTEND_URL configuration is missing - cannot send invitation"})
 		}
 		invitationURL := fmt.Sprintf("%s/accept-invitation?token=%s", baseURL, invitationToken)
 
@@ -401,7 +396,7 @@ func AcceptOrganizationInvitation(pool *pgxpool.Pool) fiber.Handler {
 		// Get invitation details
 		invitation, err := dbengine.GetInvitationByToken(c.Context(), pool, req.Token)
 		if err != nil {
-			if strings.Contains(err.Error(), "not found") {
+			if errors.Is(err, dbengine.ErrInvitationNotFound) {
 				return c.Status(404).JSON(fiber.Map{"error": "invitation not found or expired"})
 			}
 			slog.Error("get invitation by token", "token", maskToken(req.Token), "error", err)

@@ -33,24 +33,42 @@ export default function OrganizationMembersContent() {
       setLoading(true);
       setMembers([]);
 
+      // Create an AbortController for this fetch
+      const controller = new AbortController();
+
       // Fetch members for the new organization
-      fetchMembers();
+      fetchMembers(controller.signal);
+
+      // Cleanup: abort the fetch if selectedOrgId changes or component unmounts
+      return () => {
+        controller.abort();
+      };
     }
   }, [selectedOrgId]);
 
-  const fetchMembers = async () => {
+  const fetchMembers = async (signal?: AbortSignal) => {
     if (!selectedOrgId) return;
 
     try {
-      const response = await fetch(`/api/backend/organizations/${selectedOrgId}/members`);
+      const response = await fetch(`/api/backend/organizations/${selectedOrgId}/members`, { signal });
       if (response.ok) {
         const data = await response.json();
-        setMembers(data.members || []);
+        // Only update state if the fetch wasn't aborted
+        if (!signal?.aborted) {
+          setMembers(data.members || []);
+        }
       }
     } catch (err) {
+      // Ignore abort errors
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
       console.error("Failed to fetch members:", err);
     } finally {
-      setLoading(false);
+      // Only update loading state if not aborted
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
     }
   };
 
