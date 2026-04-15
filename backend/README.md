@@ -27,7 +27,10 @@ The server starts on the port specified by the `PORT` environment variable (requ
 | `WORKOS_API_KEY` | Yes | WorkOS API key |
 | `WORKOS_CLIENT_ID` | Yes | WorkOS client ID |
 | `WORKOS_TOKEN_ISSUER` | Yes | JWT issuer for validation (e.g., `https://api.workos.com/user_management/<client_id>`) |
+| `WORKOS_WEBHOOK_SECRET` | Yes | WorkOS webhook signing secret for validating webhook requests |
 | `SENDGRID_API_KEY` | Yes | SendGrid API key for sending invitation emails |
+| `SENDGRID_FROM_EMAIL` | Yes | Email address used as sender for SendGrid invitation emails |
+| `FRONTEND_URL` | Yes | Public URL of frontend application (used to build invitation accept links) |
 | `ALLOWED_ORIGINS` | No | CORS allowed origins, comma-separated (default: `http://localhost:3000`) |
 | `CDP_API_KEY` | Yes | Coinbase Developer Platform API key |
 | `CDP_API_SECRET` | Yes | CDP API secret |

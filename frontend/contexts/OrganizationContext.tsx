@@ -60,8 +60,15 @@ export function OrganizationProvider({ children }: OrganizationProviderProps) {
           const personalOrg = user.organizations.find((org: any) => org.isPersonal);
           const defaultOrg = personalOrg ? personalOrg.id : user.organizations[0].id;
 
-          // Use functional state updater to avoid stale closure
-          setSelectedOrgId(prev => prev || defaultOrg);
+          // Use functional state updater and validate prev against refreshed list
+          setSelectedOrgId(prev => {
+            // Keep prev if it's truthy AND still exists in the refreshed organizations
+            if (prev && user.organizations.some((org: any) => org.id === prev)) {
+              return prev;
+            }
+            // Otherwise, set to default
+            return defaultOrg;
+          });
         }
       }
     } catch (err) {

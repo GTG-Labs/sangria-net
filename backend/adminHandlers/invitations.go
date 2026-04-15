@@ -158,7 +158,7 @@ func sendInvitationEmail(inviteeEmail, inviterName, orgName, invitationURL, cust
     </div>
 </body>
 </html>`,
-		orgName, orgName, inviterName, orgName,
+		html.EscapeString(orgName), html.EscapeString(orgName), html.EscapeString(inviterName), html.EscapeString(orgName),
 		func() string {
 			if customMessage != "" {
 				return fmt.Sprintf(`<div style="background: #e7f3ff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #2196F3;">
@@ -330,6 +330,14 @@ func CreateOrganizationInvitation(pool *pgxpool.Pool) fiber.Handler {
 		if err != nil {
 			slog.Error("send invitation email", "org_id", orgID, "user_id", user.ID, "email", maskEmail(req.Email), "error", err)
 
+			// Clean up the invitation since email failed - allows retry
+			cleanupErr := dbengine.DeleteInvitation(c.Context(), pool, invitationID)
+			if cleanupErr != nil {
+				slog.Error("failed to clean up invitation after email failure", "invitation_id", invitationID, "error", cleanupErr)
+			} else {
+				slog.Info("cleaned up invitation after email failure - retry is now possible", "invitation_id", invitationID)
+			}
+
 			// Fallback: log the invitation URL for manual sending
 			slog.Info("📧 EMAIL FAILED - Send this invitation URL manually",
 				"invitation_id", invitationID,
@@ -341,7 +349,6 @@ func CreateOrganizationInvitation(pool *pgxpool.Pool) fiber.Handler {
 
 			return c.Status(500).JSON(fiber.Map{
 				"error": "failed to send invitation email - check SendGrid configuration",
-				"invitation_id": invitationID, // Admin can look up in logs if needed
 			})
 		}
 
@@ -412,14 +419,28 @@ func AcceptOrganizationInvitation(pool *pgxpool.Pool) fiber.Handler {
 			}
 		}
 
-		// Check if invitation is still valid
-		if invitation.Status != dbengine.InvitationStatusPending {
-			return c.Status(400).JSON(fiber.Map{"error": "invitation is no longer pending"})
-		}
-
 		// Check if invitation has expired
 		if invitation.ExpiresAt.Before(time.Now()) {
 			return c.Status(400).JSON(fiber.Map{"error": "invitation has expired"})
+		}
+
+		// Check if invitation is already accepted (idempotent behavior for React Strict Mode)
+		if invitation.Status == dbengine.InvitationStatusAccepted {
+			slog.Info("Invitation already accepted (idempotent response)",
+				"invitation_id", invitation.ID,
+				"email", maskEmail(invitation.InviteeEmail),
+				"organization_id", invitation.OrganizationID,
+			)
+
+			return c.Status(200).JSON(fiber.Map{
+				"message":         "Invitation already accepted! You'll be added to the organization when you sign in.",
+				"organization_id": invitation.OrganizationID,
+			})
+		}
+
+		// Check if invitation is still valid
+		if invitation.Status != dbengine.InvitationStatusPending {
+			return c.Status(400).JSON(fiber.Map{"error": "invitation is no longer pending"})
 		}
 
 		// Just mark the invitation as accepted - don't create user yet

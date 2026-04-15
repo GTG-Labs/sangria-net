@@ -77,7 +77,7 @@ func AddUserToOrganization(ctx context.Context, pool *pgxpool.Pool, userID, orga
 		`INSERT INTO organization_members (user_id, organization_id, is_admin, joined_at)
 		 VALUES ($1, $2, $3, NOW())
 		 ON CONFLICT (user_id, organization_id) DO UPDATE
-		 	SET is_admin = EXCLUDED.is_admin`,
+		 	SET is_admin = organization_members.is_admin OR EXCLUDED.is_admin`,
 		userID, organizationID, isAdmin,
 	)
 	return err
@@ -240,6 +240,16 @@ func MarkInvitationAccepted(ctx context.Context, pool *pgxpool.Pool, token strin
 		SET status = 'accepted', accepted_at = NOW()
 		WHERE invitation_token = $1`,
 		token,
+	)
+	return err
+}
+
+// DeleteInvitation deletes an invitation by ID (for cleanup on email send failure)
+func DeleteInvitation(ctx context.Context, pool *pgxpool.Pool, invitationID string) error {
+	_, err := pool.Exec(ctx, `
+		DELETE FROM organization_invitations
+		WHERE id = $1`,
+		invitationID,
 	)
 	return err
 }

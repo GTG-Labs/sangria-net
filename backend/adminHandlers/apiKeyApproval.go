@@ -55,19 +55,17 @@ func ApproveAPIKey(pool *pgxpool.Pool) fiber.Handler {
 			return c.Status(400).JSON(fiber.Map{"error": "API key ID is required"})
 		}
 
-		// Validate admin permissions and get organization ID
-		merchantOrgID, err := validateAPIKeyAdminPermissions(c, pool, user, keyID)
-		if err != nil {
-			if fiberErr, ok := err.(*fiber.Error); ok {
-				return c.Status(fiberErr.Code).JSON(fiber.Map{"error": fiberErr.Message})
-			}
-			return err
-		}
-
-		// Update the API key status to active
+		// Update the API key status to active with atomic permission check
+		// The UPDATE only succeeds if the user is still an org admin at execution time
 		result, err := pool.Exec(c.Context(),
-			`UPDATE merchants SET status = 'active' WHERE id = $1 AND status = 'pending' AND organization_id = $2`,
-			keyID, merchantOrgID,
+			`UPDATE merchants SET status = 'active'
+			 FROM organization_members om
+			 WHERE merchants.id = $1
+			   AND merchants.status = 'pending'
+			   AND merchants.organization_id = om.organization_id
+			   AND om.user_id = $2
+			   AND om.is_admin = true`,
+			keyID, user.ID,
 		)
 		if err != nil {
 			slog.Error("approve API key", "key_id", keyID, "user_id", user.ID, "error", err)
@@ -99,19 +97,17 @@ func RejectAPIKey(pool *pgxpool.Pool) fiber.Handler {
 			return c.Status(400).JSON(fiber.Map{"error": "API key ID is required"})
 		}
 
-		// Validate admin permissions and get organization ID
-		merchantOrgID, err := validateAPIKeyAdminPermissions(c, pool, user, keyID)
-		if err != nil {
-			if fiberErr, ok := err.(*fiber.Error); ok {
-				return c.Status(fiberErr.Code).JSON(fiber.Map{"error": fiberErr.Message})
-			}
-			return err
-		}
-
-		// Update the API key status to inactive
+		// Update the API key status to inactive with atomic permission check
+		// The UPDATE only succeeds if the user is still an org admin at execution time
 		result, err := pool.Exec(c.Context(),
-			`UPDATE merchants SET status = 'inactive' WHERE id = $1 AND status = 'pending' AND organization_id = $2`,
-			keyID, merchantOrgID,
+			`UPDATE merchants SET status = 'inactive'
+			 FROM organization_members om
+			 WHERE merchants.id = $1
+			   AND merchants.status = 'pending'
+			   AND merchants.organization_id = om.organization_id
+			   AND om.user_id = $2
+			   AND om.is_admin = true`,
+			keyID, user.ID,
 		)
 		if err != nil {
 			slog.Error("reject API key", "key_id", keyID, "user_id", user.ID, "error", err)

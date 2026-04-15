@@ -64,7 +64,7 @@ export default function AcceptInvitationPage() {
                   Processing Invitation
                 </h2>
                 <p className="mt-2 text-sm text-gray-600">
-                  Creating your account and adding you to the organization...
+                  Accepting your invitation. Please sign in to complete account creation and join the organization.
                 </p>
               </>
             )}

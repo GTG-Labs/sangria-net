@@ -29,6 +29,10 @@ export default function OrganizationMembersContent() {
       setInviteEmail("");
       setInviteMessage("");
 
+      // Reset list state before starting fetch
+      setLoading(true);
+      setMembers([]);
+
       // Fetch members for the new organization
       fetchMembers();
     }

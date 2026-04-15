@@ -50,10 +50,15 @@ func GetUserByWorkosID(ctx context.Context, pool *pgxpool.Pool, workosID string)
 
 
 
-// GetUserPersonalOrgID returns the organization ID of the user's personal org, if one exists.
-func GetUserPersonalOrgID(ctx context.Context, pool *pgxpool.Pool, userID string) (string, error) {
+// queryRowInterface defines the interface for executing a single-row query
+type queryRowInterface interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+// getUserPersonalOrgIDQuery is a helper that executes the personal org lookup query
+func getUserPersonalOrgIDQuery(ctx context.Context, q queryRowInterface, userID string) (string, error) {
 	var orgID string
-	err := pool.QueryRow(ctx,
+	err := q.QueryRow(ctx,
 		`SELECT o.id
 		 FROM organizations o
 		 JOIN organization_members om ON om.organization_id = o.id
@@ -64,18 +69,14 @@ func GetUserPersonalOrgID(ctx context.Context, pool *pgxpool.Pool, userID string
 	return orgID, err
 }
 
+// GetUserPersonalOrgID returns the organization ID of the user's personal org, if one exists.
+func GetUserPersonalOrgID(ctx context.Context, pool *pgxpool.Pool, userID string) (string, error) {
+	return getUserPersonalOrgIDQuery(ctx, pool, userID)
+}
+
 // GetUserPersonalOrgIDTx returns the organization ID of the user's personal org within a transaction, if one exists.
 func GetUserPersonalOrgIDTx(ctx context.Context, tx pgx.Tx, userID string) (string, error) {
-	var orgID string
-	err := tx.QueryRow(ctx,
-		`SELECT o.id
-		 FROM organizations o
-		 JOIN organization_members om ON om.organization_id = o.id
-		 WHERE om.user_id = $1 AND o.is_personal = true
-		 LIMIT 1`,
-		userID,
-	).Scan(&orgID)
-	return orgID, err
+	return getUserPersonalOrgIDQuery(ctx, tx, userID)
 }
 
 
@@ -88,5 +89,4 @@ func IsAdmin(ctx context.Context, pool *pgxpool.Pool, workosID string) (bool, er
 	).Scan(&exists)
 	return exists, err
 }
-
 
