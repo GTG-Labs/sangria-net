@@ -57,7 +57,7 @@ type OrganizationMember struct {
 	OrganizationID string    `json:"organization_id"`
 	IsAdmin        bool      `json:"is_admin"`
 	JoinedAt       time.Time `json:"joined_at"`
-	UserEmail      string    `json:"user_email"` // Contains the display name (FirstName LastName) or email as fallback
+	DisplayName    string    `json:"display_name"` // Contains the display name (FirstName LastName) or email as fallback
 	ActualEmail    string    `json:"actual_email,omitempty"` // The actual email address from WorkOS
 }
 
@@ -82,6 +82,7 @@ type OrganizationInvitation struct {
 	ExpiresAt       time.Time         `json:"expires_at"`
 	CreatedAt       time.Time         `json:"created_at"`
 	AcceptedAt      *time.Time        `json:"accepted_at"`
+	DeclinedAt      *time.Time        `json:"declined_at"`
 }
 
 type TransactionStatus string

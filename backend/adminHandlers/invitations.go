@@ -14,7 +14,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sendgrid/sendgrid-go"
-	"github.com/sendgrid/sendgrid-go/helpers/mail"
+	sgmail "github.com/sendgrid/sendgrid-go/helpers/mail"
 
 	"sangria/backend/auth"
 	dbengine "sangria/backend/dbEngine"
@@ -37,6 +37,29 @@ func maskEmail(email string) string {
 	// Show first character and mask the rest
 	masked := string(local[0]) + strings.Repeat("*", len(local)-1)
 	return masked + "@" + domain
+}
+
+// maskInvitationURL masks the secret token in invitation URLs for secure logging
+func maskInvitationURL(url string) string {
+	// Find the token parameter and replace its value
+	if idx := strings.Index(url, "token="); idx != -1 {
+		beforeToken := url[:idx+6] // includes "token="
+		afterToken := ""
+		if ampIdx := strings.Index(url[idx:], "&"); ampIdx != -1 {
+			afterToken = url[idx+ampIdx:]
+		}
+		return beforeToken + "***REDACTED***" + afterToken
+	}
+	return url // Return original if no token found
+}
+
+// maskToken masks a secure token for logging purposes
+func maskToken(token string) string {
+	if len(token) <= 8 {
+		return "***REDACTED***"
+	}
+	// Show first 4 and last 4 characters for debugging, mask the middle
+	return token[:4] + "***REDACTED***" + token[len(token)-4:]
 }
 
 // generateSecureToken generates a cryptographically secure random token
@@ -65,10 +88,10 @@ func sendInvitationEmail(inviteeEmail, inviterName, orgName, invitationURL, cust
 	if fromEmail == "" {
 		fromEmail = "noreply@yourdomain.com" // Update this to your domain
 	}
-	from := mail.NewEmail("Sangria Team", fromEmail)
+	from := sgmail.NewEmail("Sangria Team", fromEmail)
 
 	// Set up recipient
-	to := mail.NewEmail("", inviteeEmail)
+	to := sgmail.NewEmail("", inviteeEmail)
 
 	// Create email subject
 	subject := fmt.Sprintf("You're invited to join %s", orgName)
@@ -176,7 +199,7 @@ Powered by Sangria • Built for teams that ship fast`,
 		invitationURL)
 
 	// Create the email message
-	message := mail.NewSingleEmail(from, subject, to, plainContent, htmlContent)
+	message := sgmail.NewSingleEmail(from, subject, to, plainContent, htmlContent)
 
 	// Send the email
 	response, err := client.Send(message)
@@ -258,7 +281,7 @@ func CreateOrganizationInvitation(pool *pgxpool.Pool) fiber.Handler {
 
 		invitationID, err := dbengine.CreateInvitation(c.Context(), pool, orgID, user.ID, req.Email, message, invitationToken)
 		if err != nil {
-			slog.Error("create invitation", "org_id", orgID, "user_id", user.ID, "email", req.Email, "error", err)
+			slog.Error("create invitation", "org_id", orgID, "user_id", user.ID, "email", maskEmail(req.Email), "error", err)
 
 			// Handle duplicate invitation errors
 			if strings.Contains(err.Error(), "duplicate") || strings.Contains(err.Error(), "unique") {
@@ -305,14 +328,14 @@ func CreateOrganizationInvitation(pool *pgxpool.Pool) fiber.Handler {
 
 		err = sendInvitationEmail(req.Email, inviterName, orgName, invitationURL, customMessage)
 		if err != nil {
-			slog.Error("send invitation email", "org_id", orgID, "user_id", user.ID, "email", req.Email, "error", err)
+			slog.Error("send invitation email", "org_id", orgID, "user_id", user.ID, "email", maskEmail(req.Email), "error", err)
 
 			// Fallback: log the invitation URL for manual sending
 			slog.Info("📧 EMAIL FAILED - Send this invitation URL manually",
 				"invitation_id", invitationID,
-				"email", req.Email,
+				"email", maskEmail(req.Email),
 				"org_name", orgName,
-				"invitation_url", invitationURL,
+				"invitation_url", maskInvitationURL(invitationURL),
 				"error", err.Error(),
 			)
 
@@ -327,7 +350,7 @@ func CreateOrganizationInvitation(pool *pgxpool.Pool) fiber.Handler {
 			"email", maskEmail(req.Email),
 			"org_name", orgName,
 			"inviter", inviterName,
-			"invitation_url", invitationURL,
+			"invitation_url", maskInvitationURL(invitationURL),
 		)
 
 		return c.Status(201).JSON(fiber.Map{
@@ -355,10 +378,10 @@ func isValidEmail(email string) bool {
 // NO AUTH REQUIRED - the secure token is the authentication
 func AcceptOrganizationInvitation(pool *pgxpool.Pool) fiber.Handler {
 	return func(c fiber.Ctx) error {
-		// Parse request body - get user email and invitation token
+		// Parse request body - get invitation token
 		var req struct {
 			Token string `json:"token"`
-			Email string `json:"email"`
+			Email string `json:"email"` // Optional - for additional validation
 		}
 		if err := c.Bind().JSON(&req); err != nil {
 			return c.Status(400).JSON(fiber.Map{"error": "invalid request body"})
@@ -368,29 +391,25 @@ func AcceptOrganizationInvitation(pool *pgxpool.Pool) fiber.Handler {
 			return c.Status(400).JSON(fiber.Map{"error": "invitation token is required"})
 		}
 
-		if req.Email == "" {
-			return c.Status(400).JSON(fiber.Map{"error": "email is required"})
-		}
-
-		// Validate email format
-		req.Email = strings.TrimSpace(strings.ToLower(req.Email))
-		if !isValidEmail(req.Email) {
-			return c.Status(400).JSON(fiber.Map{"error": "invalid email format"})
-		}
-
 		// Get invitation details
 		invitation, err := dbengine.GetInvitationByToken(c.Context(), pool, req.Token)
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
 				return c.Status(404).JSON(fiber.Map{"error": "invitation not found or expired"})
 			}
-			slog.Error("get invitation by token", "token", req.Token, "error", err)
+			slog.Error("get invitation by token", "token", maskToken(req.Token), "error", err)
 			return c.Status(500).JSON(fiber.Map{"error": "failed to get invitation"})
 		}
 
-		// Verify the email matches the invitation
-		if invitation.InviteeEmail != req.Email {
-			return c.Status(403).JSON(fiber.Map{"error": "email does not match invitation"})
+		// If email is provided, verify it matches the invitation
+		if req.Email != "" {
+			req.Email = strings.TrimSpace(strings.ToLower(req.Email))
+			if !isValidEmail(req.Email) {
+				return c.Status(400).JSON(fiber.Map{"error": "invalid email format"})
+			}
+			if invitation.InviteeEmail != req.Email {
+				return c.Status(403).JSON(fiber.Map{"error": "email does not match invitation"})
+			}
 		}
 
 		// Check if invitation is still valid
@@ -406,13 +425,13 @@ func AcceptOrganizationInvitation(pool *pgxpool.Pool) fiber.Handler {
 		// Just mark the invitation as accepted - don't create user yet
 		err = dbengine.MarkInvitationAccepted(c.Context(), pool, req.Token)
 		if err != nil {
-			slog.Error("mark invitation accepted", "token", req.Token, "error", err)
+			slog.Error("mark invitation accepted", "token", maskToken(req.Token), "error", err)
 			return c.Status(500).JSON(fiber.Map{"error": "failed to accept invitation"})
 		}
 
 		slog.Info("Invitation accepted successfully - user will be created when they sign in with WorkOS",
 			"invitation_id", invitation.ID,
-			"email", req.Email,
+			"email", maskEmail(invitation.InviteeEmail),
 			"organization_id", invitation.OrganizationID,
 		)
 

@@ -49,6 +49,7 @@ All routes are organized by auth type. The route prefix indicates the auth patte
 |---|---|---|---|
 | GET | `/` | None | Health check |
 | POST | `/webhooks/workos` | None | WorkOS webhook endpoint (invitation.accepted) |
+| POST | `/accept-invitation` | Token | Accept organization invitation via secure token |
 
 ### Dashboard endpoints — `/internal/*` (WorkOS JWT)
 
@@ -173,14 +174,14 @@ backend/
 │   ├── wallets.go                 # CreateWalletPool
 │   ├── treasury.go               # FundTreasury
 │   ├── withdrawals.go             # ApproveWithdrawal, RejectWithdrawal, CompleteWithdrawal, FailWithdrawal
-│   ├── invitations.go             # CreateOrganizationInvitation (SendGrid integration)
+│   ├── invitations.go             # CreateOrganizationInvitation (SendGrid integration), AcceptOrganizationInvitation (token-based)
 │   └── webhooks.go                # HandleWorkOSWebhook (invitation.accepted)
 ├── dbEngine/
 │   ├── models.go                  # All Go types + enums
 │   ├── engine.go                  # DB connection pool
 │   ├── systemAccounts.go          # System account initialization
 │   ├── users.go                   # User CRUD, GetUserOrganizations, GetUserPersonalOrgID
-│   ├── requests.go                # Organization member management (AddUserToOrganization, ListOrganizationMembers, etc.)
+│   ├── organizations.go           # Organization management (CreateOrganization, AddUserToOrganization, invitations, etc.)
 │   ├── merchants.go               # GetMerchantByID, EnsureUSDLiabilityAccount
 │   ├── cryptoWallets.go           # CreateCryptoWalletWithAccount, GetWalletByNetwork/Address
 │   ├── withdrawals.go             # CreateWithdrawal, Approve/Reject/Complete/FailWithdrawal
@@ -276,10 +277,29 @@ Sangria uses a hybrid approach for organization invitations:
 ### Invitation Flow
 1. Organization admin creates invitation via dashboard (`POST /internal/organizations/:id/invitations`)
 2. System generates secure invitation token and stores in `organization_invitations` table
-3. SendGrid sends HTML email with invitation link to recipient
-4. When recipient clicks link, they authenticate via WorkOS
-5. Upon login, system processes any accepted invitations for their email address
-6. User is automatically added to the inviting organization as a member
+3. SendGrid sends beautiful HTML email with invitation link to recipient
+4. Recipient clicks invitation link and accepts without authentication (`POST /accept-invitation`)
+5. System marks invitation as accepted and waits for user to sign in
+6. When user signs in via WorkOS, frontend calls (`POST /internal/users`)
+7. System automatically processes accepted invitations and adds user to organizations
+
+### Technical Implementation
+- **Email Normalization**: Both invitation creation and processing normalize emails to lowercase for consistent matching
+- **Connection Pool Management**: Invitation processing uses individual pool operations to avoid transaction conflicts
+- **Error Resilience**: Failed invitations are logged but don't prevent processing of other invitations
+- **Automatic Processing**: No manual intervention required - invitations are processed on user login
+
+### Security Features
+- **Token-based Authentication**: Secure invitation tokens provide authentication for acceptance
+- **PII Protection**: All logging masks sensitive data (emails, tokens, URLs) for security
+- **Email Validation**: RFC 5322 compliant email validation using stdlib `net/mail`
+- **Token Expiration**: Invitations automatically expire after 7 days
+- **Rate Limiting**: Duplicate invitation prevention via database constraints
+
+### Troubleshooting
+- **"conn busy" errors**: Fixed by removing transactions from invitation processing
+- **Email case mismatches**: Fixed by normalizing emails to lowercase in both creation and processing
+- **Missing organization membership**: Check that `/internal/users` endpoint is called after WorkOS login
 
 ### Permission Model
 - **View Members**: All organization members can view the member list

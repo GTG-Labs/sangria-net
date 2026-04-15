@@ -88,7 +88,7 @@ Defined in `schema.ts`. All tables use UUID primary keys with `defaultRandom()`.
 
 Primary key: `(user_id, organization_id)` — users can only be in each organization once.
 
-**organization_invitations** — WorkOS-managed invitations (table exists for schema completeness but invitations are handled by WorkOS)
+**organization_invitations** — two-phase invitation processing
 
 | Column | Type | Notes |
 |---|---|---|
@@ -96,7 +96,7 @@ Primary key: `(user_id, organization_id)` — users can only be in each organiza
 | organization_id | uuid | FK → organizations.id |
 | inviter_user_id | text | FK → users.workos_id (admin who sent invite) |
 | invitee_email | varchar(255) | Email being invited |
-| invitee_user_id | text | FK → users.workos_id (set when accepted) |
+| invitee_user_id | text | FK → users.workos_id (set when user exists and is added to org) |
 | status | invitation_status | pending, accepted, declined, expired |
 | message | text | Optional welcome message |
 | invitation_token | varchar(255) | Secure token for email links |
@@ -105,7 +105,15 @@ Primary key: `(user_id, organization_id)` — users can only be in each organiza
 | accepted_at | timestamp (tz) | When invitation was accepted |
 | declined_at | timestamp (tz) | When invitation was declined |
 
-**Note**: Invitations are now handled entirely by WorkOS. This table remains in the schema for historical data but new invitations use WorkOS APIs and webhooks.
+**Two-Phase Invitation Flow**:
+1. **Accept**: User accepts invitation via token-only flow (`POST /accept-invitation`). System marks as `status='accepted'` without requiring user details upfront.
+2. **Process**: When user signs in via WorkOS, `ProcessAcceptedInvitations` automatically finds accepted invitations with `invitee_user_id IS NULL`, adds user to organizations, and sets `invitee_user_id` to complete the flow.
+
+**Technical Notes**:
+- Email normalization: All emails stored as lowercase for consistent matching
+- Connection management: Processing uses pool operations instead of transactions to avoid "conn busy" errors
+- Error handling: Failed invitation processing is logged but doesn't block user creation
+- Security: Invitation tokens, URLs, and emails are masked in all log output
 
 **admins** — access control list for Sangria staff
 

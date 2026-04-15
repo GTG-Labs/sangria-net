@@ -9,7 +9,7 @@ interface Member {
   organization_id: string;
   is_admin: boolean;
   joined_at: string;
-  user_email: string; // Actually contains the user's display name (FirstName LastName) or email as fallback
+  display_name: string; // Contains the user's display name (FirstName LastName) or email as fallback
   actual_email?: string; // The actual email address from WorkOS (if provided)
 }
 
@@ -251,7 +251,7 @@ export default function OrganizationMembersContent() {
         ) : (
           <div className="divide-y divide-gray-200">
             {members.map((member, index) => (
-              <div key={`${member.user_id}-${member.user_email}-${index}`} className="px-6 py-4">
+              <div key={`${member.user_id}-${member.display_name}-${index}`} className="px-6 py-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
@@ -260,14 +260,14 @@ export default function OrganizationMembersContent() {
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-gray-900">
-                          {member.user_email || member.user_id || 'Unknown User'}
+                          {member.display_name || member.user_id || 'Unknown User'}
                         </span>
                         {member.is_admin && (
                           <Crown className="h-4 w-4 text-yellow-500" />
                         )}
                       </div>
                       <div className="text-sm text-gray-500">
-                        {member.actual_email && member.actual_email !== member.user_email && (
+                        {member.actual_email && member.actual_email !== member.display_name && (
                           <div className="flex items-center gap-1 mb-1">
                             <Mail className="h-3 w-3" />
                             <span>{member.actual_email}</span>
@@ -299,7 +299,7 @@ export default function OrganizationMembersContent() {
                     {selectedOrg?.isAdmin &&
                      member.user_id !== userInfo?.id && (
                       <button
-                        onClick={() => handleRemoveMember(member.user_id, member.user_email)}
+                        onClick={() => handleRemoveMember(member.user_id, member.display_name)}
                         disabled={removingMembers.has(member.user_id)}
                         className="p-1 text-red-600 hover:text-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
                         title="Remove member from organization"

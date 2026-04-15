@@ -2,8 +2,6 @@ package dbengine
 
 import (
 	"context"
-	"errors"
-	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -50,42 +48,7 @@ func GetUserByWorkosID(ctx context.Context, pool *pgxpool.Pool, workosID string)
 	return u, err
 }
 
-// AddUserToOrganization adds a user to an organization with specified admin status
-func AddUserToOrganization(ctx context.Context, pool *pgxpool.Pool, userID, organizationID string, isAdmin bool) error {
-	_, err := pool.Exec(ctx,
-		`INSERT INTO organization_members (user_id, organization_id, is_admin, joined_at)
-		 VALUES ($1, $2, $3, NOW())
-		 ON CONFLICT (user_id, organization_id) DO UPDATE
-		 	SET is_admin = EXCLUDED.is_admin`,
-		userID, organizationID, isAdmin,
-	)
-	return err
-}
 
-// GetUserOrganizations returns all organizations for a user with their admin status.
-func GetUserOrganizations(ctx context.Context, pool *pgxpool.Pool, userID string) ([]OrganizationMember, error) {
-	rows, err := pool.Query(ctx,
-		`SELECT user_id, organization_id, is_admin, joined_at
-		 FROM organization_members
-		 WHERE user_id = $1
-		 ORDER BY joined_at ASC`,
-		userID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var memberships []OrganizationMember
-	for rows.Next() {
-		var m OrganizationMember
-		if err := rows.Scan(&m.UserID, &m.OrganizationID, &m.IsAdmin, &m.JoinedAt); err != nil {
-			return nil, err
-		}
-		memberships = append(memberships, m)
-	}
-	return memberships, rows.Err()
-}
 
 // GetUserPersonalOrgID returns the organization ID of the user's personal org, if one exists.
 func GetUserPersonalOrgID(ctx context.Context, pool *pgxpool.Pool, userID string) (string, error) {
@@ -115,37 +78,6 @@ func GetUserPersonalOrgIDTx(ctx context.Context, tx pgx.Tx, userID string) (stri
 	return orgID, err
 }
 
-// CreateOrganization creates a new organization and adds the creator as an admin
-func CreateOrganization(ctx context.Context, pool *pgxpool.Pool, creatorUserID, orgName string) (string, error) {
-	tx, err := pool.Begin(ctx)
-	if err != nil {
-		return "", fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer tx.Rollback(ctx)
-
-	// Create the organization
-	var orgID string
-	err = tx.QueryRow(ctx, `
-		INSERT INTO organizations (name, is_personal, created_at)
-		VALUES ($1, false, NOW())
-		RETURNING id`,
-		orgName).Scan(&orgID)
-	if err != nil {
-		return "", fmt.Errorf("failed to create organization: %w", err)
-	}
-
-	// Add creator as admin to the organization
-	err = AddUserToOrganizationTx(ctx, tx, creatorUserID, orgID, true)
-	if err != nil {
-		return "", fmt.Errorf("failed to add creator to organization: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return "", fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
-	return orgID, nil
-}
 
 // IsAdmin returns true if the given WorkOS user ID has an entry in the admins table.
 func IsAdmin(ctx context.Context, pool *pgxpool.Pool, workosID string) (bool, error) {
@@ -157,19 +89,4 @@ func IsAdmin(ctx context.Context, pool *pgxpool.Pool, workosID string) (bool, er
 	return exists, err
 }
 
-// IsOrganizationAdmin returns true if the given user is an admin of the specified organization.
-func IsOrganizationAdmin(ctx context.Context, pool *pgxpool.Pool, userID, organizationID string) (bool, error) {
-	var isAdmin bool
-	err := pool.QueryRow(ctx,
-		`SELECT is_admin FROM organization_members
-		 WHERE user_id = $1 AND organization_id = $2`,
-		userID, organizationID,
-	).Scan(&isAdmin)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return false, nil // User is not a member of the organization
-		}
-		return false, err
-	}
-	return isAdmin, nil
-}
+
