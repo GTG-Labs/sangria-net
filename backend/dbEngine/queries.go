@@ -220,7 +220,7 @@ func GetAdminTransactionsPaginated(
 		JOIN accounts merchant_acc ON merchant_acc.id = merchant_le.account_id
 			AND merchant_acc.type = 'LIABILITY'
 			AND merchant_le.direction = 'CREDIT'
-		JOIN merchants m ON m.organization_id = merchant_acc.organization_id
+		JOIN organizations o ON o.id = merchant_acc.organization_id
 		WHERE 1=1%s
 	`, extraWhere)
 

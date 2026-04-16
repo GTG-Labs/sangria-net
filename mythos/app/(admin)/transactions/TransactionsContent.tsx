@@ -126,6 +126,15 @@ export default function TransactionsContent() {
     }
   }, []);
 
+  useEffect(() => {
+    if (!selectedTx) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSelectedTx(null);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [selectedTx]);
+
   const handleSearch = () => {
     setActiveSearch(search);
   };

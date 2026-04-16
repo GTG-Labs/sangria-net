@@ -6,5 +6,5 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  return proxyToBackend("GET", `/admin/transactions/${id}/ledger`);
+  return proxyToBackend("GET", `/admin/transactions/${encodeURIComponent(id)}/ledger`);
 }
