@@ -1,7 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { getSignInUrl, withAuth } from "@workos-inc/authkit-nextjs";
+import { withAuth } from "@workos-inc/authkit-nextjs";
 
 import PortalSidebarNav from "@/components/PortalSidebarNav";
 import ProfilePopover from "@/components/ProfilePopover";
@@ -12,12 +11,7 @@ export default async function PortalLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const { user } = await withAuth();
-
-  if (!user) {
-    const signInUrl = await getSignInUrl();
-    redirect(signInUrl);
-  }
+  const { user } = await withAuth({ ensureSignedIn: true });
 
   return (
     <OrganizationProvider>

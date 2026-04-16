@@ -3,12 +3,14 @@ import { proxyToBackend } from "@/lib/api-proxy";
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
-  const limit = searchParams.get("limit") || "";
-  const cursor = searchParams.get("cursor") || "";
 
   const queryString = new URLSearchParams();
-  if (limit) queryString.set("limit", limit);
-  if (cursor) queryString.set("cursor", cursor);
+
+  const passthrough = ["limit", "cursor", "organization_id", "search", "start_date", "end_date"];
+  for (const key of passthrough) {
+    const val = searchParams.get(key);
+    if (val) queryString.set(key, val);
+  }
 
   const path = `/admin/transactions${queryString.toString() ? `?${queryString}` : ""}`;
   return proxyToBackend("GET", path);

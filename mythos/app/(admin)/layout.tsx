@@ -25,21 +25,21 @@ export default async function AdminLayout({
       <nav className="border-b border-gray-800">
         <div className="mx-auto max-w-6xl px-6 flex items-center justify-between h-14">
           <div className="flex items-center gap-8">
-            <Link href="/dashboard" className="text-lg font-bold">
+            <Link href="/transactions" className="text-lg font-bold">
               mythos
             </Link>
             <div className="flex items-center gap-6">
-              <Link
-                href="/dashboard"
-                className="text-sm text-gray-400 hover:text-white transition-colors"
-              >
-                Dashboard
-              </Link>
               <Link
                 href="/transactions"
                 className="text-sm text-gray-400 hover:text-white transition-colors"
               >
                 Transactions
+              </Link>
+              <Link
+                href="/withdrawals"
+                className="text-sm text-gray-400 hover:text-white transition-colors"
+              >
+                Withdrawals
               </Link>
             </div>
           </div>
