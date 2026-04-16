@@ -232,6 +232,8 @@ export default function TransactionsContent() {
         </div>
       )}
 
+      {/* hasMore is only true when nextCursor is non-null — backend sets
+          HasMore: nextCursor != nil and only encodes NextCursor when non-nil */}
       {hasMore && (
         <div className="mt-6 flex justify-center">
           <button
