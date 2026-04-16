@@ -1,11 +1,32 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { CheckCircle, XCircle, Loader, LogIn } from "lucide-react";
 import { handleSignIn } from "@/lib/auth-actions";
 
 export default function AcceptInvitationPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+          <div className="sm:mx-auto sm:w-full sm:max-w-md">
+            <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
+              <div className="text-center">
+                <Loader className="mx-auto h-12 w-12 text-blue-500 animate-spin" />
+                <h2 className="mt-4 text-xl font-bold text-gray-900">Loading...</h2>
+              </div>
+            </div>
+          </div>
+        </div>
+      }
+    >
+      <AcceptInvitationContent />
+    </Suspense>
+  );
+}
+
+function AcceptInvitationContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const token = searchParams.get("token");
