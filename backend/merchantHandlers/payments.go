@@ -20,10 +20,32 @@ import (
 
 const maxTimeoutSeconds = 60
 
+func buildCanonicalRequirements(
+	netConfig x402Handlers.NetworkConfig,
+	payTo string,
+	amount string,
+) x402Handlers.PaymentRequirements {
+	return x402Handlers.PaymentRequirements{
+		Scheme:            "exact",
+		Network:           netConfig.CAIP2,
+		Amount:            amount,
+		Asset:             netConfig.USDCAddress,
+		PayTo:             payTo,
+		MaxTimeoutSeconds: maxTimeoutSeconds,
+		Extra: map[string]any{
+			"name":                "USD Coin",
+			"version":             "2",
+			"assetTransferMethod": "eip3009",
+		},
+	}
+}
+
 // GeneratePayment handles POST /v1/generate-payment.
 // Stateless: looks up the wallet for the network and returns x402 payment terms.
 func GeneratePayment(pool *pgxpool.Pool) fiber.Handler {
 	return func(c fiber.Ctx) error {
+		slog.Info("generate payment: request received")
+
 		var req struct {
 			Amount      int64  `json:"amount"`
 			Description string `json:"description"`
@@ -36,6 +58,11 @@ func GeneratePayment(pool *pgxpool.Pool) fiber.Handler {
 		if req.Amount <= 0 {
 			return c.Status(400).JSON(fiber.Map{"error": "amount must be a positive integer (microunits)"})
 		}
+
+		slog.Info("generate payment: validated request",
+			"amount_micro", req.Amount,
+			"description", req.Description,
+			"resource", req.Resource)
 
 		// Hardcoded: USDC on Base (change to "base" for mainnet).
 		const network = "base"
@@ -52,23 +79,16 @@ func GeneratePayment(pool *pgxpool.Pool) fiber.Handler {
 		}
 
 		slog.Info("generate payment: terms issued", "network", netConfig.CAIP2, "amount_micro", req.Amount)
+		canonicalRequirements := buildCanonicalRequirements(
+			netConfig,
+			wallet.Address,
+			strconv.FormatInt(req.Amount, 10),
+		)
 
 		return c.Status(200).JSON(fiber.Map{
 			"x402Version": 2,
 			"accepts": []x402Handlers.PaymentRequirements{
-				{
-					Scheme:            "exact",
-					Network:           netConfig.CAIP2,
-					Amount:            strconv.FormatInt(req.Amount, 10),
-					Asset:             netConfig.USDCAddress,
-					PayTo:             wallet.Address,
-					MaxTimeoutSeconds: maxTimeoutSeconds,
-					Extra: map[string]any{
-						"name":                "USD Coin",
-						"version":             "2",
-						"assetTransferMethod": "eip3009",
-					},
-				},
+				canonicalRequirements,
 			},
 			"resource": x402Handlers.ResourceInfo{
 				URL:         req.Resource,
@@ -101,6 +121,8 @@ type payloadEnvelope struct {
 // background job to resolve stale pending rows using on-chain state.
 func SettlePayment(pool *pgxpool.Pool) fiber.Handler {
 	return func(c fiber.Ctx) error {
+		slog.Info("settle payment: request received")
+
 		merchant, ok := c.Locals("merchant_api_key").(*dbengine.Merchant)
 		if !ok || merchant == nil {
 			return c.Status(500).JSON(fiber.Map{"error": "internal server error"})
@@ -112,6 +134,10 @@ func SettlePayment(pool *pgxpool.Pool) fiber.Handler {
 		if err := c.Bind().JSON(&req); err != nil {
 			return c.Status(400).JSON(fiber.Map{"error": "invalid request body"})
 		}
+
+		slog.Info("settle payment: payload received",
+			"merchant_id", merchant.ID,
+			"payload_b64_len", len(req.PaymentPayload))
 
 		// ── 1. Parse & validate payload ──────────────────────────────────
 
@@ -141,6 +167,11 @@ func SettlePayment(pool *pgxpool.Pool) fiber.Handler {
 			return c.Status(400).JSON(fiber.Map{"error": "invalid payment amount"})
 		}
 
+		slog.Info("settle payment: parsed payload",
+			"merchant_id", merchant.ID,
+			"to_address", toAddress,
+			"amount_micro", amount)
+
 		// ── 2. Lookup wallet, build requirements ─────────────────────────
 
 		wallet, err := dbengine.GetWalletByAddress(c.Context(), pool, toAddress)
@@ -157,19 +188,17 @@ func SettlePayment(pool *pgxpool.Pool) fiber.Handler {
 			return c.Status(500).JSON(fiber.Map{"error": "network config not found for wallet"})
 		}
 
-		canonicalRequirements := x402Handlers.PaymentRequirements{
-			Scheme:            "exact",
-			Network:           netConfig.CAIP2,
-			Amount:            valueStr,
-			Asset:             netConfig.USDCAddress,
-			PayTo:             wallet.Address,
-			MaxTimeoutSeconds: maxTimeoutSeconds,
-			Extra: map[string]any{
-				"name":                "USD Coin",
-				"version":             "2",
-				"assetTransferMethod": "eip3009",
-			},
-		}
+		slog.Info("settle payment: resolved wallet",
+			"merchant_id", merchant.ID,
+			"wallet_id", wallet.ID,
+			"wallet_address", wallet.Address,
+			"wallet_network", wallet.Network)
+
+		canonicalRequirements := buildCanonicalRequirements(
+			netConfig,
+			wallet.Address,
+			valueStr,
+		)
 
 		payload := json.RawMessage(payloadBytes)
 
@@ -269,6 +298,8 @@ func SettlePayment(pool *pgxpool.Pool) fiber.Handler {
 			"fee_micro", fee,
 		)
 
+		logger.Info("settle payment: pending ledger transaction created", "payload_key", payloadKey)
+
 		// ── 7. Verify with facilitator ───────────────────────────────────
 
 		logger.Info("settle payment: calling verify")
@@ -351,6 +382,8 @@ func SettlePayment(pool *pgxpool.Pool) fiber.Handler {
 				return c.Status(500).JSON(fiber.Map{"error": "settlement succeeded but ledger confirmation failed — safe to retry"})
 			}
 		}
+
+		logger.Info("settle payment: ledger confirmed", "tx_hash", settleResp.Transaction)
 
 		// ── 10. Return success ───────────────────────────────────────────
 
