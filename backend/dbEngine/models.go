@@ -283,7 +283,7 @@ type Withdrawal struct {
 	ReviewNote              *string          `json:"review_note"`
 	CompletedBy             *string          `json:"completed_by"`
 	FailedBy                *string          `json:"failed_by"`
-	IdempotencyKey          string           `json:"idempotency_key"`
+	IdempotencyKey          string           `json:"-"`
 	CreatedAt               time.Time        `json:"created_at"`
 	ApprovedAt              *time.Time       `json:"approved_at"`
 	ProcessedAt             *time.Time       `json:"processed_at"`

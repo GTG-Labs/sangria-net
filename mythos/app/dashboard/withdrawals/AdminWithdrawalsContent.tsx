@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Fragment, useState, useEffect } from "react";
 
 interface Withdrawal {
   id: string;
@@ -9,15 +9,23 @@ interface Withdrawal {
   fee: number;
   net_amount: number;
   status: string;
-  created_at: string;
-  approved_at: string | null;
-  completed_at: string | null;
-  failed_at: string | null;
-  canceled_at: string | null;
+  debit_transaction_id: string | null;
+  completion_transaction_id: string | null;
+  reversal_transaction_id: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  review_note: string | null;
+  completed_by: string | null;
+  failed_by: string | null;
   failure_code: string | null;
   failure_message: string | null;
-  reviewed_by: string | null;
-  review_note: string | null;
+  created_at: string;
+  approved_at: string | null;
+  processed_at: string | null;
+  completed_at: string | null;
+  failed_at: string | null;
+  reversed_at: string | null;
+  canceled_at: string | null;
 }
 
 interface PaginatedWithdrawalsResponse {
@@ -51,6 +59,7 @@ export default function AdminWithdrawalsContent() {
   const [total, setTotal] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState("");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const fetchWithdrawals = async (cursor?: string, signal?: AbortSignal) => {
     const isInitialLoad = !cursor;
@@ -185,6 +194,12 @@ export default function AdminWithdrawalsContent() {
   const formatAmount = (microunits: number) =>
     `$${formatMicrounits(microunits)}`;
 
+  const formatDate = (dateString: string) =>
+    new Date(dateString).toLocaleString("en-US", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+
   const timeAgo = (dateString: string) => {
     const now = new Date();
     const date = new Date(dateString);
@@ -228,6 +243,102 @@ export default function AdminWithdrawalsContent() {
       >
         {labels[status] || status}
       </span>
+    );
+  };
+
+  const detailRow = (label: string, value: string | null, mono = false) => (
+    <div className="flex gap-4 py-1 text-sm">
+      <span className="w-32 shrink-0 text-gray-500">{label}</span>
+      <span
+        className={`text-gray-900 break-all ${mono ? "font-mono text-xs" : ""}`}
+      >
+        {value || "—"}
+      </span>
+    </div>
+  );
+
+  const detailSection = (title: string, rows: React.ReactNode) => (
+    <div>
+      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
+        {title}
+      </h3>
+      {rows}
+    </div>
+  );
+
+  const renderDetailPanel = (w: Withdrawal) => {
+    const hasReview = w.reviewed_by || w.reviewed_at || w.review_note;
+    const hasCompletion = !!w.completed_by;
+    const hasFailure = w.failed_by || w.failure_code || w.failure_message;
+
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+        {detailSection(
+          "Identifiers",
+          <>
+            {detailRow("ID", w.id, true)}
+            {detailRow("Merchant ID", w.merchant_id, true)}
+          </>
+        )}
+        {detailSection(
+          "Timeline",
+          <>
+            {detailRow("Requested", formatDate(w.created_at))}
+            {detailRow("Approved", w.approved_at && formatDate(w.approved_at))}
+            {detailRow(
+              "Processed",
+              w.processed_at && formatDate(w.processed_at)
+            )}
+            {detailRow(
+              "Completed",
+              w.completed_at && formatDate(w.completed_at)
+            )}
+            {detailRow("Failed", w.failed_at && formatDate(w.failed_at))}
+            {detailRow(
+              "Reversed",
+              w.reversed_at && formatDate(w.reversed_at)
+            )}
+            {detailRow(
+              "Canceled",
+              w.canceled_at && formatDate(w.canceled_at)
+            )}
+          </>
+        )}
+        {hasReview &&
+          detailSection(
+            "Review",
+            <>
+              {detailRow("Reviewer", w.reviewed_by, true)}
+              {detailRow(
+                "Reviewed at",
+                w.reviewed_at && formatDate(w.reviewed_at)
+              )}
+              {detailRow("Note", w.review_note)}
+            </>
+          )}
+        {hasCompletion &&
+          detailSection(
+            "Completion",
+            detailRow("Completed by", w.completed_by, true)
+          )}
+        {hasFailure &&
+          detailSection(
+            "Failure",
+            <>
+              {detailRow("Failed by", w.failed_by, true)}
+              {detailRow("Code", w.failure_code)}
+              {detailRow("Message", w.failure_message)}
+            </>
+          )}
+        {detailSection(
+          "Ledger Transactions",
+          <>
+            {detailRow("Debit", w.debit_transaction_id, true)}
+            {detailRow("Completion", w.completion_transaction_id, true)}
+            {detailRow("Reversal", w.reversal_transaction_id, true)}
+          </>
+        )}
+      </div>
     );
   };
 
@@ -366,37 +477,71 @@ export default function AdminWithdrawalsContent() {
               </tr>
             </thead>
             <tbody>
-              {withdrawals.map((w, i) => (
-                <tr
-                  key={w.id}
-                  className={`border-b border-zinc-200 hover:bg-zinc-200/50 transition-colors ${
-                    i % 2 === 0 ? "bg-zinc-100/50" : ""
-                  }`}
-                >
-                  <td className="py-4 pl-2 pr-4 font-mono text-xs text-gray-500">
-                    {truncateId(w.id)}
-                  </td>
-                  <td className="py-4 px-4 font-mono text-xs text-gray-500">
-                    {truncateId(w.merchant_id)}
-                  </td>
-                  <td className="py-4 px-4 text-sm text-gray-900">
-                    {formatAmount(w.amount)}
-                  </td>
-                  <td className="py-4 px-4 text-sm text-gray-500">
-                    {formatAmount(w.fee)}
-                  </td>
-                  <td className="py-4 px-4 text-sm text-gray-900 font-medium">
-                    {formatAmount(w.net_amount)}
-                  </td>
-                  <td className="py-4 px-4">{statusBadge(w.status)}</td>
-                  <td className="py-4 px-4 text-sm text-gray-900">
-                    {timeAgo(w.created_at)}
-                  </td>
-                  <td className="py-4 pl-4 pr-2 text-right">
-                    {renderActions(w)}
-                  </td>
-                </tr>
-              ))}
+              {withdrawals.map((w, i) => {
+                const isExpanded = expandedId === w.id;
+                const toggle = () =>
+                  setExpandedId(isExpanded ? null : w.id);
+                return (
+                  <Fragment key={w.id}>
+                    <tr
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={isExpanded}
+                      onClick={toggle}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          toggle();
+                        }
+                      }}
+                      className={`border-b border-zinc-200 hover:bg-zinc-200/50 transition-colors cursor-pointer ${
+                        i % 2 === 0 ? "bg-zinc-100/50" : ""
+                      }`}
+                    >
+                      <td className="py-4 pl-2 pr-4 font-mono text-xs text-gray-500">
+                        <div className="flex items-center gap-2">
+                          <span
+                            aria-hidden
+                            className="select-none text-gray-400 w-3 inline-block"
+                          >
+                            {isExpanded ? "▾" : "▸"}
+                          </span>
+                          {truncateId(w.id)}
+                        </div>
+                      </td>
+                      <td className="py-4 px-4 font-mono text-xs text-gray-500">
+                        {truncateId(w.merchant_id)}
+                      </td>
+                      <td className="py-4 px-4 text-sm text-gray-900">
+                        {formatAmount(w.amount)}
+                      </td>
+                      <td className="py-4 px-4 text-sm text-gray-500">
+                        {formatAmount(w.fee)}
+                      </td>
+                      <td className="py-4 px-4 text-sm text-gray-900 font-medium">
+                        {formatAmount(w.net_amount)}
+                      </td>
+                      <td className="py-4 px-4">{statusBadge(w.status)}</td>
+                      <td className="py-4 px-4 text-sm text-gray-900">
+                        {timeAgo(w.created_at)}
+                      </td>
+                      <td
+                        className="py-4 pl-4 pr-2 text-right"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {renderActions(w)}
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr className="border-b border-zinc-200 bg-zinc-50">
+                        <td colSpan={8} className="px-6 py-6">
+                          {renderDetailPanel(w)}
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>
