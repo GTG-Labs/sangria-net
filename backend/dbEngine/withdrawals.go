@@ -59,10 +59,17 @@ func getWithdrawalByIdempotencyKey(ctx context.Context, pool *pgxpool.Pool, idem
 // creates a withdrawal record. Auto-approves if the amount is within the
 // threshold. The entire operation runs in a single transaction with a row lock
 // on the merchant's account to prevent overdraw from concurrent requests.
+//
+// Authorization: the caller must be an admin of the organization that owns
+// the merchant. This is enforced atomically inside the merchant-account lock
+// query via a JOIN on organization_members. If the caller is not an admin
+// (or the merchant doesn't exist) the function returns ErrMerchantNotFound.
+// The ambiguity is intentional — don't disclose authorization state separately
+// from existence.
 func CreateWithdrawal(
 	ctx context.Context, pool *pgxpool.Pool,
 	merchantID string, amount int64, fee int64, idempotencyKey string,
-	autoApprove bool,
+	autoApprove bool, userID string,
 ) (Withdrawal, error) {
 	if err := ValidateAmountAndFee(amount, fee); err != nil {
 		return Withdrawal{}, err
@@ -90,16 +97,24 @@ func CreateWithdrawal(
 		return Withdrawal{}, fmt.Errorf("check idempotency: %w", idempErr)
 	}
 
-	// Look up merchant's USD LIABILITY account and lock it.
+	// Look up merchant's USD LIABILITY account and lock it. The JOIN on
+	// organization_members doubles as the authorization check — if the caller
+	// is not an admin of the owning org, zero rows are returned and we surface
+	// ErrMerchantNotFound (see function-level comment on the ambiguity).
 	var merchantAcctID string
 	err = tx.QueryRow(ctx,
 		`SELECT a.id FROM accounts a
 		 JOIN merchants m ON m.organization_id = a.organization_id
-		 WHERE m.id = $1 AND a.type = 'LIABILITY' AND a.currency = 'USD'
+		 JOIN organization_members om ON om.organization_id = m.organization_id
+		 WHERE m.id = $1 AND om.user_id = $2 AND om.is_admin = true
+		   AND a.type = 'LIABILITY' AND a.currency = 'USD'
 		 FOR UPDATE`,
-		merchantID,
+		merchantID, userID,
 	).Scan(&merchantAcctID)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Withdrawal{}, ErrMerchantNotFound
+		}
 		return Withdrawal{}, fmt.Errorf("lock merchant account: %w", err)
 	}
 
