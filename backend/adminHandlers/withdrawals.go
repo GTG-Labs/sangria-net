@@ -138,6 +138,12 @@ func FailWithdrawal(pool *pgxpool.Pool) fiber.Handler {
 		if req.FailureCode == "" {
 			return c.Status(400).JSON(fiber.Map{"error": "failure_code is required"})
 		}
+		if len(req.FailureCode) > 100 {
+			return c.Status(400).JSON(fiber.Map{"error": "failure_code must be at most 100 characters"})
+		}
+		if len(req.FailureMessage) > 1000 {
+			return c.Status(400).JSON(fiber.Map{"error": "failure_message must be at most 1000 characters"})
+		}
 
 		if err := dbengine.FailWithdrawal(c.Context(), pool, withdrawalID, admin.ID, req.FailureCode, req.FailureMessage); err != nil {
 			if errors.Is(err, dbengine.ErrWithdrawalNotFound) {
