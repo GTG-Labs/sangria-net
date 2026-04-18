@@ -552,7 +552,13 @@ func RejectWithdrawal(ctx context.Context, pool *pgxpool.Pool, withdrawalID, adm
 
 // CancelWithdrawal allows a merchant to cancel their own pending_approval withdrawal.
 // Verifies the withdrawal belongs to the given merchant before reversing.
-func CancelWithdrawal(ctx context.Context, pool *pgxpool.Pool, withdrawalID, merchantID string) error {
+// CancelWithdrawal atomically cancels a pending withdrawal if the caller is an
+// admin of the organization that owns the merchant.
+//
+// Returns ErrWithdrawalNotFound if: the withdrawal doesn't exist, it's not in
+// pending_approval status, OR the caller is not an org admin. The ambiguity is
+// intentional — don't disclose authorization state separately from existence.
+func CancelWithdrawal(ctx context.Context, pool *pgxpool.Pool, withdrawalID, merchantID, userID string) error {
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
@@ -561,8 +567,16 @@ func CancelWithdrawal(ctx context.Context, pool *pgxpool.Pool, withdrawalID, mer
 
 	var w Withdrawal
 	w, err = scanWithdrawal(tx.QueryRow(ctx,
-		fmt.Sprintf(`SELECT %s FROM withdrawals WHERE id = $1 AND merchant_id = $2 AND status = 'pending_approval' FOR UPDATE`, withdrawalColumns),
-		withdrawalID, merchantID,
+		fmt.Sprintf(`
+			SELECT %s FROM withdrawals
+			WHERE id = $1 AND merchant_id = $2 AND status = 'pending_approval'
+			  AND EXISTS (
+			    SELECT 1 FROM organization_members om
+			    JOIN merchants m ON m.organization_id = om.organization_id
+			    WHERE m.id = $2 AND om.user_id = $3 AND om.is_admin = true
+			  )
+			FOR UPDATE`, withdrawalColumns),
+		withdrawalID, merchantID, userID,
 	))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

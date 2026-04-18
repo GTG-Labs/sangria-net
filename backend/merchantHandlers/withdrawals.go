@@ -172,7 +172,9 @@ func ListWithdrawals(pool *pgxpool.Pool) fiber.Handler {
 }
 
 // CancelWithdrawal handles POST /withdrawals/:id/cancel.
-// Dashboard endpoint — merchant cancels their own pending withdrawal.
+// Dashboard endpoint — only an admin of the organization that owns the merchant
+// may cancel a pending withdrawal. Authorization is enforced atomically in SQL
+// (see dbengine.CancelWithdrawal) to prevent TOCTOU.
 func CancelWithdrawal(pool *pgxpool.Pool) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		user, ok := c.Locals("workos_user").(auth.WorkOSUser)
@@ -191,42 +193,9 @@ func CancelWithdrawal(pool *pgxpool.Pool) fiber.Handler {
 			return c.Status(400).JSON(fiber.Map{"error": "merchant_id is required"})
 		}
 
-		// Get user organizations to validate merchant access
-		memberships, err := dbengine.GetUserOrganizations(c.Context(), pool, user.ID)
-		if err != nil {
-			slog.Error("get user organizations", "user_id", user.ID, "error", err)
-			return c.Status(500).JSON(fiber.Map{"error": "failed to get user organizations"})
-		}
-		if len(memberships) == 0 {
-			slog.Error("user has no organizations", "user_id", user.ID)
-			return c.Status(400).JSON(fiber.Map{"error": "user must belong to an organization"})
-		}
-
-		// Verify this merchant belongs to the authenticated user's organization.
-		merchant, err := dbengine.GetMerchantByID(c.Context(), pool, req.MerchantID)
-		if err != nil {
-			if errors.Is(err, dbengine.ErrMerchantNotFound) {
-				return c.Status(404).JSON(fiber.Map{"error": "merchant not found"})
-			}
-			slog.Error("get merchant", "merchant_id", req.MerchantID, "error", err)
-			return c.Status(500).JSON(fiber.Map{"error": "failed to look up merchant"})
-		}
-
-		// Check if user is a member of the organization that owns this merchant
-		userHasAccess := false
-		for _, membership := range memberships {
-			if membership.OrganizationID == merchant.OrganizationID {
-				userHasAccess = true
-				break
-			}
-		}
-		if !userHasAccess {
-			return c.Status(403).JSON(fiber.Map{"error": "Forbidden"})
-		}
-
-		if err := dbengine.CancelWithdrawal(c.Context(), pool, withdrawalID, merchant.ID); err != nil {
+		if err := dbengine.CancelWithdrawal(c.Context(), pool, withdrawalID, req.MerchantID, user.ID); err != nil {
 			if errors.Is(err, dbengine.ErrWithdrawalNotFound) {
-				return c.Status(400).JSON(fiber.Map{"error": "withdrawal not found or not pending approval"})
+				return c.Status(400).JSON(fiber.Map{"error": "withdrawal not found, not pending approval, or access denied"})
 			}
 			slog.Error("cancel withdrawal", "withdrawal_id", withdrawalID, "error", err)
 			return c.Status(500).JSON(fiber.Map{"error": "failed to cancel withdrawal"})
