@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 interface Transaction {
   id: string;
@@ -55,6 +55,9 @@ export default function TransactionsContent() {
   const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
   const [ledgerLoading, setLedgerLoading] = useState(false);
 
+  const fetchControllerRef = useRef<AbortController | null>(null);
+  const ledgerControllerRef = useRef<AbortController | null>(null);
+
   // Filters
   const [search, setSearch] = useState("");
   const [activeSearch, setActiveSearch] = useState("");
@@ -72,11 +75,15 @@ export default function TransactionsContent() {
 
   const fetchTransactions = useCallback(
     async (cursor?: string) => {
+      fetchControllerRef.current?.abort();
+      const controller = new AbortController();
+      fetchControllerRef.current = controller;
+
       const isInitialLoad = !cursor;
       isInitialLoad ? setLoading(true) : setLoadingMore(true);
 
       try {
-        const response = await fetch(buildUrl(cursor));
+        const response = await fetch(buildUrl(cursor), { signal: controller.signal });
 
         if (response.ok) {
           const data = (await response.json()) as PaginatedResponse;
@@ -95,11 +102,14 @@ export default function TransactionsContent() {
           setError(errorData.error || "Failed to load transactions");
           if (isInitialLoad) setTransactions([]);
         }
-      } catch {
+      } catch (e) {
+        if ((e as Error).name === "AbortError") return;
         setError("Failed to load transactions");
         if (isInitialLoad) setTransactions([]);
       } finally {
-        isInitialLoad ? setLoading(false) : setLoadingMore(false);
+        if (!controller.signal.aborted) {
+          isInitialLoad ? setLoading(false) : setLoadingMore(false);
+        }
       }
     },
     [buildUrl]
@@ -110,19 +120,25 @@ export default function TransactionsContent() {
   }, [fetchTransactions]);
 
   const selectTransaction = useCallback(async (tx: Transaction) => {
+    ledgerControllerRef.current?.abort();
+    const controller = new AbortController();
+    ledgerControllerRef.current = controller;
+
     setSelectedTx(tx);
     setLedgerEntries([]);
     setLedgerLoading(true);
     try {
-      const res = await fetch(`/api/admin/transactions/${tx.id}/ledger`);
+      const res = await fetch(`/api/admin/transactions/${tx.id}/ledger`, { signal: controller.signal });
       if (res.ok) {
         const data = await res.json();
         setLedgerEntries(data.entries ?? []);
       }
-    } catch {
-      // Silently fail — modal still shows transaction summary
+    } catch (e) {
+      if ((e as Error).name === "AbortError") return;
     } finally {
-      setLedgerLoading(false);
+      if (!controller.signal.aborted) {
+        setLedgerLoading(false);
+      }
     }
   }, []);
 

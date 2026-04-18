@@ -73,7 +73,7 @@ func GetAllTransactions(pool *pgxpool.Pool) fiber.Handler {
 		// Fetch totals only on first page to avoid extra query on pagination
 		var totals *dbengine.AdminTotals
 		if cursor == nil {
-			t, err := dbengine.GetAdminTransactionTotals(c.Context(), pool)
+			t, err := dbengine.GetAdminTransactionTotals(c.Context(), pool, filters)
 			if err != nil {
 				slog.Error("admin: fetch transaction totals failed", "error", err)
 			} else {

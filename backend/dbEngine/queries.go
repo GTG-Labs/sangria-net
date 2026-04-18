@@ -303,18 +303,50 @@ func GetAdminTransactionsPaginated(
 	return transactions, nextCursor, total, nil
 }
 
-// GetAdminTransactionTotals returns aggregate metrics across all transactions.
-func GetAdminTransactionTotals(ctx context.Context, pool *pgxpool.Pool) (AdminTotals, error) {
+// GetAdminTransactionTotals returns aggregate metrics, respecting the same filters as the list query.
+func GetAdminTransactionTotals(ctx context.Context, pool *pgxpool.Pool, filters AdminTransactionFilters) (AdminTotals, error) {
+	paramIdx := 1
+	var conditions []string
+	var args []interface{}
+
+	if filters.OrganizationID != nil {
+		conditions = append(conditions, fmt.Sprintf("o.id = $%d", paramIdx))
+		args = append(args, *filters.OrganizationID)
+		paramIdx++
+	}
+	if filters.Search != nil {
+		conditions = append(conditions, fmt.Sprintf("t.idempotency_key ILIKE '%%' || $%d || '%%'", paramIdx))
+		args = append(args, *filters.Search)
+		paramIdx++
+	}
+	if filters.StartDate != nil {
+		conditions = append(conditions, fmt.Sprintf("t.created_at >= $%d", paramIdx))
+		args = append(args, *filters.StartDate)
+		paramIdx++
+	}
+	if filters.EndDate != nil {
+		conditions = append(conditions, fmt.Sprintf("t.created_at < $%d", paramIdx))
+		args = append(args, *filters.EndDate)
+		paramIdx++
+	}
+
+	extraWhere := ""
+	if len(conditions) > 0 {
+		extraWhere = " AND " + joinStrings(conditions, " AND ")
+	}
+
+	// Fee uses a correlated subquery on t.id so it automatically respects the outer WHERE filters
 	var totals AdminTotals
-	err := pool.QueryRow(ctx, `
+	query := fmt.Sprintf(`
 		SELECT
 			COUNT(DISTINCT t.id),
 			COALESCE(SUM(merchant_le.amount), 0),
-			COALESCE((
-				SELECT SUM(fl.amount) FROM ledger_entries fl
-				JOIN accounts fa ON fa.id = fl.account_id
-				WHERE fa.name = 'Platform Fee Revenue'
-				  AND fl.direction = 'CREDIT'
+			COALESCE(SUM(
+				(SELECT fl.amount FROM ledger_entries fl
+				 JOIN accounts fa ON fa.id = fl.account_id
+				 WHERE fl.transaction_id = t.id
+				   AND fl.direction = 'CREDIT'
+				   AND fa.name = 'Platform Fee Revenue')
 			), 0),
 			COUNT(DISTINCT o.id)
 		FROM transactions t
@@ -323,7 +355,10 @@ func GetAdminTransactionTotals(ctx context.Context, pool *pgxpool.Pool) (AdminTo
 			AND merchant_acc.type = 'LIABILITY'
 			AND merchant_le.direction = 'CREDIT'
 		JOIN organizations o ON o.id = merchant_acc.organization_id
-	`).Scan(&totals.TransactionCount, &totals.TotalVolume, &totals.TotalFees, &totals.MerchantCount)
+		WHERE 1=1%s
+	`, extraWhere)
+
+	err := pool.QueryRow(ctx, query, args...).Scan(&totals.TransactionCount, &totals.TotalVolume, &totals.TotalFees, &totals.MerchantCount)
 	if err != nil {
 		return AdminTotals{}, fmt.Errorf("totals query failed: %w", err)
 	}
