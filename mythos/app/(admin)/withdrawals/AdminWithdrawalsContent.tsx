@@ -1,6 +1,16 @@
 "use client";
 
 import { Fragment, useState, useEffect } from "react";
+import ActionDialog, { type ActionDialogField } from "./ActionDialog";
+
+type DialogConfig = {
+  title: string;
+  message?: string;
+  fields: ActionDialogField[];
+  confirmLabel: string;
+  confirmVariant: "primary" | "destructive";
+  onConfirm: (values: Record<string, string>) => void;
+};
 
 interface Withdrawal {
   id: string;
@@ -60,6 +70,7 @@ export default function AdminWithdrawalsContent() {
   const [statusFilter, setStatusFilter] = useState("");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [dialog, setDialog] = useState<DialogConfig | null>(null);
 
   const fetchWithdrawals = async (cursor?: string, signal?: AbortSignal) => {
     const isInitialLoad = !cursor;
@@ -144,31 +155,98 @@ export default function AdminWithdrawalsContent() {
     }
   };
 
+  const closeDialog = () => setDialog(null);
+
   const handleApprove = (id: string) => {
-    const note = prompt("Optional note for approval (leave blank to skip):");
-    if (note === null) return; // User cancelled prompt
-    performAction(id, "approve", note ? { note } : {});
+    setDialog({
+      title: "Approve withdrawal",
+      fields: [
+        {
+          name: "note",
+          label: "Note (optional)",
+          type: "textarea",
+          placeholder: "Add a note for the audit trail...",
+          maxLength: 500,
+        },
+      ],
+      confirmLabel: "Approve",
+      confirmVariant: "primary",
+      onConfirm: (values) => {
+        closeDialog();
+        const note = values.note?.trim();
+        performAction(id, "approve", note ? { note } : {});
+      },
+    });
   };
 
   const handleReject = (id: string) => {
-    if (!confirm("Are you sure you want to reject this withdrawal? This will reverse the balance debit.")) return;
-    const note = prompt("Optional note for rejection (leave blank to skip):");
-    if (note === null) return;
-    performAction(id, "reject", note ? { note } : {});
+    setDialog({
+      title: "Reject withdrawal",
+      message:
+        "This will reverse the balance debit. This action cannot be undone.",
+      fields: [
+        {
+          name: "note",
+          label: "Note (optional)",
+          type: "textarea",
+          placeholder: "Explain why this was rejected...",
+          maxLength: 500,
+        },
+      ],
+      confirmLabel: "Reject",
+      confirmVariant: "destructive",
+      onConfirm: (values) => {
+        closeDialog();
+        const note = values.note?.trim();
+        performAction(id, "reject", note ? { note } : {});
+      },
+    });
   };
 
   const handleComplete = (id: string) => {
-    if (!confirm("Mark this withdrawal as completed? This confirms the bank transfer has been sent.")) return;
-    performAction(id, "complete");
+    setDialog({
+      title: "Mark as completed",
+      message:
+        "This confirms the bank transfer has been sent. This action cannot be undone.",
+      fields: [],
+      confirmLabel: "Complete",
+      confirmVariant: "primary",
+      onConfirm: () => {
+        closeDialog();
+        performAction(id, "complete");
+      },
+    });
   };
 
   const handleFail = (id: string) => {
-    const failureCode = prompt("Failure code (required):");
-    if (!failureCode) return;
-    const failureMessage = prompt("Failure message (optional):") || "";
-    performAction(id, "fail", {
-      failure_code: failureCode,
-      failure_message: failureMessage,
+    setDialog({
+      title: "Mark as failed",
+      message: "Record the failure reason. This cannot be undone.",
+      fields: [
+        {
+          name: "failure_code",
+          label: "Failure code",
+          placeholder: "e.g. BANK_REJECTED",
+          required: true,
+          maxLength: 100,
+        },
+        {
+          name: "failure_message",
+          label: "Failure message (optional)",
+          type: "textarea",
+          placeholder: "Additional context...",
+          maxLength: 1000,
+        },
+      ],
+      confirmLabel: "Fail",
+      confirmVariant: "destructive",
+      onConfirm: (values) => {
+        closeDialog();
+        performAction(id, "fail", {
+          failure_code: values.failure_code.trim(),
+          failure_message: (values.failure_message ?? "").trim(),
+        });
+      },
     });
   };
 
@@ -201,18 +279,16 @@ export default function AdminWithdrawalsContent() {
     });
 
   const timeAgo = (dateString: string) => {
-    const now = new Date();
-    const date = new Date(dateString);
-    const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+    const seconds = Math.floor(
+      (Date.now() - new Date(dateString).getTime()) / 1000
+    );
     if (seconds < 60) return "just now";
     const minutes = Math.floor(seconds / 60);
-    if (minutes < 60)
-      return `about ${minutes} minute${minutes !== 1 ? "s" : ""} ago`;
+    if (minutes < 60) return `${minutes}m ago`;
     const hours = Math.floor(minutes / 60);
-    if (hours < 24)
-      return `about ${hours} hour${hours !== 1 ? "s" : ""} ago`;
+    if (hours < 24) return `${hours}h ago`;
     const days = Math.floor(hours / 24);
-    return `about ${days} day${days !== 1 ? "s" : ""} ago`;
+    return `${days}d ago`;
   };
 
   const truncateId = (id: string) => {
@@ -222,12 +298,12 @@ export default function AdminWithdrawalsContent() {
 
   const statusBadge = (status: string) => {
     const styles: Record<string, string> = {
-      pending_approval: "bg-yellow-100 text-yellow-800",
-      approved: "bg-blue-100 text-blue-800",
-      processing: "bg-blue-100 text-blue-800",
-      completed: "bg-green-100 text-green-800",
-      failed: "bg-red-100 text-red-800",
-      canceled: "bg-gray-100 text-gray-800",
+      pending_approval: "bg-yellow-900/40 text-yellow-400",
+      approved: "bg-blue-900/40 text-blue-400",
+      processing: "bg-blue-900/40 text-blue-400",
+      completed: "bg-green-900/40 text-green-400",
+      failed: "bg-red-900/40 text-red-400",
+      canceled: "bg-gray-800 text-gray-400",
     };
     const labels: Record<string, string> = {
       pending_approval: "Pending",
@@ -239,7 +315,7 @@ export default function AdminWithdrawalsContent() {
     };
     return (
       <span
-        className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${styles[status] || "bg-gray-100 text-gray-800"}`}
+        className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${styles[status] || "bg-gray-800 text-gray-400"}`}
       >
         {labels[status] || status}
       </span>
@@ -250,7 +326,7 @@ export default function AdminWithdrawalsContent() {
     <div className="flex gap-4 py-1 text-sm">
       <span className="w-32 shrink-0 text-gray-500">{label}</span>
       <span
-        className={`text-gray-900 break-all ${mono ? "font-mono text-xs" : ""}`}
+        className={`break-all ${mono ? "font-mono text-xs text-gray-400" : "text-gray-300"}`}
       >
         {value || "—"}
       </span>
@@ -259,7 +335,7 @@ export default function AdminWithdrawalsContent() {
 
   const detailSection = (title: string, rows: React.ReactNode) => (
     <div>
-      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
+      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
         {title}
       </h3>
       {rows}
@@ -346,24 +422,22 @@ export default function AdminWithdrawalsContent() {
     const isLoading = actionLoading === w.id;
 
     if (isLoading) {
-      return (
-        <span className="text-xs text-gray-400">Processing...</span>
-      );
+      return <span className="text-xs text-gray-500">Processing...</span>;
     }
 
     switch (w.status) {
       case "pending_approval":
         return (
-          <div className="flex gap-2">
+          <div className="flex gap-2 justify-end">
             <button
               onClick={() => handleApprove(w.id)}
-              className="px-2.5 py-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-md hover:bg-green-100 transition-colors"
+              className="px-2.5 py-1 text-xs font-medium text-green-400 border border-green-900/60 rounded-md hover:bg-green-900/40 transition-colors"
             >
               Approve
             </button>
             <button
               onClick={() => handleReject(w.id)}
-              className="px-2.5 py-1 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded-md hover:bg-red-100 transition-colors"
+              className="px-2.5 py-1 text-xs font-medium text-red-400 border border-red-900/60 rounded-md hover:bg-red-900/40 transition-colors"
             >
               Reject
             </button>
@@ -372,16 +446,16 @@ export default function AdminWithdrawalsContent() {
       case "approved":
       case "processing":
         return (
-          <div className="flex gap-2">
+          <div className="flex gap-2 justify-end">
             <button
               onClick={() => handleComplete(w.id)}
-              className="px-2.5 py-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-md hover:bg-green-100 transition-colors"
+              className="px-2.5 py-1 text-xs font-medium text-green-400 border border-green-900/60 rounded-md hover:bg-green-900/40 transition-colors"
             >
               Complete
             </button>
             <button
               onClick={() => handleFail(w.id)}
-              className="px-2.5 py-1 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded-md hover:bg-red-100 transition-colors"
+              className="px-2.5 py-1 text-xs font-medium text-red-400 border border-red-900/60 rounded-md hover:bg-red-900/40 transition-colors"
             >
               Fail
             </button>
@@ -395,7 +469,7 @@ export default function AdminWithdrawalsContent() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white" />
       </div>
     );
   }
@@ -404,9 +478,7 @@ export default function AdminWithdrawalsContent() {
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-gray-900">
-            Withdrawals
-          </h1>
+          <h1 className="text-2xl font-bold text-white">Withdrawals</h1>
           <p className="mt-1 text-sm text-gray-500">
             Manage withdrawal requests across all merchants.
           </p>
@@ -414,10 +486,14 @@ export default function AdminWithdrawalsContent() {
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white text-gray-900"
+          className="rounded-lg border border-gray-700 bg-transparent px-3 py-2 text-sm text-white focus:border-gray-500 focus:outline-none"
         >
           {STATUS_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
+            <option
+              key={opt.value}
+              value={opt.value}
+              className="bg-gray-950 text-white"
+            >
               {opt.label}
             </option>
           ))}
@@ -425,11 +501,11 @@ export default function AdminWithdrawalsContent() {
       </div>
 
       {error && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
+        <div className="mb-6 p-4 bg-red-900/30 border border-red-800 rounded-lg flex items-center gap-2 text-red-400">
           <span className="flex-1 text-sm">{error}</span>
           <button
             onClick={() => setError(null)}
-            className="text-red-400 hover:text-red-600"
+            className="text-red-500 hover:text-red-300 transition-colors"
           >
             &times;
           </button>
@@ -438,8 +514,8 @@ export default function AdminWithdrawalsContent() {
 
       {!withdrawals || withdrawals.length === 0 ? (
         <div className="py-16 text-center">
-          <p className="text-gray-400 mb-1">No withdrawals found</p>
-          <p className="text-sm text-gray-400">
+          <p className="text-gray-500 mb-1">No withdrawals found</p>
+          <p className="text-sm text-gray-600">
             {statusFilter
               ? "Try a different status filter."
               : "Withdrawals will appear here once merchants request payouts."}
@@ -449,35 +525,35 @@ export default function AdminWithdrawalsContent() {
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-zinc-200">
-                <th className="pb-3 pr-4 text-left text-sm font-medium text-gray-400">
+              <tr className="border-b border-gray-800">
+                <th className="pb-3 pr-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   ID
                 </th>
-                <th className="pb-3 px-4 text-left text-sm font-medium text-gray-400">
+                <th className="pb-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Merchant
                 </th>
-                <th className="pb-3 px-4 text-left text-sm font-medium text-gray-400">
+                <th className="pb-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Amount
                 </th>
-                <th className="pb-3 px-4 text-left text-sm font-medium text-gray-400">
+                <th className="pb-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Fee
                 </th>
-                <th className="pb-3 px-4 text-left text-sm font-medium text-gray-400">
+                <th className="pb-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Net
                 </th>
-                <th className="pb-3 px-4 text-left text-sm font-medium text-gray-400">
+                <th className="pb-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Status
                 </th>
-                <th className="pb-3 px-4 text-left text-sm font-medium text-gray-400">
+                <th className="pb-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Requested
                 </th>
-                <th className="pb-3 pl-4 text-right text-sm font-medium text-gray-400">
+                <th className="pb-3 pl-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
             </thead>
             <tbody>
-              {withdrawals.map((w, i) => {
+              {withdrawals.map((w) => {
                 const isExpanded = expandedId === w.id;
                 const toggle = () =>
                   setExpandedId(isExpanded ? null : w.id);
@@ -494,15 +570,13 @@ export default function AdminWithdrawalsContent() {
                           toggle();
                         }
                       }}
-                      className={`border-b border-zinc-200 hover:bg-zinc-200/50 transition-colors cursor-pointer ${
-                        i % 2 === 0 ? "bg-zinc-100/50" : ""
-                      }`}
+                      className="border-b border-gray-800/50 hover:bg-white/5 transition-colors cursor-pointer"
                     >
-                      <td className="py-4 pl-2 pr-4 font-mono text-xs text-gray-500">
+                      <td className="py-4 pr-4 font-mono text-xs text-gray-500">
                         <div className="flex items-center gap-2">
                           <span
                             aria-hidden
-                            className="select-none text-gray-400 w-3 inline-block"
+                            className="select-none text-gray-500 w-3 inline-block"
                           >
                             {isExpanded ? "▾" : "▸"}
                           </span>
@@ -512,28 +586,28 @@ export default function AdminWithdrawalsContent() {
                       <td className="py-4 px-4 font-mono text-xs text-gray-500">
                         {truncateId(w.merchant_id)}
                       </td>
-                      <td className="py-4 px-4 text-sm text-gray-900">
+                      <td className="py-4 px-4 text-sm text-gray-300 font-mono">
                         {formatAmount(w.amount)}
                       </td>
-                      <td className="py-4 px-4 text-sm text-gray-500">
+                      <td className="py-4 px-4 text-sm text-gray-500 font-mono">
                         {formatAmount(w.fee)}
                       </td>
-                      <td className="py-4 px-4 text-sm text-gray-900 font-medium">
+                      <td className="py-4 px-4 text-sm text-white font-mono font-medium">
                         {formatAmount(w.net_amount)}
                       </td>
                       <td className="py-4 px-4">{statusBadge(w.status)}</td>
-                      <td className="py-4 px-4 text-sm text-gray-900">
+                      <td className="py-4 px-4 text-sm text-gray-500">
                         {timeAgo(w.created_at)}
                       </td>
                       <td
-                        className="py-4 pl-4 pr-2 text-right"
+                        className="py-4 pl-4 text-right"
                         onClick={(e) => e.stopPropagation()}
                       >
                         {renderActions(w)}
                       </td>
                     </tr>
                     {isExpanded && (
-                      <tr className="border-b border-zinc-200 bg-zinc-50">
+                      <tr className="border-b border-gray-800/50 bg-gray-900/40">
                         <td colSpan={8} className="px-6 py-6">
                           {renderDetailPanel(w)}
                         </td>
@@ -547,14 +621,12 @@ export default function AdminWithdrawalsContent() {
         </div>
       )}
 
-      {/* hasMore is only true when nextCursor is non-null — backend sets
-          HasMore: nextCursor != nil and only encodes NextCursor when non-nil */}
       {hasMore && (
         <div className="mt-6 flex justify-center">
           <button
             onClick={() => fetchWithdrawals(nextCursor!)}
             disabled={loadingMore}
-            className="px-5 py-2 text-sm border border-zinc-200 rounded-lg text-gray-600 hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="px-5 py-2 text-sm border border-gray-700 rounded-lg text-gray-400 hover:bg-white/5 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {loadingMore ? "Loading..." : "Load More"}
           </button>
@@ -562,11 +634,23 @@ export default function AdminWithdrawalsContent() {
       )}
 
       {withdrawals.length > 0 && (
-        <div className="mt-4 text-xs text-gray-400 text-center">
+        <div className="mt-4 text-xs text-gray-600 text-center">
           Showing {withdrawals.length}
           {total !== null && ` of ${total}`} withdrawal
           {withdrawals.length !== 1 ? "s" : ""}
         </div>
+      )}
+
+      {dialog && (
+        <ActionDialog
+          title={dialog.title}
+          message={dialog.message}
+          fields={dialog.fields}
+          confirmLabel={dialog.confirmLabel}
+          confirmVariant={dialog.confirmVariant}
+          onConfirm={dialog.onConfirm}
+          onCancel={closeDialog}
+        />
       )}
     </div>
   );
