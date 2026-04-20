@@ -82,21 +82,3 @@ Payment data is available in your handler via `request.state.sangria_payment`.
 # This will return a 402 with payment requirements
 curl http://localhost:4004/premium
 ```
-
-## 5. Handle Sangria errors
-
-If the Sangria backend is unreachable, times out, or returns a non-2xx status, the SDK raises a `SangriaError`. Register a FastAPI exception handler to turn this into a graceful fallback.
-
-```python
-from fastapi.responses import JSONResponse
-from sangria_sdk import SangriaError
-
-@app.exception_handler(SangriaError)
-async def sangria_error_handler(_request: Request, exc: SangriaError):
-    return JSONResponse(
-        status_code=503,
-        content={"error": "Payment provider unavailable, please retry shortly."},
-    )
-```
-
-`SangriaError` subclasses (`SangriaConnectionError`, `SangriaTimeoutError`, `SangriaAPIStatusError`) let you handle network issues, timeouts, and HTTP errors separately if you want. Business-level payment failures (bad signature, insufficient funds) are not errors — they flow through as normal `402` responses.

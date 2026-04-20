@@ -87,24 +87,3 @@ When an agent calls `GET /premium`:
 # This will return a 402 with payment requirements
 curl http://localhost:4003/premium
 ```
-
-## 5. Handle Sangria errors
-
-If the Sangria backend is unreachable, times out, or returns a 5xx, the SDK throws a `SangriaError`. Register a Hono error handler to turn this into a graceful fallback.
-
-```ts
-import { SangriaError } from "@sangria-sdk/core";
-
-app.onError((err, c) => {
-  if (err instanceof SangriaError) {
-    console.error(`[sangria:${err.operation}]`, err.message);
-    return c.json(
-      { error: "Payment provider unavailable, please retry shortly." },
-      503
-    );
-  }
-  throw err;
-});
-```
-
-Business-level payment failures (bad signature, insufficient funds) are not errors — they flow through as normal `402` responses.

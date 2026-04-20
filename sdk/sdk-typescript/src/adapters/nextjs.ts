@@ -1,6 +1,5 @@
 import type { SangriaRequestData, FixedPriceOptions } from "../types.js";
 import { Sangria, validateFixedPriceOptions } from "../core.js";
-import { SangriaError } from "../errors.js";
 
 /**
  * Minimal type stubs for Next.js request/response.
@@ -86,33 +85,4 @@ export function getSangria(
   request: any
 ): SangriaRequestData | undefined {
   return request.sangria;
-}
-
-// ── Wrap a route to catch SangriaError and respond cleanly ──
-//
-// Next.js App Router has no global error middleware, so wrap your routes:
-//
-//   export const GET = withSangriaErrorHandler(
-//     fixedPrice(sangria, { price: 0.01 }, handler)
-//   );
-//
-// If Sangria is unreachable, the agent gets a 503 response instead of
-// a framework-default 500 stack trace.
-//
-export function withSangriaErrorHandler(
-  handler: NextRouteHandler
-): NextRouteHandler {
-  return async (request: any, context?: any) => {
-    try {
-      return await handler(request, context);
-    } catch (err) {
-      if (err instanceof SangriaError) {
-        return new Response(
-          JSON.stringify({ error: "Payment provider unavailable" }),
-          { status: 503, headers: { "Content-Type": "application/json" } }
-        );
-      }
-      throw err;
-    }
-  };
 }

@@ -88,24 +88,3 @@ curl http://localhost:4001/premium
 ```
 
 The response includes everything an agent needs to sign and submit payment automatically.
-
-## 5. Handle Sangria errors
-
-If the Sangria backend is unreachable, times out, or returns a 5xx, the SDK throws a `SangriaError`. Register an Express error handler to turn this into a graceful fallback — without one, the agent sees an opaque `500 Internal Server Error`.
-
-```ts
-import { SangriaError } from "@sangria-sdk/core";
-
-// Register AFTER all your routes.
-app.use((err, _req, res, next) => {
-  if (err instanceof SangriaError) {
-    console.error(`[sangria:${err.operation}]`, err.message);
-    return res
-      .status(503)
-      .json({ error: "Payment provider unavailable, please retry shortly." });
-  }
-  next(err);
-});
-```
-
-`SangriaError` subclasses (`SangriaConnectionError`, `SangriaTimeoutError`, `SangriaAPIStatusError`) let you handle network issues, timeouts, and HTTP errors separately if you want. Business-level payment failures (bad signature, insufficient funds) are not errors — they flow through as normal `402` responses.

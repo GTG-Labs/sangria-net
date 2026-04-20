@@ -1,5 +1,5 @@
-import express, { NextFunction, Request, Response } from "express";
-import { Sangria, SangriaError } from "@sangria-sdk/core";
+import express from "express";
+import { Sangria } from "@sangria-sdk/core";
 import { fixedPrice } from "@sangria-sdk/core/express";
 
 const app = express();
@@ -21,18 +21,6 @@ app.get(
     res.json({ message: "You accessed the premium endpoint!" });
   }
 );
-
-// Global error handler — catches SangriaError from any fixedPrice-gated route.
-// Register AFTER all routes (Express convention).
-app.use((err: Error, _req: Request, res: Response, next: NextFunction) => {
-  if (err instanceof SangriaError) {
-    console.error(`[sangria:${err.operation}]`, err.message);
-    return res
-      .status(503)
-      .json({ error: "Payment provider unavailable, please retry shortly." });
-  }
-  next(err);
-});
 
 const PORT = Number(process.env.PORT ?? 4001);
 app.listen(PORT, () => {

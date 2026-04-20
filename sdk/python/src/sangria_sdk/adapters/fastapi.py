@@ -44,9 +44,6 @@ def require_sangria_payment(
             if bypass_if and bypass_if(request):
                 return await func(*args, **kwargs)
 
-            # SangriaError (and subclasses) raised here propagate to FastAPI's
-            # exception handlers. Merchants register one via:
-            #   @app.exception_handler(SangriaError)
             result = await merchant_client.handle_fixed_price(
                 payment_header=request.headers.get("PAYMENT-SIGNATURE"),
                 options=FixedPriceOptions(
