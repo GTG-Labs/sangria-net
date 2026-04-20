@@ -6,5 +6,5 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  return proxyToBackend("POST", `/admin/withdrawals/${id}/complete`);
+  return proxyToBackend("POST", `/admin/withdrawals/${encodeURIComponent(id)}/complete`);
 }

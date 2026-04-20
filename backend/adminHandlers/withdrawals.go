@@ -183,6 +183,9 @@ func ListAllWithdrawals(pool *pgxpool.Pool) fiber.Handler {
 			c.Context(), pool, status, limit, cursor,
 		)
 		if err != nil {
+			if errors.Is(err, dbengine.ErrInvalidWithdrawalStatus) {
+				return c.Status(400).JSON(fiber.Map{"error": err.Error()})
+			}
 			slog.Error("list all withdrawals", "status", status, "error", err)
 			return c.Status(500).JSON(fiber.Map{"error": "failed to list withdrawals"})
 		}

@@ -15,6 +15,10 @@ import (
 // ErrInsufficientBalance is returned when a merchant doesn't have enough balance for a withdrawal.
 var ErrInsufficientBalance = errors.New("insufficient balance")
 
+// ErrInvalidWithdrawalStatus is returned when a caller passes a status value
+// outside the allowed enum. Callers should map this to HTTP 400.
+var ErrInvalidWithdrawalStatus = errors.New("invalid withdrawal status")
+
 // ErrWithdrawalNotFound is returned when a withdrawal does not exist or is not in the expected state.
 var ErrWithdrawalNotFound = errors.New("withdrawal not found or not in expected state")
 
@@ -342,7 +346,7 @@ func GetAllWithdrawalsPaginated(
 		string(WithdrawalStatusCanceled):        true,
 	}
 	if status != "" && !validStatuses[status] {
-		return nil, nil, 0, fmt.Errorf("invalid withdrawal status: %s", status)
+		return nil, nil, 0, fmt.Errorf("%w: %s", ErrInvalidWithdrawalStatus, status)
 	}
 
 	// Build WHERE clauses dynamically based on optional filters.

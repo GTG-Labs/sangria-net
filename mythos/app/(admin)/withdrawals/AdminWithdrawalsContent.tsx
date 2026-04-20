@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState, useEffect } from "react";
+import { Fragment, useState, useEffect, useRef } from "react";
 import ActionDialog, { type ActionDialogField } from "./ActionDialog";
 
 type DialogConfig = {
@@ -72,7 +72,25 @@ export default function AdminWithdrawalsContent() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [dialog, setDialog] = useState<DialogConfig | null>(null);
 
-  const fetchWithdrawals = async (cursor?: string, signal?: AbortSignal) => {
+  // Single in-flight controller shared across every entry point (effect,
+  // Load More, post-action refetch). A new request aborts any previous one,
+  // so stale responses can never commit to state.
+  const fetchControllerRef = useRef<AbortController | null>(null);
+
+  // Clear both list and pagination metadata after an initial-load failure so
+  // a stale "Load More" button can't render below the empty state.
+  const resetForInitialLoadFailure = () => {
+    setWithdrawals([]);
+    setHasMore(false);
+    setNextCursor(null);
+    setTotal(null);
+  };
+
+  const fetchWithdrawals = async (cursor?: string) => {
+    fetchControllerRef.current?.abort();
+    const controller = new AbortController();
+    fetchControllerRef.current = controller;
+
     const isInitialLoad = !cursor;
     isInitialLoad ? setLoading(true) : setLoadingMore(true);
 
@@ -82,12 +100,14 @@ export default function AdminWithdrawalsContent() {
       if (statusFilter) params.set("status", statusFilter);
       if (cursor) params.set("cursor", cursor);
 
-      const response = await fetch(`/api/admin/withdrawals?${params}`, { signal });
-
-      if (signal?.aborted) return;
+      const response = await fetch(`/api/admin/withdrawals?${params}`, {
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
 
       if (response.ok) {
         const data = await response.json();
+        if (controller.signal.aborted) return;
 
         if (data.data && data.pagination) {
           const paginatedData = data as PaginatedWithdrawalsResponse;
@@ -107,16 +127,18 @@ export default function AdminWithdrawalsContent() {
         const errorData = await response
           .json()
           .catch(() => ({ error: "Unknown error" }));
+        if (controller.signal.aborted) return;
         setError(errorData.error || "Failed to load withdrawals");
-        if (isInitialLoad) setWithdrawals([]);
+        if (isInitialLoad) resetForInitialLoadFailure();
       }
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") return;
+      if (controller.signal.aborted) return;
       console.error("Failed to load withdrawals:", err);
       setError("Failed to load withdrawals");
-      if (isInitialLoad) setWithdrawals([]);
+      if (isInitialLoad) resetForInitialLoadFailure();
     } finally {
-      if (!signal?.aborted) {
+      if (!controller.signal.aborted) {
         isInitialLoad ? setLoading(false) : setLoadingMore(false);
       }
     }
@@ -251,11 +273,12 @@ export default function AdminWithdrawalsContent() {
   };
 
   useEffect(() => {
-    const controller = new AbortController();
     setError(null);
     setActionLoading(null);
-    fetchWithdrawals(undefined, controller.signal);
-    return () => controller.abort();
+    fetchWithdrawals();
+    return () => {
+      fetchControllerRef.current?.abort();
+    };
   }, [statusFilter]);
 
   const formatMicrounits = (microunits: number) => {
@@ -486,6 +509,7 @@ export default function AdminWithdrawalsContent() {
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
+          aria-label="Filter withdrawals by status"
           className="rounded-lg border border-gray-700 bg-transparent px-3 py-2 text-sm text-white focus:border-gray-500 focus:outline-none"
         >
           {STATUS_OPTIONS.map((opt) => (
@@ -505,9 +529,10 @@ export default function AdminWithdrawalsContent() {
           <span className="flex-1 text-sm">{error}</span>
           <button
             onClick={() => setError(null)}
+            aria-label="Dismiss error"
             className="text-red-500 hover:text-red-300 transition-colors"
           >
-            &times;
+            <span aria-hidden="true">&times;</span>
           </button>
         </div>
       )}
@@ -565,6 +590,11 @@ export default function AdminWithdrawalsContent() {
                       aria-expanded={isExpanded}
                       onClick={toggle}
                       onKeyDown={(e) => {
+                        // Only toggle when the keydown originates on the row
+                        // itself (not bubbled from a focused descendant like
+                        // an action button) so we don't hijack button
+                        // activation or double-fire on Space.
+                        if (e.target !== e.currentTarget) return;
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault();
                           toggle();

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 export interface ActionDialogField {
   name: string;
@@ -31,6 +31,10 @@ export default function ActionDialog({
   onCancel,
 }: ActionDialogProps) {
   const [values, setValues] = useState<Record<string, string>>({});
+  const baseId = useId();
+  const titleId = `${baseId}-title`;
+  const messageId = `${baseId}-message`;
+  const fieldId = (name: string) => `${baseId}-${name}`;
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -64,12 +68,18 @@ export default function ActionDialog({
       onClick={onCancel}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={message ? messageId : undefined}
         className="w-full max-w-md rounded-xl border border-gray-800 bg-gray-950 p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="flex items-start justify-between">
-            <h2 className="text-lg font-semibold text-white">{title}</h2>
+            <h2 id={titleId} className="text-lg font-semibold text-white">
+              {title}
+            </h2>
             <button
               type="button"
               onClick={onCancel}
@@ -92,17 +102,26 @@ export default function ActionDialog({
             </button>
           </div>
 
-          {message && <p className="text-sm text-gray-400">{message}</p>}
+          {message && (
+            <p id={messageId} className="text-sm text-gray-400">
+              {message}
+            </p>
+          )}
 
           {fields.map((field, idx) => {
             const value = values[field.name] ?? "";
+            const inputId = fieldId(field.name);
             return (
               <div key={field.name}>
-                <label className="mb-1 block text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <label
+                  htmlFor={inputId}
+                  className="mb-1 block text-xs font-medium text-gray-500 uppercase tracking-wider"
+                >
                   {field.label}
                 </label>
                 {field.type === "textarea" ? (
                   <textarea
+                    id={inputId}
                     value={value}
                     onChange={(e) =>
                       setValues((prev) => ({
@@ -118,6 +137,7 @@ export default function ActionDialog({
                   />
                 ) : (
                   <input
+                    id={inputId}
                     type="text"
                     value={value}
                     onChange={(e) =>
