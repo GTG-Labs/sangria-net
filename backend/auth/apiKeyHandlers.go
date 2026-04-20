@@ -16,24 +16,22 @@ func ListAPIKeys(pool *pgxpool.Pool) fiber.Handler {
 			return c.Status(500).JSON(fiber.Map{"error": "internal server error"})
 		}
 
-		// Resolve organization context
-		orgResult := ResolveOrganizationContext(c.Context(), c, pool, user)
-		if orgResult.Error != "" {
-			return c.Status(orgResult.HTTPStatus).JSON(fiber.Map{"error": orgResult.Error})
-		}
-		selectedOrgID := orgResult.OrganizationID
-
-		apiKeys, err := GetAPIKeysByOrganizationID(c.Context(), pool, selectedOrgID)
+		apiKeys, err := GetAPIKeysByUserID(c.Context(), pool, user.ID)
 		if err != nil {
-			slog.Error("list API keys: query failed", "user_id", user.ID, "org_id", selectedOrgID, "error", err)
-			return c.Status(500).JSON(fiber.Map{"error": "failed to retrieve API keys"})
+			slog.Error("list API keys: query failed", "user_id", user.ID, "error", err)
+			return c.Status(500).JSON(fiber.Map{"error": "Failed to retrieve API keys"})
+		}
+
+		// Remove sensitive data before returning
+		for i := range apiKeys {
+			apiKeys[i].APIKey = "" // Never expose the hash
 		}
 
 		return c.JSON(apiKeys)
 	}
 }
 
-// DeleteAPIKey handles DELETE /api-keys/:id (org admin-only)
+// DeleteAPIKey handles DELETE /api-keys/:id
 func DeleteAPIKey(pool *pgxpool.Pool) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		user, ok := c.Locals("workos_user").(WorkOSUser)
