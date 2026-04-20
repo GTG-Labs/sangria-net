@@ -91,7 +91,15 @@ export default function TransactionsContent() {
       fetchControllerRef.current = controller;
 
       const isInitialLoad = !cursor;
-      isInitialLoad ? setLoading(true) : setLoadingMore(true);
+      // Symmetric set: clear the opposite flag so a superseding fetch can't
+      // leave the other flag stuck.
+      if (isInitialLoad) {
+        setLoading(true);
+        setLoadingMore(false);
+      } else {
+        setLoadingMore(true);
+        setLoading(false);
+      }
 
       try {
         const response = await fetch(buildUrl(cursor), { signal: controller.signal });
@@ -119,7 +127,8 @@ export default function TransactionsContent() {
         if (isInitialLoad) resetForInitialLoadFailure();
       } finally {
         if (!controller.signal.aborted) {
-          isInitialLoad ? setLoading(false) : setLoadingMore(false);
+          setLoading(false);
+          setLoadingMore(false);
         }
       }
     },

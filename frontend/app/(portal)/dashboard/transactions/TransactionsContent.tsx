@@ -44,7 +44,15 @@ export default function TransactionsContent() {
 
   const fetchTransactions = async (cursor?: string) => {
     const isInitialLoad = !cursor;
-    isInitialLoad ? setLoading(true) : setLoadingMore(true);
+    // Symmetric set: clear the opposite flag so a superseding fetch can't
+    // leave the other flag stuck.
+    if (isInitialLoad) {
+      setLoading(true);
+      setLoadingMore(false);
+    } else {
+      setLoadingMore(true);
+      setLoading(false);
+    }
 
     try {
       const url = cursor
@@ -82,7 +90,8 @@ export default function TransactionsContent() {
       setError("Failed to load transactions");
       if (isInitialLoad) resetForInitialLoadFailure();
     } finally {
-      isInitialLoad ? setLoading(false) : setLoadingMore(false);
+      setLoading(false);
+      setLoadingMore(false);
     }
   };
 

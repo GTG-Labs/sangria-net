@@ -56,6 +56,7 @@ const STATUS_OPTIONS = [
   { value: "processing", label: "Processing" },
   { value: "completed", label: "Completed" },
   { value: "failed", label: "Failed" },
+  { value: "reversed", label: "Reversed" },
   { value: "canceled", label: "Canceled" },
 ];
 
@@ -92,7 +93,15 @@ export default function AdminWithdrawalsContent() {
     fetchControllerRef.current = controller;
 
     const isInitialLoad = !cursor;
-    isInitialLoad ? setLoading(true) : setLoadingMore(true);
+    // Symmetric set: clear the opposite flag so a superseding fetch (e.g.
+    // filter change during a Load More) can't leave the other flag stuck.
+    if (isInitialLoad) {
+      setLoading(true);
+      setLoadingMore(false);
+    } else {
+      setLoadingMore(true);
+      setLoading(false);
+    }
 
     try {
       const params = new URLSearchParams();
@@ -139,7 +148,8 @@ export default function AdminWithdrawalsContent() {
       if (isInitialLoad) resetForInitialLoadFailure();
     } finally {
       if (!controller.signal.aborted) {
-        isInitialLoad ? setLoading(false) : setLoadingMore(false);
+        setLoading(false);
+        setLoadingMore(false);
       }
     }
   };
@@ -166,11 +176,20 @@ export default function AdminWithdrawalsContent() {
         // Patch the acted-upon row in place using the returned Withdrawal
         // instead of full-refetching. Avoids the full-page loading spinner
         // (`loading` guard unmounts the table), preserves scroll position,
-        // and keeps any expanded detail panel open.
+        // and keeps any expanded detail panel open. If the updated status no
+        // longer matches the active filter, drop the row from the list and
+        // decrement `total` so the filter's promise stays intact.
         const updated = (await response.json()) as Withdrawal;
+        const droppedByFilter =
+          !!statusFilter && updated.status !== statusFilter;
         setWithdrawals((prev) =>
-          prev.map((w) => (w.id === updated.id ? updated : w))
+          droppedByFilter
+            ? prev.filter((w) => w.id !== updated.id)
+            : prev.map((w) => (w.id === updated.id ? updated : w))
         );
+        if (droppedByFilter) {
+          setTotal((t) => (t !== null ? Math.max(0, t - 1) : t));
+        }
       } else {
         const errorData = await response
           .json()
@@ -333,6 +352,7 @@ export default function AdminWithdrawalsContent() {
       processing: "bg-blue-900/40 text-blue-400",
       completed: "bg-green-900/40 text-green-400",
       failed: "bg-red-900/40 text-red-400",
+      reversed: "bg-purple-900/40 text-purple-400",
       canceled: "bg-gray-800 text-gray-400",
     };
     const labels: Record<string, string> = {
@@ -341,6 +361,7 @@ export default function AdminWithdrawalsContent() {
       processing: "Processing",
       completed: "Completed",
       failed: "Failed",
+      reversed: "Reversed",
       canceled: "Canceled",
     };
     return (

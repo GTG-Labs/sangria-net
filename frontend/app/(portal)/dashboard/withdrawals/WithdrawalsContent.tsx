@@ -67,7 +67,15 @@ export default function WithdrawalsContent() {
 
   const fetchWithdrawals = async (cursor?: string, signal?: AbortSignal) => {
     const isInitialLoad = !cursor;
-    isInitialLoad ? setLoading(true) : setLoadingMore(true);
+    // Symmetric set: clear the opposite flag so a superseding fetch can't
+    // leave the other flag stuck.
+    if (isInitialLoad) {
+      setLoading(true);
+      setLoadingMore(false);
+    } else {
+      setLoadingMore(true);
+      setLoading(false);
+    }
 
     try {
       const params = new URLSearchParams();
@@ -110,7 +118,8 @@ export default function WithdrawalsContent() {
       if (isInitialLoad) resetForInitialLoadFailure();
     } finally {
       if (!signal?.aborted) {
-        isInitialLoad ? setLoading(false) : setLoadingMore(false);
+        setLoading(false);
+        setLoadingMore(false);
       }
     }
   };
@@ -220,6 +229,7 @@ export default function WithdrawalsContent() {
       processing: "bg-blue-100 text-blue-800",
       completed: "bg-green-100 text-green-800",
       failed: "bg-red-100 text-red-800",
+      reversed: "bg-purple-100 text-purple-800",
       canceled: "bg-gray-100 text-gray-800",
     };
     const labels: Record<string, string> = {
@@ -228,6 +238,7 @@ export default function WithdrawalsContent() {
       processing: "Processing",
       completed: "Completed",
       failed: "Failed",
+      reversed: "Reversed",
       canceled: "Canceled",
     };
     return (
