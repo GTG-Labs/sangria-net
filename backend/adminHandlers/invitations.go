@@ -1,6 +1,7 @@
 package adminHandlers
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -74,7 +75,7 @@ func generateSecureToken() (string, error) {
 }
 
 // sendInvitationEmail sends a beautiful invitation email via Resend
-func sendInvitationEmail(inviteeEmail, inviterName, orgName, invitationURL, customMessage string) error {
+func sendInvitationEmail(ctx context.Context, inviteeEmail, inviterName, orgName, invitationURL, customMessage string) error {
 	// Get Resend API key from environment
 	apiKey := os.Getenv("RESEND_API_KEY")
 	if apiKey == "" {
@@ -85,9 +86,10 @@ func sendInvitationEmail(inviteeEmail, inviterName, orgName, invitationURL, cust
 	client := resend.NewClient(apiKey)
 
 	// Set up sender (you should update this to your verified sender email)
-	fromEmail := os.Getenv("RESEND_FROM_EMAIL")
+	fromEmail := strings.TrimSpace(os.Getenv("RESEND_FROM_EMAIL"))
 	if fromEmail == "" {
-		fromEmail = "noreply@yourdomain.com" // TODO: update this to the actual Sangria domain
+		return fmt.Errorf("RESEND_FROM_EMAIL environment variable not set")
+		
 	}
 
 	// Create email subject
@@ -207,7 +209,7 @@ Powered by Sangria • Built for teams that ship fast`,
 		Text:    plainContent,
 	}
 
-	sent, err := client.Emails.Send(params)
+	sent, err := client.Emails.SendWithContext(ctx, params)
 	if err != nil {
 		return fmt.Errorf("failed to send email: %w", err)
 	}
@@ -316,8 +318,10 @@ func CreateOrganizationInvitation(pool *pgxpool.Pool) fiber.Handler {
 		}
 		invitationURL := fmt.Sprintf("%s/accept-invitation?token=%s", baseURL, invitationToken)
 
-		// Send beautiful invitation email via Resend
-		err = sendInvitationEmail(req.Email, inviterName, orgName, invitationURL, message)
+		// Send beautiful invitation email via Resend with timeout
+		emailCtx, cancel := context.WithTimeout(c.Context(), 30*time.Second)
+		defer cancel()
+		err = sendInvitationEmail(emailCtx, req.Email, inviterName, orgName, invitationURL, message)
 		if err != nil {
 			slog.Error("send invitation email", "org_id", orgID, "user_id", user.ID, "email", maskEmail(req.Email), "error", err)
 
