@@ -52,6 +52,35 @@ The `@require_sangria_payment` decorator handles the x402 negotiation loop:
 1. **First request** (no `PAYMENT-SIGNATURE` header): calls Sangria's `/v1/generate-payment` endpoint, returns `402 Payment Required` with payment terms and a base64-encoded `PAYMENT-REQUIRED` response header.
 2. **Retry** (with `PAYMENT-SIGNATURE` header): forwards the signed payload to Sangria's `/v1/settle-payment` endpoint. On success, stores the result in `request.state.sangria_payment` and calls your handler.
 
+## Handling errors
+
+The SDK raises `SangriaError` (or a subclass) when the Sangria backend is unreachable, times out, or returns a non-2xx status. Business-level payment failures (bad signature, insufficient funds, etc.) are not errors — they flow through as normal `402` responses to the caller.
+
+Register a FastAPI exception handler to turn these into a graceful fallback. Without one, uncaught exceptions leak a `500 Internal Server Error` to the agent.
+
+Exception hierarchy:
+
+```
+SangriaError                   # base — catch-all
+├── SangriaConnectionError     # DNS, refused, socket error
+│   └── SangriaTimeoutError    # client-side timeout
+└── SangriaAPIStatusError      # backend returned non-2xx (has .status_code, .response)
+```
+
+Every exception carries `.operation: "generate" | "settle"` so you can tell which call failed.
+
+```python
+from fastapi.responses import JSONResponse
+from sangria_sdk import SangriaError
+
+@app.exception_handler(SangriaError)
+async def sangria_error_handler(_request: Request, exc: SangriaError):
+    return JSONResponse(
+        status_code=503,
+        content={"error": "Payment provider unavailable, please retry shortly."},
+    )
+```
+
 ## API Contract
 
 ### `POST /v1/generate-payment`

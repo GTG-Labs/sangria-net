@@ -1,6 +1,6 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
-import { Sangria } from "@sangria-sdk/core";
+import { Sangria, SangriaError } from "@sangria-sdk/core";
 import { fixedPrice } from "@sangria-sdk/core/hono";
 
 const app = new Hono();
@@ -8,6 +8,18 @@ const app = new Hono();
 const sangria = new Sangria({
   apiKey: process.env.SANGRIA_SECRET_KEY ?? "sk_test_abc123",
   baseUrl: process.env.SANGRIA_URL ?? "http://localhost:8080",
+});
+
+// Catches SangriaError from any fixedPrice-gated route.
+app.onError((err, c) => {
+  if (err instanceof SangriaError) {
+    console.error(`[sangria:${err.operation}]`, err.message);
+    return c.json(
+      { error: "Payment provider unavailable, please retry shortly." },
+      503
+    );
+  }
+  throw err;
 });
 
 app.get("/", (c) => {

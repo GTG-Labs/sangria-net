@@ -113,3 +113,26 @@ curl http://localhost:3000/api/premium
 ```
 
 The response includes everything an agent needs to sign and submit payment automatically.
+
+## 5. Handle Sangria errors
+
+If the Sangria backend is unreachable, times out, or returns a 5xx, the SDK throws a `SangriaError`. Next.js App Router doesn't have global error middleware for route handlers, so wrap your route with the `withSangriaErrorHandler` helper:
+
+```ts
+import {
+  fixedPrice,
+  withSangriaErrorHandler,
+} from "@sangria-sdk/core/nextjs";
+
+export const GET = withSangriaErrorHandler(
+  fixedPrice(
+    sangria,
+    { price: 0.01, description: "Access premium content" },
+    handler
+  )
+);
+```
+
+Without it, a flaky Sangria backend would surface as an opaque `500 Internal Server Error` to the agent. With the wrapper, they get a clean `503`.
+
+Business-level payment failures (bad signature, insufficient funds) are not errors — they flow through as normal `402` responses.

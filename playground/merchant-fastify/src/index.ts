@@ -1,5 +1,5 @@
 import Fastify from "fastify";
-import { Sangria } from "@sangria-sdk/core";
+import { Sangria, SangriaError } from "@sangria-sdk/core";
 import { sangriaPlugin, fixedPrice } from "@sangria-sdk/core/fastify";
 
 const fastify = Fastify({ logger: false });
@@ -10,6 +10,17 @@ const sangria = new Sangria({
 });
 
 fastify.register(sangriaPlugin);
+
+// Catches SangriaError from any fixedPrice-gated route.
+fastify.setErrorHandler((err, _req, reply) => {
+  if (err instanceof SangriaError) {
+    fastify.log.error(`[sangria:${err.operation}] ${err.message}`);
+    return reply
+      .status(503)
+      .send({ error: "Payment provider unavailable, please retry shortly." });
+  }
+  throw err;
+});
 
 fastify.get("/", async () => {
   return { message: "Hello! This endpoint is free." };
