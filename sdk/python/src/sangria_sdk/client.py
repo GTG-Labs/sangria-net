@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import math
 
 from ._http import SangriaHTTPClient
 from .models import (
@@ -14,7 +15,12 @@ from .models import (
 
 def validate_fixed_price_options(options: FixedPriceOptions) -> None:
     """Raise ValueError if options are invalid. Called at adapter construction."""
-    if not isinstance(options.price, (int, float)) or options.price <= 0:
+    if (
+        isinstance(options.price, bool)
+        or not isinstance(options.price, (int, float))
+        or not math.isfinite(options.price)
+        or options.price <= 0
+    ):
         raise ValueError("Sangria: price must be a positive number (dollars)")
 
 

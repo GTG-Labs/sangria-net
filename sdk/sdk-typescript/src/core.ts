@@ -142,7 +142,7 @@ export class Sangria {
     }
 
     if (!res.ok) {
-      const message = await parseErrorMessage(res);
+      const message = await parseErrorMessage(res.clone());
       throw new SangriaAPIStatusError(message, {
         operation,
         response: res,
@@ -151,7 +151,7 @@ export class Sangria {
     }
 
     try {
-      return await res.json();
+      return await res.clone().json();
     } catch (err) {
       throw new SangriaAPIStatusError(
         "Sangria returned a malformed response body",

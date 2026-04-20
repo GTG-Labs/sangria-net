@@ -11,6 +11,13 @@ from .errors import (
 )
 
 
+def _request_or_none(exc: httpx.RequestError) -> httpx.Request | None:
+    try:
+        return exc.request
+    except RuntimeError:
+        return None
+
+
 class SangriaHTTPClient:
     def __init__(
         self,
@@ -41,16 +48,16 @@ class SangriaHTTPClient:
             raise SangriaTimeoutError(
                 f"Sangria request timed out: {exc}",
                 operation=operation,
-                request=exc.request,
+                request=_request_or_none(exc),
             ) from exc
         except httpx.RequestError as exc:
             raise SangriaConnectionError(
                 f"Sangria connection failed: {exc}",
                 operation=operation,
-                request=exc.request,
+                request=_request_or_none(exc),
             ) from exc
 
-        if response.is_error:
+        if not response.is_success:
             message = _parse_error_message(response)
             raise SangriaAPIStatusError(
                 message,
