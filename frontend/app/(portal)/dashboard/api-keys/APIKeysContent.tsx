@@ -2,8 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { Copy, Plus, Trash2, AlertCircle, Check, X, Users, Crown } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import ArcadeButton from "@/components/ArcadeButton";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { apiKeySchema, type APIKeyData } from "@/lib/validation";
 
 const API_KEY_STATUS = {
   ACTIVE: "active",
@@ -31,15 +34,24 @@ export default function APIKeysContent() {
   const [loading, setLoading] = useState(true);
   const [createLoading, setCreateLoading] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [newKeyName, setNewKeyName] = useState("");
   const [newKeyResult, setNewKeyResult] = useState<string | null>(null);
   const [showNewKey, setShowNewKey] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [approvalLoading, setApprovalLoading] = useState<Set<string>>(new Set());
 
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isValid },
+    reset,
+  } = useForm<APIKeyData>({
+    resolver: zodResolver(apiKeySchema),
+    mode: "onChange",
+  });
+
   const resetCreateForm = () => {
-    setNewKeyName("");
+    reset();
     setShowCreateForm(false);
   };
 
@@ -81,9 +93,7 @@ export default function APIKeysContent() {
     }
   };
 
-  const createAPIKey = async () => {
-    if (!newKeyName.trim()) return;
-
+  const createAPIKey = async (data: APIKeyData) => {
     setCreateLoading(true);
     setError(null);
 
@@ -95,7 +105,7 @@ export default function APIKeysContent() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          name: newKeyName.trim(),
+          name: data.name,
         }),
       });
 
@@ -221,7 +231,7 @@ export default function APIKeysContent() {
 
     // Reset all form and alert states when switching organizations
     setShowCreateForm(false);
-    setNewKeyName("");
+    reset();
     setNewKeyResult(null);
     setShowNewKey(false);
     setError(null);
@@ -232,7 +242,7 @@ export default function APIKeysContent() {
     fetchAPIKeys(true, controller.signal);
 
     return () => controller.abort();
-  }, [selectedOrgId]);
+  }, [selectedOrgId, reset]);
 
   if (loading) {
     return (
@@ -373,7 +383,7 @@ export default function APIKeysContent() {
           <h3 className="text-lg font-semibold text-gray-900 mb-4">
             Create New API Key
           </h3>
-          <div className="space-y-4">
+          <form onSubmit={handleSubmit(createAPIKey)} className="space-y-4">
             <div>
               <label
                 htmlFor="keyName"
@@ -384,29 +394,33 @@ export default function APIKeysContent() {
               <input
                 id="keyName"
                 type="text"
-                value={newKeyName}
-                onChange={(e) => setNewKeyName(e.target.value)}
+                {...register("name")}
                 placeholder="e.g., Production Server, Development Environment"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-900 placeholder-gray-500"
-                maxLength={255}
+                className={`w-full px-3 py-2 border rounded-md bg-white text-gray-900 placeholder-gray-500 ${
+                  errors.name ? "border-red-500 focus:ring-red-500" : "border-gray-300 focus:ring-blue-500"
+                } focus:outline-none focus:ring-2`}
               />
+              {errors.name && (
+                <p className="mt-1 text-sm text-red-600">{errors.name.message}</p>
+              )}
             </div>
             <div className="flex gap-3">
               <button
-                onClick={createAPIKey}
-                disabled={createLoading || !newKeyName.trim()}
-                className="px-4 py-2 bg-sangria-500 text-white rounded-md hover:bg-sangria-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                type="submit"
+                disabled={createLoading || !isValid}
+                className="px-4 py-2 bg-sangria-500 text-white rounded-md hover:bg-sangria-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {createLoading ? "Creating..." : "Create Key"}
               </button>
               <button
+                type="button"
                 onClick={resetCreateForm}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
               >
                 Cancel
               </button>
             </div>
-          </div>
+          </form>
         </div>
       )}
 

@@ -4,6 +4,31 @@ import { createMDX } from "fumadocs-mdx/next";
 const nextConfig: NextConfig = {
   output: "standalone",
   reactStrictMode: true,
+
+  // Security headers (CSP is handled in middleware.ts with nonces)
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          // X-Frame-Options removed - redundant with frame-ancestors 'none' in CSP
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff',
+          },
+          {
+            key: 'Referrer-Policy',
+            value: 'origin-when-cross-origin',
+          },
+          {
+            key: 'Permissions-Policy',
+            value: 'camera=(), microphone=(), geolocation=()',
+          },
+        ],
+      },
+    ];
+  },
+
   images: {
     remotePatterns: [
       {

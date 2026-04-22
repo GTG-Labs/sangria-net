@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { AlertCircle, X as XIcon } from "lucide-react";
 import ArcadeButton from "@/components/ArcadeButton";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { useCSRFToken } from "@/lib/csrf-protection";
 import WithdrawModal from "./WithdrawModal";
 
 interface Withdrawal {
@@ -44,6 +45,7 @@ interface APIKey {
 
 export default function WithdrawalsContent() {
   const { selectedOrgId } = useOrganization();
+  const { addToJSON } = useCSRFToken();
   const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -162,7 +164,7 @@ export default function WithdrawalsContent() {
       const response = await fetch(`/api/backend/withdrawals/${withdrawalId}/cancel`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ merchant_id: merchantId }),
+        body: JSON.stringify(addToJSON({ merchant_id: merchantId })),
       });
 
       if (response.ok) {

@@ -58,7 +58,10 @@ export default function OrganizationDropdown() {
         setIsCreating(false);
         setIsOpen(false);
       } else {
-        const data = await response.json().catch(() => ({}));
+        const data = await response.json().catch((error) => {
+          console.error('Failed to parse organization creation response:', error);
+          return null;
+        });
         setCreateError(data.error || "Failed to create organization");
       }
     } catch (err) {

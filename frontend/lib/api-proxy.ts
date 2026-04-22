@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import { withAuth } from "@workos-inc/authkit-nextjs";
+import { JSONSecurity } from "./security";
 
 const BACKEND_URL = process.env.BACKEND_URL;
 
@@ -32,15 +33,30 @@ export async function proxyToBackend(
     const timeoutId = setTimeout(() => controller.abort(), 10000);
 
     try {
+      // Secure request body preparation
+      let requestBody: string | undefined;
+      if (options?.body !== undefined) {
+        // Validate object structure before serialization
+        const validation = JSONSecurity.validateObjectStructure(options.body);
+        if (!validation.isValid) {
+          console.error('Invalid object structure:', validation.error);
+          return NextResponse.json(
+            { error: "Invalid request data structure" },
+            { status: 400 }
+          );
+        }
+
+        // Safe JSON serialization with prototype pollution protection
+        requestBody = JSONSecurity.safeStringify(options.body);
+      }
+
       const response = await fetch(`${BACKEND_URL}${path}`, {
         method,
         headers: {
           Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
         },
-        ...(options?.body !== undefined && {
-          body: JSON.stringify(options.body),
-        }),
+        ...(requestBody && { body: requestBody }),
         signal: controller.signal,
       });
 
