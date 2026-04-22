@@ -212,8 +212,14 @@ func SettlePayment(pool *pgxpool.Pool) fiber.Handler {
 
 		fee, err := config.PlatformFee.CalculateFee(amount)
 		if err != nil {
+			// The amount already passed PaymentConfig.MaxAmountMicrounits upstream,
+			// so a CalculateFee failure here is a server-side arithmetic or config
+			// problem (e.g. misconfigured RateBasisPoints) — not a client mistake.
 			slog.Error("settle payment: fee calculation failed", "amount_micro", amount, "error", err)
-			return c.Status(400).JSON(fiber.Map{"error": "invalid payment amount"})
+			return c.Status(500).JSON(fiber.Map{
+				"error":        "internal error calculating fee",
+				"error_reason": "fee_calculation_failed",
+			})
 		}
 		merchantAmount := amount - fee
 		if merchantAmount <= 0 {
@@ -359,6 +365,17 @@ func SettlePayment(pool *pgxpool.Pool) fiber.Handler {
 					"tx_hash", settleResp.Transaction,
 					"idempotency_key", txn.IdempotencyKey,
 				)
+				// Mark the pending row as failed so future retries with the same
+				// idempotency key short-circuit via ErrPreviouslyFailed instead of
+				// looping back to this same collision.
+				if failErr := dbengine.FailTransaction(c.Context(), pool, txn.ID); failErr != nil {
+					logger.Error("CRITICAL: failed to mark collided transaction as failed",
+						"txn_id", txn.ID,
+						"tx_hash", settleResp.Transaction,
+						"idempotency_key", txn.IdempotencyKey,
+						"error", failErr,
+					)
+				}
 				return c.Status(500).JSON(fiber.Map{"error": "settlement collision detected — contact support"})
 			default:
 				// CRITICAL: on-chain settlement succeeded but we couldn't confirm

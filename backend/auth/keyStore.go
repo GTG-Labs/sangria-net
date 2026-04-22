@@ -15,6 +15,11 @@ import (
 // ErrAPIKeyNotFound is returned when an API key does not exist or is not owned by the user.
 var ErrAPIKeyNotFound = errors.New("API key not found or not owned by user")
 
+// ErrInvalidAPIKey is returned when AuthenticateAPIKey cannot match the
+// provided key to any active merchant (no key_id match, or key_id matched
+// but the hash comparison failed). Callers should use errors.Is to detect.
+var ErrInvalidAPIKey = errors.New("invalid API key")
+
 // precomputed bcrypt dummy hash
 var dummyHash []byte
 
@@ -93,7 +98,7 @@ func AuthenticateAPIKey(ctx context.Context, pool *pgxpool.Pool, providedKey str
 		_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(providedKey))
 	}
 
-	return nil, fmt.Errorf("invalid API key")
+	return nil, ErrInvalidAPIKey
 }
 
 // RevokeAPIKey atomically deactivates an API key, but only if the requesting
