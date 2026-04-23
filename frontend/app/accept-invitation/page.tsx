@@ -56,7 +56,8 @@ function AcceptInvitationContent() {
     setMessage("");
 
     try {
-      const response = await internalFetch("/api/backend/accept-invitation", {
+      // Bare fetch: backend's /accept-invitation is unauthenticated, no CSRF.
+      const response = await fetch("/api/backend/accept-invitation", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

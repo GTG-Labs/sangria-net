@@ -9,7 +9,7 @@ export async function POST(
 
   try {
     const body = await request.json();
-    if (!body || typeof body !== 'object') {
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
       return new Response(JSON.stringify({ error: "Invalid request body" }), {
         status: 400,
         headers: { "Content-Type": "application/json" },
