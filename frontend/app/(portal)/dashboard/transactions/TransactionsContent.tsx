@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { ExternalLink, AlertCircle } from "lucide-react";
+import { internalFetch } from "@/lib/fetch";
 
 interface Transaction {
   id: string;
@@ -59,7 +60,7 @@ export default function TransactionsContent() {
         ? `/api/backend/transactions?limit=20&cursor=${encodeURIComponent(cursor)}`
         : `/api/backend/transactions?limit=20`;
 
-      const response = await fetch(url);
+      const response = await internalFetch(url);
 
       if (response.ok) {
         const data = await response.json();
@@ -97,7 +98,7 @@ export default function TransactionsContent() {
 
   const fetchBalance = async () => {
     try {
-      const response = await fetch("/api/backend/balance");
+      const response = await internalFetch("/api/backend/balance");
       if (response.ok) {
         const data = await response.json();
         setBalance(data.balance);
@@ -209,9 +210,8 @@ export default function TransactionsContent() {
               {transactions.map((tx, i) => (
                 <tr
                   key={tx.id}
-                  className={`border-b border-zinc-200 hover:bg-zinc-200/50 transition-colors ${
-                    i % 2 === 0 ? "bg-zinc-100/50" : ""
-                  }`}
+                  className={`border-b border-zinc-200 hover:bg-zinc-200/50 transition-colors ${i % 2 === 0 ? "bg-zinc-100/50" : ""
+                    }`}
                 >
                   <td className="py-4 pl-4 pr-6">
                     {tx.idempotency_key.startsWith("0x") ? (

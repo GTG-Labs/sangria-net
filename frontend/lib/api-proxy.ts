@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import { withAuth } from "@workos-inc/authkit-nextjs";
+import { JSONSecurity } from "./security";
 
 const BACKEND_URL = process.env.BACKEND_URL;
 
@@ -12,11 +13,15 @@ const BACKEND_URL = process.env.BACKEND_URL;
  * @param options.body - Optional request body (will be JSON-stringified)
  * @param options.rawResponse - If true, return 204 with no body on success
  *                              instead of parsing JSON. Used for DELETE.
+ * @param request - Incoming request. Required so the CSRF cookie can be
+ *                  forwarded to the Go backend (its CSRFMiddleware requires
+ *                  both the cookie AND the X-CSRF-Token header).
  */
 export async function proxyToBackend(
   method: string,
   path: string,
-  options?: { body?: unknown; rawResponse?: boolean }
+  options: { body?: unknown; rawResponse?: boolean } | undefined,
+  request: Request
 ): Promise<NextResponse> {
   try {
     const { user, accessToken } = await withAuth();
@@ -32,15 +37,54 @@ export async function proxyToBackend(
     const timeoutId = setTimeout(() => controller.abort(), 10000);
 
     try {
+      // Secure request body preparation
+      let requestBody: string | undefined;
+      if (options?.body !== undefined) {
+        // Validate object structure before serialization
+        const validation = JSONSecurity.validateObjectStructure(options.body);
+        if (!validation.isValid) {
+          console.error('Invalid object structure:', validation.error);
+          clearTimeout(timeoutId); // Clean up timer on early return
+          return NextResponse.json(
+            { error: "Invalid request data structure" },
+            { status: 400 }
+          );
+        }
+
+        // Safe JSON serialization with prototype pollution protection
+        requestBody = JSONSecurity.safeStringify(options.body);
+      }
+
+      // Get CSRF token from the incoming request's cookie jar. Server-side
+      // only — there's no other source here (Node fetch has no document,
+      // no global cookie jar).
+      const csrfCookie = request.headers.get('cookie')
+        ?.split(';')
+        ?.find(cookie => cookie.trim().startsWith('csrf_token='));
+      // Use slice(idx + 1) instead of split('=')[1] so a token containing
+      // an '=' (base64url padding, future format) isn't truncated.
+      const eqIdx = csrfCookie?.indexOf('=') ?? -1;
+      const csrfToken = csrfCookie && eqIdx >= 0
+        ? csrfCookie.slice(eqIdx + 1).trim()
+        : null;
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      };
+
+      // Add CSRF token to headers for state-changing operations.
+      // Also set a Cookie header — backend CSRFMiddleware does double-submit
+      // (cookie + X-CSRF-Token) and Node's server-side fetch does not inherit
+      // browser cookies on outbound requests.
+      if (method !== "GET" && csrfToken) {
+        headers["X-CSRF-Token"] = csrfToken;
+        headers["Cookie"] = `csrf_token=${csrfToken}`;
+      }
+
       const response = await fetch(`${BACKEND_URL}${path}`, {
         method,
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        ...(options?.body !== undefined && {
-          body: JSON.stringify(options.body),
-        }),
+        headers,
+        ...(requestBody && { body: requestBody }),
         signal: controller.signal,
       });
 

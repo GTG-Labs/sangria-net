@@ -2,7 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { User, UserPlus, Crown, Mail, Building, Users, Trash2 } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { inviteSchema, type InviteData } from "@/lib/validation";
+import { useSecureSubmit } from "@/lib/security-hooks";
+import { internalFetch } from "@/lib/fetch";
 
 interface Member {
   user_id: string;
@@ -18,16 +23,33 @@ export default function OrganizationMembersContent() {
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [isInviting, setIsInviting] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteMessage, setInviteMessage] = useState("");
   const [removingMembers, setRemovingMembers] = useState<Set<string>>(new Set());
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isValid },
+    reset,
+  } = useForm<InviteData>({
+    resolver: zodResolver(inviteSchema),
+    mode: "onChange",
+  });
+
+
+  // Secure submit with rate limiting
+  const secureSubmit = useSecureSubmit(async (data: InviteData) => {
+    await handleInviteInternal(data);
+  }, {
+    maxAttempts: 3, // Max 3 invitations per minute
+    rateLimitWindow: 60000, // 1 minute window
+  });
 
   useEffect(() => {
     if (selectedOrgId) {
       // Reset all form states when switching organizations
       setIsInviting(false);
-      setInviteEmail("");
-      setInviteMessage("");
+      reset();
 
       // Reset list state before starting fetch
       setLoading(true);
@@ -44,13 +66,13 @@ export default function OrganizationMembersContent() {
         controller.abort();
       };
     }
-  }, [selectedOrgId]);
+  }, [selectedOrgId, reset]);
 
   const fetchMembers = async (signal?: AbortSignal) => {
     if (!selectedOrgId) return;
 
     try {
-      const response = await fetch(`/api/backend/organizations/${selectedOrgId}/members`, { signal });
+      const response = await internalFetch(`/api/backend/organizations/${selectedOrgId}/members`, { signal });
       if (response.ok) {
         const data = await response.json();
         // Only update state if the fetch wasn't aborted
@@ -72,33 +94,47 @@ export default function OrganizationMembersContent() {
     }
   };
 
-  const handleInvite = async () => {
-    if (!inviteEmail.trim() || !selectedOrgId) return;
+  const handleInviteInternal = async (data: InviteData) => {
+    if (!selectedOrgId) {
+      throw new Error("No organization selected");
+    }
+
+    setSubmitError(null);
 
     try {
-      const response = await fetch(`/api/backend/organizations/${selectedOrgId}/invitations`, {
+      const response = await internalFetch(`/api/backend/organizations/${selectedOrgId}/invitations`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          email: inviteEmail.trim(),
-          message: inviteMessage.trim() || null,
+          email: data.email,
+          message: data.message || null,
         }),
       });
 
       if (response.ok) {
-        setInviteEmail("");
-        setInviteMessage("");
+        reset();
         setIsInviting(false);
         fetchMembers(); // Refresh the members list
       } else {
         const error = await response.json();
-        alert(`Failed to invite user: ${error.error}`);
+        throw new Error(error.error || "Failed to invite user");
       }
     } catch (err) {
       console.error("Error inviting user:", err);
-      alert("Failed to invite user");
+      const errorMessage = err instanceof Error ? err.message : "Failed to invite user";
+      setSubmitError(errorMessage);
+      throw err; // Re-throw so secureSubmit can handle it
+    }
+  };
+
+  const handleInvite = async (data: InviteData) => {
+    try {
+      await secureSubmit.secureSubmit(data);
+    } catch (err) {
+      // Error handling is done in handleInviteInternal
+      console.error("Invite submission blocked:", err);
     }
   };
 
@@ -110,7 +146,7 @@ export default function OrganizationMembersContent() {
     setRemovingMembers(prev => new Set(prev).add(memberUserId));
 
     try {
-      const response = await fetch(`/api/backend/organizations/${selectedOrgId}/members/${memberUserId}`, {
+      const response = await internalFetch(`/api/backend/organizations/${selectedOrgId}/members/${memberUserId}`, {
         method: "DELETE",
       });
 
@@ -196,7 +232,7 @@ export default function OrganizationMembersContent() {
           <h3 className="text-lg font-semibold text-gray-900 mb-4">
             Invite New Member
           </h3>
-          <div className="space-y-4">
+          <form onSubmit={handleSubmit(handleInvite)} className="space-y-4">
             <div>
               <label htmlFor="inviteEmail" className="block text-sm font-medium text-gray-700 mb-2">
                 Email Address
@@ -204,11 +240,16 @@ export default function OrganizationMembersContent() {
               <input
                 type="email"
                 id="inviteEmail"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
+                {...register("email")}
                 placeholder="Enter email address"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 ${errors.email
+                    ? "border-red-500 focus:ring-red-500"
+                    : "border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                  }`}
               />
+              {errors.email && (
+                <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
+              )}
             </div>
             <div>
               <label htmlFor="inviteMessage" className="block text-sm font-medium text-gray-700 mb-2">
@@ -216,33 +257,66 @@ export default function OrganizationMembersContent() {
               </label>
               <textarea
                 id="inviteMessage"
-                value={inviteMessage}
-                onChange={(e) => setInviteMessage(e.target.value)}
+                {...register("message")}
                 placeholder="Add a personal welcome message..."
                 rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 ${errors.message
+                    ? "border-red-500 focus:ring-red-500"
+                    : "border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                  }`}
               />
+              {errors.message && (
+                <p className="mt-1 text-sm text-red-600">{errors.message.message}</p>
+              )}
             </div>
+            {/* Security Status Display */}
+            {(secureSubmit.isBlocked || secureSubmit.attemptsRemaining() < 3 || submitError) && (
+              <div className="p-3 border rounded-lg">
+                {secureSubmit.isBlocked && (
+                  <div className="flex items-center gap-2 text-red-600 text-sm">
+                    <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                    Rate limit exceeded. Please wait {Math.ceil(secureSubmit.remainingCooldown() / 1000)} seconds.
+                  </div>
+                )}
+                {!secureSubmit.isBlocked && secureSubmit.attemptsRemaining() < 3 && (
+                  <div className="flex items-center gap-2 text-amber-600 text-sm">
+                    <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+                    {secureSubmit.attemptsRemaining()} invitation attempts remaining this minute.
+                  </div>
+                )}
+                {submitError && (
+                  <div className="flex items-center gap-2 text-red-600 text-sm">
+                    <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                    {submitError}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="flex items-center gap-3">
               <button
-                onClick={handleInvite}
-                disabled={!inviteEmail.trim()}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                type="submit"
+                disabled={!isValid || secureSubmit.isSubmitting || secureSubmit.isBlocked}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
               >
-                Send Invitation
+                {secureSubmit.isSubmitting && (
+                  <div className="w-4 h-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                )}
+                {secureSubmit.isSubmitting ? "Sending..." : "Send Invitation"}
               </button>
               <button
+                type="button"
                 onClick={() => {
                   setIsInviting(false);
-                  setInviteEmail("");
-                  setInviteMessage("");
+                  setSubmitError(null);
+                  reset();
                 }}
                 className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
               >
                 Cancel
               </button>
             </div>
-          </div>
+          </form>
         </div>
       )}
 
@@ -319,20 +393,20 @@ export default function OrganizationMembersContent() {
 
                     {/* Remove member button - only show for admins and not for the current user */}
                     {selectedOrg?.isAdmin &&
-                     member.user_id !== userInfo?.id && (
-                      <button
-                        onClick={() => handleRemoveMember(member.user_id, member.display_name)}
-                        disabled={removingMembers.has(member.user_id)}
-                        className="p-1 text-red-600 hover:text-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
-                        title="Remove member from organization"
-                      >
-                        {removingMembers.has(member.user_id) ? (
-                          <div className="w-4 h-4 animate-spin rounded-full border-2 border-red-600 border-t-transparent" />
-                        ) : (
-                          <Trash2 className="w-4 h-4" />
-                        )}
-                      </button>
-                    )}
+                      member.user_id !== userInfo?.id && (
+                        <button
+                          onClick={() => handleRemoveMember(member.user_id, member.display_name)}
+                          disabled={removingMembers.has(member.user_id)}
+                          className="p-1 text-red-600 hover:text-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Remove member from organization"
+                        >
+                          {removingMembers.has(member.user_id) ? (
+                            <div className="w-4 h-4 animate-spin rounded-full border-2 border-red-600 border-t-transparent" />
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
+                        </button>
+                      )}
                   </div>
                 </div>
               </div>

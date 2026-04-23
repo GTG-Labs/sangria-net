@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { AlertCircle, X as XIcon } from "lucide-react";
 import ArcadeButton from "@/components/ArcadeButton";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { internalFetch } from "@/lib/fetch";
 import WithdrawModal from "./WithdrawModal";
 
 interface Withdrawal {
@@ -83,7 +84,7 @@ export default function WithdrawalsContent() {
       if (selectedOrgId) params.set("org_id", selectedOrgId);
       if (cursor) params.set("cursor", cursor);
 
-      const response = await fetch(`/api/backend/withdrawals?${params}`, { signal });
+      const response = await internalFetch(`/api/backend/withdrawals?${params}`, { signal });
 
       if (signal?.aborted) return;
 
@@ -127,7 +128,7 @@ export default function WithdrawalsContent() {
   const fetchBalance = async (signal?: AbortSignal) => {
     try {
       const orgParam = selectedOrgId ? `?org_id=${selectedOrgId}` : "";
-      const response = await fetch(`/api/backend/balance${orgParam}`, { signal });
+      const response = await internalFetch(`/api/backend/balance${orgParam}`, { signal });
       if (signal?.aborted) return;
       if (response.ok) {
         const data = await response.json();
@@ -142,7 +143,7 @@ export default function WithdrawalsContent() {
   const fetchMerchants = async (signal?: AbortSignal) => {
     try {
       const orgParam = selectedOrgId ? `?org_id=${selectedOrgId}` : "";
-      const response = await fetch(`/api/backend/api-keys${orgParam}`, { signal });
+      const response = await internalFetch(`/api/backend/api-keys${orgParam}`, { signal });
       if (signal?.aborted) return;
       if (response.ok) {
         const keys = await response.json();
@@ -159,7 +160,7 @@ export default function WithdrawalsContent() {
 
     setCancellingId(withdrawalId);
     try {
-      const response = await fetch(`/api/backend/withdrawals/${withdrawalId}/cancel`, {
+      const response = await internalFetch(`/api/backend/withdrawals/${withdrawalId}/cancel`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ merchant_id: merchantId }),
@@ -333,9 +334,8 @@ export default function WithdrawalsContent() {
               {withdrawals.map((w, i) => (
                 <tr
                   key={w.id}
-                  className={`border-b border-zinc-200 hover:bg-zinc-200/50 transition-colors ${
-                    i % 2 === 0 ? "bg-zinc-100/50" : ""
-                  }`}
+                  className={`border-b border-zinc-200 hover:bg-zinc-200/50 transition-colors ${i % 2 === 0 ? "bg-zinc-100/50" : ""
+                    }`}
                 >
                   <td className="py-4 pl-4 pr-6 text-sm text-gray-900">
                     {formatAmount(w.amount)}

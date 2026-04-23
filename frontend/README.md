@@ -1,112 +1,218 @@
 # Sangria Frontend
 
-Next.js documentation and landing page for the Sangria x402 payment protocol demo.
+**Secure financial application for HTTP-native micropayments with x402 protocol**
 
-## Getting Started
+A Next.js frontend application with enterprise-grade security for handling real money transactions using USDC on Base.
+
+## 🚀 Quick Start
 
 ### Prerequisites
-
-- Node.js 18+ or compatible version
-- npm
+- **Node.js 18+** (LTS recommended)
+- **pnpm** (required - do not use npm or yarn)
 
 ### Installation
-
 ```bash
+git clone [repository]
 cd frontend
-npm install
+pnpm install
+```
+
+### Environment Setup
+```bash
+cp .env.example .env.local
+# Fill in required environment variables:
+# - WORKOS_CLIENT_ID
+# - WORKOS_API_KEY
+# - NEXT_PUBLIC_WORKOS_REDIRECT_URI
+# - BACKEND_URL
 ```
 
 ### Development
-
-Run the development server:
-
 ```bash
-npm run dev
+pnpm run dev          # Start development server
+pnpm run build        # Production build (test before deploy)
+pnpm run lint         # Code linting
+pnpm run type-check   # TypeScript validation
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) to view the application.
+
+## 🏗️ Architecture
+
+### Technology Stack
+- **Framework**: Next.js 16.1.6 with App Router
+- **Language**: TypeScript (strict mode)
+- **Styling**: Tailwind CSS 4.x
+- **Authentication**: WorkOS AuthKit (OAuth/SAML)
+- **Forms**: React Hook Form + Zod validation
+- **Security**: Multi-layer protection with CSRF, CSP, XSS prevention
+
+### Project Structure
+
+```text
+frontend/
+├── app/                          # Next.js App Router
+│   ├── (marketing)/             # Public pages (landing, docs, blog)
+│   ├── (portal)/dashboard/      # Authenticated application
+│   │   ├── api-keys/           # API key management
+│   │   ├── members/            # Organization members
+│   │   ├── organizations/      # Organization management
+│   │   ├── transactions/       # Transaction history
+│   │   └── withdrawals/        # Financial withdrawals
+│   └── api/backend/            # API proxy routes
+├── lib/                         # Core utilities & security
+├── components/                  # Reusable UI components
+├── contexts/                    # React state management
+└── proxy.ts                    # Security middleware (CSP + Auth)
+```
+
+## 🔐 Security Features
+
+This application implements enterprise-grade security appropriate for financial operations:
+
+- ✅ **CSRF Protection**: All state-changing operations protected
+- ✅ **Input Validation**: Comprehensive Zod schemas with XSS prevention
+- ✅ **Content Security Policy**: Nonce-based CSP with strict directives
+- ✅ **Authentication**: WorkOS integration with server-side sessions
+- ✅ **Financial Controls**: Bulletproof currency validation, microunit precision
+- ✅ **API Security**: Request timeouts, JSON validation, error sanitization
+
+**⚠️ CRITICAL**: See [SECURITY.md](./SECURITY.md) for complete security documentation.
+
+## 💰 Financial Operations
+
+### Withdrawal System
+- **Amount Validation**: Regex-based validation blocking scientific notation
+- **Balance Verification**: Real-time balance checks
+- **Security**: CSRF protection + input sanitization
+- **Precision**: Microunit handling prevents floating-point errors
+
+### Transaction Tracking
+- **Real-time Updates**: Live transaction monitoring
+- **Block Explorer**: Transparent on-chain verification
+- **Audit Trail**: Complete transaction history
+
+## 🛡️ Development Security Guidelines
+
+### Required for All New Features
+
+#### 1. CSRF Protection (REQUIRED)
+
+CSRF validation lives on the Go backend (`backend/auth/csrf_middleware.go` via double-submit cookie + `X-CSRF-Token` header). Do NOT add a second validation layer at the Next.js proxy route — it's been removed across all `app/api/backend/**` routes because it was redundant with the backend check and caused inconsistency (some routes had it, some didn't).
+
+Proxy routes must forward the CSRF token to the backend. This happens automatically via `proxyToBackend` in `lib/api-proxy.ts`, which attaches both the `X-CSRF-Token` header AND a `Cookie: csrf_token=...` header so the Go middleware's double-submit check can match. Callers just need to pass the incoming `NextRequest` as the fourth argument:
+
+```typescript
+import { proxyToBackend } from "@/lib/api-proxy";
+
+export async function POST(request: NextRequest) {
+  const body = await request.json();
+  // proxyToBackend forwards the CSRF header + cookie for you.
+  return proxyToBackend("POST", "/internal/resource", { body }, request);
+}
+```
+
+On the client, use `internalFetch` from `lib/fetch.ts` (not bare `fetch`) — it auto-attaches the `X-CSRF-Token` header for state-changing methods.
+
+#### 2. Input Validation (REQUIRED)
+All user inputs must use Zod schemas:
+
+```typescript
+import { safeValidate, withdrawalSchema } from "@/lib/validation";
+
+const result = safeValidate(withdrawalSchema, userInput);
+if (!result.success) {
+  setError(result.error);
+  return;
+}
+```
+
+#### 3. Client-side CSRF (REQUIRED)
+All forms must include CSRF tokens:
+
+```typescript
+import { internalFetch } from "@/lib/fetch";
+
+const response = await internalFetch('/api/endpoint', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(formData),
+});
+```
+
+## 🧪 Testing & Quality
+
+### Pre-deployment Checklist
+- [ ] `pnpm run build` - Must pass without errors
+- [ ] `pnpm run lint` - Must pass without warnings
+- [ ] `pnpm run type-check` - Must pass without errors
+- [ ] All POST endpoints have CSRF validation
+- [ ] All inputs use Zod validation schemas
+- [ ] No hardcoded secrets or credentials
+
+### Security Testing
+```bash
+pnpm audit                    # Check for vulnerable dependencies
+pnpm audit --audit-level high # Critical/high vulnerabilities only
+```
+
+## 🚨 Critical Security Notes
+
+### Recently Fixed (April 2026)
+- **CSRF Protection Bypass**: All API routes now properly validate CSRF tokens
+- **Financial Transaction Security**: All money operations require CSRF validation
+
+### Security Requirements
+1. **Never skip CSRF validation** on state-changing operations
+2. **Always validate inputs** using Zod schemas from `/lib/validation.ts`
+3. **Use microunit precision** for all currency calculations
+4. **Test security** with build commands before deployment
+
+## 📚 Documentation
+
+- **[SECURITY.md](./SECURITY.md)**: Complete security implementation guide
+- **Development**: Follow security patterns documented in this README
+- **API Documentation**: See `/app/api/` route handlers for examples
+
+## 🔧 Environment Variables
+
+```bash
+# Authentication (WorkOS)
+WORKOS_CLIENT_ID=your_client_id
+WORKOS_API_KEY=your_api_key
+NEXT_PUBLIC_WORKOS_REDIRECT_URI=http://localhost:3000/auth/callback
+
+# Backend API
+BACKEND_URL=http://localhost:8080
+
+# Environment
+NODE_ENV=development|production
+```
+
+## 🚀 Deployment
 
 ### Build for Production
-
 ```bash
-npm run build
-npm start
+pnpm run build     # Creates optimized standalone build
 ```
 
-## Project Structure
+### Deployment Checklist
+- [ ] All environment variables configured
+- [ ] Build passes without errors
+- [ ] Security headers properly configured
+- [ ] HTTPS enabled (required for financial operations)
 
-```
-frontend/
-  app/
-    page.tsx              # Landing page
-    layout.tsx            # Root layout with Navigation and Footer
-    globals.css           # Global styles and Tailwind config
-    docs/
-      page.tsx            # Documentation index
-      layout.tsx          # Docs-specific layout with prose styling
-      getting-started/    # Getting started guide
-      x402-protocol/      # x402 protocol deep dive
-      variable-pricing/   # Variable pricing documentation
-      architecture/       # Project architecture overview
-  components/
-    Navigation.tsx        # Site navigation header
-    Footer.tsx            # Site footer
-  public/                 # Static assets
-```
+## 📞 Support
 
-## Features
+### Security Issues
+- Review [SECURITY.md](./SECURITY.md) for security guidelines
+- Follow incident response procedures for vulnerabilities
 
-- **Landing Page**: Showcases the x402 protocol with adapted content from the original design
-- **Documentation**: Comprehensive guides covering setup, protocol details, and architecture
-- **Responsive Design**: Mobile-first design with Tailwind CSS
-- **Custom Theme**: Matches the original Sangria brand colors and styling
-- **MDX Support**: Ready for markdown-based content expansion
+### Development Issues
+- Ensure using `pnpm` (not npm/yarn)
+- Check TypeScript strict mode compliance
+- Verify CSRF protection on new endpoints
 
-## Tech Stack
+---
 
-- **Framework**: Next.js 15 with App Router
-- **Styling**: Tailwind CSS with custom configuration
-- **Typography**: Inter (sans-serif) and JetBrains Mono (monospace)
-- **Icons**: Lucide React
-- **Deployment**: Optimized for Vercel
-
-## Deployment
-
-### Deploy to Vercel
-
-The easiest way to deploy is using [Vercel](https://vercel.com):
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/GTG-Labs/sangria)
-
-Or manually:
-
-```bash
-npm run build
-# Deploy the .next folder and package.json
-```
-
-### Environment Variables
-
-No environment variables required for the frontend.
-
-## Customization
-
-### Update Brand Colors
-
-Edit `app/globals.css` to modify the color scheme:
-
-```css
---color-sangria-500: #ec4899; /* Primary brand color */
-```
-
-### Add New Documentation Pages
-
-1. Create a new folder in `app/docs/`
-2. Add a `page.tsx` file with your content
-3. Update the docs index page to link to it
-
-## Learn More
-
-- [Next.js Documentation](https://nextjs.org/docs)
-- [Tailwind CSS](https://tailwindcss.com/docs)
-- [x402 Protocol](https://www.x402.org/)
+**Framework**: Next.js 16.1.6 | **Security**: Enterprise-grade | **Package Manager**: pnpm (required)

@@ -2,8 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { Copy, Plus, Trash2, AlertCircle, Check, X, Users, Crown } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import ArcadeButton from "@/components/ArcadeButton";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { apiKeySchema, type APIKeyData } from "@/lib/validation";
+import { internalFetch } from "@/lib/fetch";
 
 const API_KEY_STATUS = {
   ACTIVE: "active",
@@ -31,15 +35,24 @@ export default function APIKeysContent() {
   const [loading, setLoading] = useState(true);
   const [createLoading, setCreateLoading] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [newKeyName, setNewKeyName] = useState("");
   const [newKeyResult, setNewKeyResult] = useState<string | null>(null);
   const [showNewKey, setShowNewKey] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [approvalLoading, setApprovalLoading] = useState<Set<string>>(new Set());
 
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isValid },
+    reset,
+  } = useForm<APIKeyData>({
+    resolver: zodResolver(apiKeySchema),
+    mode: "onChange",
+  });
+
   const resetCreateForm = () => {
-    setNewKeyName("");
+    reset();
     setShowCreateForm(false);
   };
 
@@ -51,7 +64,7 @@ export default function APIKeysContent() {
 
     try {
       const orgParam = selectedOrgId ? `?org_id=${selectedOrgId}` : "";
-      const response = await fetch(`/api/backend/api-keys${orgParam}`, { signal });
+      const response = await internalFetch(`/api/backend/api-keys${orgParam}`, { signal });
 
       if (signal?.aborted) return;
 
@@ -81,21 +94,19 @@ export default function APIKeysContent() {
     }
   };
 
-  const createAPIKey = async () => {
-    if (!newKeyName.trim()) return;
-
+  const createAPIKey = async (data: APIKeyData) => {
     setCreateLoading(true);
     setError(null);
 
     try {
       const orgParam = selectedOrgId ? `?org_id=${selectedOrgId}` : "";
-      const response = await fetch(`/api/backend/merchants${orgParam}`, {
+      const response = await internalFetch(`/api/backend/api-keys${orgParam}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          name: newKeyName.trim(),
+          name: data.name,
         }),
       });
 
@@ -135,7 +146,7 @@ export default function APIKeysContent() {
     }
 
     try {
-      const response = await fetch(`/api/backend/api-keys/${keyId}`, {
+      const response = await internalFetch(`/api/backend/api-keys/${keyId}`, {
         method: "DELETE",
       });
 
@@ -154,7 +165,7 @@ export default function APIKeysContent() {
     setApprovalLoading(prev => new Set(prev).add(keyId));
 
     try {
-      const response = await fetch(`/api/backend/api-keys/${keyId}/approve`, {
+      const response = await internalFetch(`/api/backend/api-keys/${keyId}/approve`, {
         method: "POST",
       });
 
@@ -180,7 +191,7 @@ export default function APIKeysContent() {
     setApprovalLoading(prev => new Set(prev).add(keyId));
 
     try {
-      const response = await fetch(`/api/backend/api-keys/${keyId}/reject`, {
+      const response = await internalFetch(`/api/backend/api-keys/${keyId}/reject`, {
         method: "POST",
       });
 
@@ -221,7 +232,7 @@ export default function APIKeysContent() {
 
     // Reset all form and alert states when switching organizations
     setShowCreateForm(false);
-    setNewKeyName("");
+    reset();
     setNewKeyResult(null);
     setShowNewKey(false);
     setError(null);
@@ -232,7 +243,7 @@ export default function APIKeysContent() {
     fetchAPIKeys(true, controller.signal);
 
     return () => controller.abort();
-  }, [selectedOrgId]);
+  }, [selectedOrgId, reset]);
 
   if (loading) {
     return (
@@ -373,7 +384,7 @@ export default function APIKeysContent() {
           <h3 className="text-lg font-semibold text-gray-900 mb-4">
             Create New API Key
           </h3>
-          <div className="space-y-4">
+          <form onSubmit={handleSubmit(createAPIKey)} className="space-y-4">
             <div>
               <label
                 htmlFor="keyName"
@@ -384,29 +395,32 @@ export default function APIKeysContent() {
               <input
                 id="keyName"
                 type="text"
-                value={newKeyName}
-                onChange={(e) => setNewKeyName(e.target.value)}
+                {...register("name")}
                 placeholder="e.g., Production Server, Development Environment"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-900 placeholder-gray-500"
-                maxLength={255}
+                className={`w-full px-3 py-2 border rounded-md bg-white text-gray-900 placeholder-gray-500 ${errors.name ? "border-red-500 focus:ring-red-500" : "border-gray-300 focus:ring-blue-500"
+                  } focus:outline-none focus:ring-2`}
               />
+              {errors.name && (
+                <p className="mt-1 text-sm text-red-600">{errors.name.message}</p>
+              )}
             </div>
             <div className="flex gap-3">
               <button
-                onClick={createAPIKey}
-                disabled={createLoading || !newKeyName.trim()}
-                className="px-4 py-2 bg-sangria-500 text-white rounded-md hover:bg-sangria-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                type="submit"
+                disabled={createLoading || !isValid}
+                className="px-4 py-2 bg-sangria-500 text-white rounded-md hover:bg-sangria-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {createLoading ? "Creating..." : "Create Key"}
               </button>
               <button
+                type="button"
                 onClick={resetCreateForm}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
               >
                 Cancel
               </button>
             </div>
-          </div>
+          </form>
         </div>
       )}
 
@@ -461,16 +475,15 @@ export default function APIKeysContent() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span
-                        className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                          key.status === API_KEY_STATUS.ACTIVE
+                        className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${key.status === API_KEY_STATUS.ACTIVE
                             ? "bg-green-100 text-green-800"
                             : key.status === API_KEY_STATUS.PENDING
-                            ? "bg-yellow-100 text-yellow-800"
-                            : "bg-gray-100 text-gray-800"
-                        }`}
+                              ? "bg-yellow-100 text-yellow-800"
+                              : "bg-gray-100 text-gray-800"
+                          }`}
                       >
                         {key.status === API_KEY_STATUS.ACTIVE ? 'Active' :
-                         key.status === API_KEY_STATUS.PENDING ? 'Pending' : 'Inactive'}
+                          key.status === API_KEY_STATUS.PENDING ? 'Pending' : 'Inactive'}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">

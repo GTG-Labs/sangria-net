@@ -7,5 +7,5 @@ export async function GET(request: NextRequest) {
   const path = queryString
     ? `/internal/balance?${queryString}`
     : "/internal/balance";
-  return proxyToBackend("GET", path);
+  return proxyToBackend("GET", path, undefined, request);
 }

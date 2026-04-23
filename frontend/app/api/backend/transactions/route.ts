@@ -11,5 +11,5 @@ export async function GET(request: NextRequest) {
   if (cursor) queryString.set("cursor", cursor);
 
   const path = `/internal/transactions${queryString.toString() ? `?${queryString}` : ""}`;
-  return proxyToBackend("GET", path);
+  return proxyToBackend("GET", path, undefined, request);
 }

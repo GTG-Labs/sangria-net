@@ -2,6 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { Building, Users, Plus, Settings, UserPlus } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { organizationSchema, type OrganizationData } from "@/lib/validation";
+import { internalFetch } from "@/lib/fetch";
 
 interface Organization {
   id: string;
@@ -22,12 +26,21 @@ interface UserInfo {
 export default function OrganizationsPage() {
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [isCreating, setIsCreating] = useState(false);
-  const [newOrgName, setNewOrgName] = useState("");
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isValid },
+    reset,
+  } = useForm<OrganizationData>({
+    resolver: zodResolver(organizationSchema),
+    mode: "onChange",
+  });
 
   useEffect(() => {
     const fetchUserInfo = async () => {
       try {
-        const response = await fetch("/api/backend/me");
+        const response = await internalFetch("/api/backend/me");
         if (response.ok) {
           const user = await response.json();
           setUserInfo(user);
@@ -40,16 +53,14 @@ export default function OrganizationsPage() {
     fetchUserInfo();
   }, []);
 
-  const handleCreateOrganization = async () => {
-    if (!newOrgName.trim()) return;
-
+  const handleCreateOrganization = async (data: OrganizationData) => {
     try {
-      const response = await fetch("/api/backend/organizations", {
+      const response = await internalFetch("/api/backend/organizations", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ name: newOrgName.trim() }),
+        body: JSON.stringify({ name: data.name })
       });
 
       if (response.ok) {
@@ -58,7 +69,7 @@ export default function OrganizationsPage() {
           ...prev,
           organizations: [...prev.organizations, newOrg]
         } : null);
-        setNewOrgName("");
+        reset();
         setIsCreating(false);
       } else {
         console.error("Failed to create organization");
@@ -100,7 +111,7 @@ export default function OrganizationsPage() {
           <h3 className="text-lg font-semibold text-gray-900 mb-4">
             Create New Organization
           </h3>
-          <div className="space-y-4">
+          <form onSubmit={handleSubmit(handleCreateOrganization)} className="space-y-4">
             <div>
               <label htmlFor="orgName" className="block text-sm font-medium text-gray-700 mb-2">
                 Organization Name
@@ -108,31 +119,38 @@ export default function OrganizationsPage() {
               <input
                 type="text"
                 id="orgName"
-                value={newOrgName}
-                onChange={(e) => setNewOrgName(e.target.value)}
+                {...register("name")}
                 placeholder="Enter organization name"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 ${
+                  errors.name
+                    ? "border-red-500 focus:ring-red-500"
+                    : "border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                }`}
               />
+              {errors.name && (
+                <p className="mt-1 text-sm text-red-600">{errors.name.message}</p>
+              )}
             </div>
             <div className="flex items-center gap-3">
               <button
-                onClick={handleCreateOrganization}
-                disabled={!newOrgName.trim()}
+                type="submit"
+                disabled={!isValid}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 Create
               </button>
               <button
+                type="button"
                 onClick={() => {
                   setIsCreating(false);
-                  setNewOrgName("");
+                  reset();
                 }}
                 className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
               >
                 Cancel
               </button>
             </div>
-          </div>
+          </form>
         </div>
       )}
 

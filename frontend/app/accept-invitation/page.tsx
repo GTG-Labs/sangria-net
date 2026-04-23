@@ -4,6 +4,8 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { CheckCircle, XCircle, Loader, LogIn } from "lucide-react";
 import { handleSignIn } from "@/lib/auth-actions";
+import { safeValidate, tokenSchema } from "@/lib/validation";
+import { internalFetch } from "@/lib/fetch";
 
 export default function AcceptInvitationPage() {
   return (
@@ -42,16 +44,27 @@ function AcceptInvitationContent() {
       return;
     }
 
+    // Validate token format
+    const validation = safeValidate(tokenSchema, { token });
+    if (!validation.success) {
+      setStatus("error");
+      setMessage("Invalid invitation token format.");
+      return;
+    }
+
     setStatus("loading");
     setMessage("");
 
     try {
+      // Bare fetch: backend's /accept-invitation is unauthenticated, no CSRF.
       const response = await fetch("/api/backend/accept-invitation", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ token }),
+        body: JSON.stringify({
+          token
+        }),
       });
 
       const data = await response.json();
@@ -61,7 +74,7 @@ function AcceptInvitationContent() {
 
         // Check if user is already logged in — if so, redirect to dashboard
         try {
-          const meResponse = await fetch("/api/backend/me");
+          const meResponse = await internalFetch("/api/backend/me");
           if (meResponse.ok) {
             router.push("/dashboard");
             return;

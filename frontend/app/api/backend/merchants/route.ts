@@ -19,5 +19,5 @@ export async function POST(request: NextRequest) {
   const url = new URL(request.url);
   const queryString = url.searchParams.toString();
   const path = queryString ? `/internal/merchants?${queryString}` : "/internal/merchants";
-  return proxyToBackend("POST", path, { body });
+  return proxyToBackend("POST", path, { body }, request);
 }

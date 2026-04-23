@@ -1,7 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { X as XIcon, AlertCircle } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { createWithdrawalSchema, type WithdrawalData } from "@/lib/validation";
+import { internalFetch } from "@/lib/fetch";
 
 interface APIKey {
   id: string;
@@ -35,42 +39,40 @@ export default function WithdrawModal({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
 
-  const [merchantId, setMerchantId] = useState(
-    merchants.length === 1 ? merchants[0].id : ""
-  );
-  const [amount, setAmount] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async () => {
+  // Memoized resolver to prevent recreation on every render
+  const memoizedResolver = useMemo(() => {
+    return zodResolver(createWithdrawalSchema(balance));
+  }, [balance]);
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isValid },
+  } = useForm<WithdrawalData>({
+    resolver: memoizedResolver,
+    mode: "onChange",
+    defaultValues: {
+      merchantId: merchants.length === 1 ? merchants[0].id : "",
+      amount: "",
+    },
+  });
+
+  const onSubmit = async (data: WithdrawalData) => {
     setError(null);
-
-    if (!merchantId) {
-      setError("Please select a merchant");
-      return;
-    }
-
-    const dollars = parseFloat(amount);
-    if (isNaN(dollars) || dollars <= 0) {
-      setError("Please enter a valid amount");
-      return;
-    }
-
-    const microunits = Math.round(dollars * 1_000_000);
-
-    if (balance !== null && microunits > balance) {
-      setError("Amount exceeds available balance");
-      return;
-    }
-
     setSubmitting(true);
 
+    // Safe conversion - amount already validated by Zod schema
+    const microunits = Math.round(Number(data.amount) * 1_000_000);
+
     try {
-      const response = await fetch("/api/backend/withdrawals", {
+      const response = await internalFetch("/api/backend/withdrawals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          merchant_id: merchantId,
+          merchant_id: data.merchantId,
           amount: microunits,
           idempotency_key: crypto.randomUUID(),
         }),
@@ -79,8 +81,8 @@ export default function WithdrawModal({
       if (response.ok) {
         await onSuccess();
       } else {
-        const data = await response.json().catch(() => ({ error: "Unknown error" }));
-        setError(data.error || "Failed to create withdrawal");
+        const responseData = await response.json().catch(() => ({ error: "Unknown error" }));
+        setError(responseData.error || "Failed to create withdrawal");
       }
     } catch {
       setError("Failed to create withdrawal");
@@ -109,7 +111,7 @@ export default function WithdrawModal({
           </button>
         </div>
 
-        <div className="px-6 pb-6 space-y-4">
+        <form onSubmit={handleSubmit(onSubmit)} className="px-6 pb-6 space-y-4">
           {balance !== null && (
             <div className="p-3 bg-gray-50 rounded-lg">
               <p className="text-xs font-medium text-gray-500">
@@ -131,9 +133,9 @@ export default function WithdrawModal({
               </label>
               <select
                 id="merchant"
-                value={merchantId}
-                onChange={(e) => setMerchantId(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-900"
+                {...register("merchantId")}
+                className={`w-full px-3 py-2 border rounded-md bg-white text-gray-900 ${errors.merchantId ? "border-red-500" : "border-gray-300"
+                  }`}
               >
                 <option value="">Select a merchant</option>
                 {merchants.map((m) => (
@@ -142,6 +144,9 @@ export default function WithdrawModal({
                   </option>
                 ))}
               </select>
+              {errors.merchantId && (
+                <p className="mt-1 text-sm text-red-600">{errors.merchantId.message}</p>
+              )}
             </div>
           )}
 
@@ -170,15 +175,15 @@ export default function WithdrawModal({
                 type="number"
                 step="0.01"
                 min="0"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                {...register("amount")}
                 placeholder="0.00"
-                className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-md bg-white text-gray-900 placeholder-gray-400"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleSubmit();
-                }}
+                className={`w-full pl-7 pr-3 py-2 border rounded-md bg-white text-gray-900 placeholder-gray-400 ${errors.amount ? "border-red-500" : "border-gray-300"
+                  }`}
               />
             </div>
+            {errors.amount && (
+              <p className="mt-1 text-sm text-red-600">{errors.amount.message}</p>
+            )}
           </div>
 
           {error && (
@@ -190,20 +195,21 @@ export default function WithdrawModal({
 
           <div className="flex gap-3 pt-2">
             <button
-              onClick={handleSubmit}
-              disabled={submitting || !amount || !merchantId}
+              type="submit"
+              disabled={submitting || !isValid}
               className="flex-1 px-4 py-2 bg-sangria-500 text-white rounded-md hover:bg-sangria-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm font-medium"
             >
               {submitting ? "Submitting..." : "Submit Withdrawal"}
             </button>
             <button
+              type="button"
               onClick={onClose}
               className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors text-sm"
             >
               Cancel
             </button>
           </div>
-        </div>
+        </form>
       </div>
     </div>
   );
