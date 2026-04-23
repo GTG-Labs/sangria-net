@@ -74,16 +74,16 @@ func CSRFMiddleware() fiber.Handler {
 	}
 }
 
-// isValidCSRFToken performs timing-safe comparison of CSRF tokens
+// isValidCSRFToken performs a timing-safe comparison of CSRF tokens.
 func isValidCSRFToken(stored, submitted string) bool {
-	if len(stored) != len(submitted) {
-		return false
-	}
-
-	// Convert to bytes for timing-safe comparison
 	storedBytes := []byte(stored)
 	submittedBytes := []byte(submitted)
 
-	// Use crypto/subtle.ConstantTimeCompare for timing-safe comparison
+	if len(submittedBytes) != len(storedBytes) {
+		// Dummy compare so length-mismatch takes the same time as the real path.
+		_ = subtle.ConstantTimeCompare(storedBytes, storedBytes)
+		return false
+	}
+
 	return subtle.ConstantTimeCompare(storedBytes, submittedBytes) == 1
 }

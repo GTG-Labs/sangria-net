@@ -114,7 +114,7 @@ Request:
 
 Response:
 ```json
-{ "success": true, "transaction": "0x...", "network": "base-sepolia", "payer": "0x..." }
+{ "success": true, "transaction": "0x...", "network": "base", "payer": "0x..." }
 ```
 
 ## Requirements
