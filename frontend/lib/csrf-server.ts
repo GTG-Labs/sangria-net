@@ -59,14 +59,23 @@ export class ServerCSRFProtection {
     try {
       let submittedToken: string | null = null;
 
-      // Try to get token from JSON body
-      if (request.headers.get('content-type')?.includes('application/json')) {
+      // First check X-CSRF-Token header (preferred method used by fetch wrapper)
+      submittedToken = request.headers.get('X-CSRF-Token') || request.headers.get('x-csrf-token');
+
+      // Fall back to JSON body if header not present
+      if (!submittedToken && request.headers.get('content-type')?.includes('application/json')) {
         const body = await request.json();
         submittedToken = body.csrf_token;
-      } else {
-        // Try to get token from FormData
-        const formData = await request.formData();
-        submittedToken = formData.get('csrf_token')?.toString() || null;
+      }
+
+      // Fall back to FormData if neither header nor JSON body contains token
+      if (!submittedToken) {
+        try {
+          const formData = await request.formData();
+          submittedToken = formData.get('csrf_token')?.toString() || null;
+        } catch {
+          // Ignore FormData parsing errors if request isn't multipart/form-data
+        }
       }
 
       if (!submittedToken) {

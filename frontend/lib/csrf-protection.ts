@@ -154,8 +154,9 @@ export function useCSRFToken() {
   };
 
   const addToJSON = <T extends object>(data: T): T & { csrf_token?: string } => {
-    if (token) {
-      return { ...data, csrf_token: token };
+    const currentToken = getToken();
+    if (currentToken) {
+      return { ...data, csrf_token: currentToken };
     }
     return data;
   };

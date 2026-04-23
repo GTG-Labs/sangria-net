@@ -28,10 +28,10 @@ export async function GET(request: NextRequest) {
       'Cache-Control': 'no-store',
     });
 
-    // Forward Set-Cookie headers from backend to frontend
-    const setCookieHeader = response.headers.get('Set-Cookie');
-    if (setCookieHeader) {
-      responseHeaders.set('Set-Cookie', setCookieHeader);
+    // Forward Set-Cookie headers from backend to frontend (preserve multiple cookies)
+    const setCookies = response.headers.getSetCookie?.() ?? [];
+    for (const cookie of setCookies) {
+      responseHeaders.append('Set-Cookie', cookie);
     }
 
     return new Response(JSON.stringify(data), {

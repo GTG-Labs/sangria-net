@@ -6,7 +6,8 @@ import { useState, useEffect } from 'react';
 export function setToken(token: string): void {
   if (typeof window !== 'undefined') {
     // Store in cookie for cross-origin sharing with backend
-    document.cookie = `csrf_token=${token}; path=/; SameSite=Lax`;
+    const secureAttr = location.protocol === 'https:' ? '; Secure' : '';
+    document.cookie = `csrf_token=${encodeURIComponent(token)}; path=/; SameSite=Lax${secureAttr}`;
     // Also keep in sessionStorage as backup
     sessionStorage.setItem('csrf_token', token);
   }
@@ -18,9 +19,11 @@ export function getToken(): string | null {
     // Try cookie first (matches backend)
     const cookies = document.cookie.split(';');
     for (const cookie of cookies) {
-      const [name, value] = cookie.trim().split('=');
-      if (name === 'csrf_token') {
-        return value;
+      const trimmed = cookie.trim();
+      const idx = trimmed.indexOf('=');
+      if (idx === -1) continue;
+      if (trimmed.slice(0, idx) === 'csrf_token') {
+        return decodeURIComponent(trimmed.slice(idx + 1));
       }
     }
 
@@ -83,9 +86,13 @@ export function useCSRFToken() {
   // Load token on mount if not already present
   useEffect(() => {
     if (typeof window === 'undefined' || token) return;
-    fetchToken().catch(() => {
-      // Error already logged in fetchToken
-    });
+    fetchToken()
+      .then((newToken) => {
+        if (newToken) setTokenState(newToken);
+      })
+      .catch(() => {
+        // Error already logged in fetchToken
+      });
   }, [token]);
 
   // Manual refresh function for 403 recovery
