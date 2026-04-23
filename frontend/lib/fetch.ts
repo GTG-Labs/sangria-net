@@ -6,9 +6,13 @@ function getCSRFToken(): string | null {
     // Try cookie first (matches backend)
     const cookies = document.cookie.split(';');
     for (const cookie of cookies) {
-      const [name, value] = cookie.trim().split('=');
-      if (name === 'csrf_token') {
-        return value;
+      const trimmed = cookie.trim();
+      const idx = trimmed.indexOf('=');
+      if (idx === -1) continue;
+      // slice(idx + 1), not split('=')[1], so tokens containing '=' aren't
+      // truncated at the first occurrence.
+      if (trimmed.slice(0, idx) === 'csrf_token') {
+        return trimmed.slice(idx + 1);
       }
     }
 

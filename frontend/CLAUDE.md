@@ -26,6 +26,8 @@ pnpm format             # Prettier
 - `useSearchParams()` must be wrapped in a `<Suspense>` boundary (Next.js 16 requirement for static generation).
 - Output mode is `standalone` — production runs via `node .next/standalone/server.js`.
 - Proxy routes and paginated list patterns: see root CLAUDE.md § Next.js App Conventions.
+- Client-side state-changing requests must go through `internalFetch` (`lib/fetch.ts`), not bare `fetch()`. `internalFetch` auto-attaches the `X-CSRF-Token` header on `POST/PUT/DELETE/PATCH`, fetching the token from `/api/csrf-token` if missing.
+- Proxy route POST handlers must (1) parse `request.json()` in an isolated try/catch with a specific `"Invalid JSON in … request"` log, (2) reject non-plain-object bodies with `!body || typeof body !== 'object' || Array.isArray(body)`, (3) strip `csrf_token` from the body before forwarding to the Go backend. See `api/backend/organizations/route.ts` for the canonical shape.
 
 ## Security
 

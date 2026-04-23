@@ -157,11 +157,6 @@ export class SecurityUtils {
   }
 }
 
-// Hook for React components
-export function useSafeContent(content: string): string {
-  return SecurityUtils.secureDisplay(content);
-}
-
 // JSON Serialization Security
 export class JSONSecurity {
   // Maximum recursion depth to prevent stack overflow

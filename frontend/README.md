@@ -97,23 +97,22 @@ This application implements enterprise-grade security appropriate for financial 
 ### Required for All New Features
 
 #### 1. CSRF Protection (REQUIRED)
-All POST/PUT/DELETE endpoints must validate CSRF tokens:
+
+CSRF validation lives on the Go backend (`backend/auth/csrf_middleware.go` via double-submit cookie + `X-CSRF-Token` header). Do NOT add a second validation layer at the Next.js proxy route — it's been removed across all `app/api/backend/**` routes because it was redundant with the backend check and caused inconsistency (some routes had it, some didn't).
+
+Proxy routes must forward the CSRF token to the backend. This happens automatically via `proxyToBackend` in `lib/api-proxy.ts`, which attaches both the `X-CSRF-Token` header AND a `Cookie: csrf_token=...` header so the Go middleware's double-submit check can match. Callers just need to pass the incoming `NextRequest` as the fourth argument:
 
 ```typescript
-import { ServerCSRFProtection } from "@/lib/csrf-server";
+import { proxyToBackend } from "@/lib/api-proxy";
 
-export async function POST(request: Request) {
-  const clonedRequest = request.clone();
-  const isValidCSRF = await ServerCSRFProtection.validateRequestToken(clonedRequest);
-  if (!isValidCSRF) {
-    return new Response(JSON.stringify({ error: "Invalid CSRF token" }), {
-      status: 403,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-  // Continue with business logic...
+export async function POST(request: NextRequest) {
+  const body = await request.json();
+  // proxyToBackend forwards the CSRF header + cookie for you.
+  return proxyToBackend("POST", "/internal/resource", { body }, request);
 }
 ```
+
+On the client, use `internalFetch` from `lib/fetch.ts` (not bare `fetch`) — it auto-attaches the `X-CSRF-Token` header for state-changing methods.
 
 #### 2. Input Validation (REQUIRED)
 All user inputs must use Zod schemas:

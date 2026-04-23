@@ -1,20 +1,7 @@
 import { NextResponse } from "next/server";
-import { ServerCSRFProtection } from "@/lib/csrf-server";
 
 export async function POST(request: Request) {
   try {
-    // Clone request to avoid body consumption issues
-    const clonedRequest = request.clone();
-
-    // Validate CSRF token BEFORE accepting invitations
-    const isValidCSRF = await ServerCSRFProtection.validateRequestToken(clonedRequest);
-    if (!isValidCSRF) {
-      return new Response(JSON.stringify({ error: "Invalid CSRF token" }), {
-        status: 403,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
     const body = await request.json();
     if (!body || typeof body !== 'object') {
       return new Response(JSON.stringify({ error: "Invalid request body" }), {
@@ -23,7 +10,10 @@ export async function POST(request: Request) {
       });
     }
 
-    // Remove CSRF token from body before forwarding to backend
+    // Defensive: strip csrf_token from the body before forwarding. Current
+    // clients send it as the X-CSRF-Token header only, not in the body, so
+    // this is a no-op for normal traffic. Kept to stop a misbehaving client
+    // from leaking the raw token into the backend's /internal/* handlers.
     const { csrf_token: _csrf_token, ...sanitizedBody } = body;
 
     // Call backend directly (no auth required)

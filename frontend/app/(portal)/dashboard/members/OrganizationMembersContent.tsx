@@ -270,18 +270,18 @@ export default function OrganizationMembersContent() {
               )}
             </div>
             {/* Security Status Display */}
-            {(secureSubmit.isBlocked || secureSubmit.attemptsRemaining < 3 || submitError) && (
+            {(secureSubmit.isBlocked || secureSubmit.attemptsRemaining() < 3 || submitError) && (
               <div className="p-3 border rounded-lg">
                 {secureSubmit.isBlocked && (
                   <div className="flex items-center gap-2 text-red-600 text-sm">
                     <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-                    Rate limit exceeded. Please wait {Math.ceil(secureSubmit.remainingCooldown / 1000)} seconds.
+                    Rate limit exceeded. Please wait {Math.ceil(secureSubmit.remainingCooldown() / 1000)} seconds.
                   </div>
                 )}
-                {!secureSubmit.isBlocked && secureSubmit.attemptsRemaining < 3 && (
+                {!secureSubmit.isBlocked && secureSubmit.attemptsRemaining() < 3 && (
                   <div className="flex items-center gap-2 text-amber-600 text-sm">
                     <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
-                    {secureSubmit.attemptsRemaining} invitation attempts remaining this minute.
+                    {secureSubmit.attemptsRemaining()} invitation attempts remaining this minute.
                   </div>
                 )}
                 {submitError && (
