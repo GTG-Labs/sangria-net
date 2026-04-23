@@ -2,7 +2,7 @@
 
 **Secure financial application for HTTP-native micropayments with x402 protocol**
 
-A Next.js frontend application with enterprise-grade security for handling real money transactions using USDC on Base Sepolia.
+A Next.js frontend application with enterprise-grade security for handling real money transactions using USDC on Base.
 
 ## 🚀 Quick Start
 
@@ -132,13 +132,12 @@ if (!result.success) {
 All forms must include CSRF tokens:
 
 ```typescript
-import { useCSRFToken } from "@/lib/csrf-protection";
+import { internalFetch } from "@/lib/fetch";
 
-const { addToJSON } = useCSRFToken();
-const response = await fetch('/api/endpoint', {
+const response = await internalFetch('/api/endpoint', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(addToJSON(formData)),
+  body: JSON.stringify(formData),
 });
 ```
 

@@ -54,24 +54,33 @@ export class ServerCSRFProtection {
     }
   }
 
-  // Middleware helper for CSRF validation
+  /**
+   * Middleware helper for CSRF validation
+   *
+   * Note: This function reads the request body and will clone the request internally
+   * to avoid consuming the original request body for the caller.
+   */
   static async validateRequestToken(request: Request): Promise<boolean> {
     try {
+      // Clone request defensively to avoid consuming original body
+      const req = request.clone();
       let submittedToken: string | null = null;
 
       // First check X-CSRF-Token header (preferred method used by fetch wrapper)
-      submittedToken = request.headers.get('X-CSRF-Token') || request.headers.get('x-csrf-token');
+      submittedToken = req.headers.get('X-CSRF-Token') || req.headers.get('x-csrf-token');
 
       // Fall back to JSON body if header not present
-      if (!submittedToken && request.headers.get('content-type')?.includes('application/json')) {
-        const body = await request.json();
+      if (!submittedToken && req.headers.get('content-type')?.includes('application/json')) {
+        const body = await req.json();
         submittedToken = body.csrf_token;
       }
 
       // Fall back to FormData if neither header nor JSON body contains token
       if (!submittedToken) {
         try {
-          const formData = await request.formData();
+          // Need second clone since first clone was consumed by JSON parsing
+          const formDataRequest = request.clone();
+          const formData = await formDataRequest.formData();
           submittedToken = formData.get('csrf_token')?.toString() || null;
         } catch {
           // Ignore FormData parsing errors if request isn't multipart/form-data
@@ -82,7 +91,7 @@ export class ServerCSRFProtection {
         return false;
       }
 
-      return this.validateToken(submittedToken);
+      return await this.validateToken(submittedToken);
     } catch {
       return false;
     }

@@ -7,7 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { inviteSchema, type InviteData } from "@/lib/validation";
 import { useSecureSubmit } from "@/lib/security-hooks";
-import { fetch } from "@/lib/fetch";
+import { internalFetch } from "@/lib/fetch";
 
 interface Member {
   user_id: string;
@@ -72,7 +72,7 @@ export default function OrganizationMembersContent() {
     if (!selectedOrgId) return;
 
     try {
-      const response = await fetch(`/api/backend/organizations/${selectedOrgId}/members`, { signal });
+      const response = await internalFetch(`/api/backend/organizations/${selectedOrgId}/members`, { signal });
       if (response.ok) {
         const data = await response.json();
         // Only update state if the fetch wasn't aborted
@@ -102,7 +102,7 @@ export default function OrganizationMembersContent() {
     setSubmitError(null);
 
     try {
-      const response = await fetch(`/api/backend/organizations/${selectedOrgId}/invitations`, {
+      const response = await internalFetch(`/api/backend/organizations/${selectedOrgId}/invitations`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -146,7 +146,7 @@ export default function OrganizationMembersContent() {
     setRemovingMembers(prev => new Set(prev).add(memberUserId));
 
     try {
-      const response = await fetch(`/api/backend/organizations/${selectedOrgId}/members/${memberUserId}`, {
+      const response = await internalFetch(`/api/backend/organizations/${selectedOrgId}/members/${memberUserId}`, {
         method: "DELETE",
       });
 
@@ -242,11 +242,10 @@ export default function OrganizationMembersContent() {
                 id="inviteEmail"
                 {...register("email")}
                 placeholder="Enter email address"
-                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 ${
-                  errors.email
+                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 ${errors.email
                     ? "border-red-500 focus:ring-red-500"
                     : "border-gray-300 focus:ring-blue-500 focus:border-blue-500"
-                }`}
+                  }`}
               />
               {errors.email && (
                 <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
@@ -261,11 +260,10 @@ export default function OrganizationMembersContent() {
                 {...register("message")}
                 placeholder="Add a personal welcome message..."
                 rows={3}
-                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 ${
-                  errors.message
+                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 ${errors.message
                     ? "border-red-500 focus:ring-red-500"
                     : "border-gray-300 focus:ring-blue-500 focus:border-blue-500"
-                }`}
+                  }`}
               />
               {errors.message && (
                 <p className="mt-1 text-sm text-red-600">{errors.message.message}</p>
@@ -395,20 +393,20 @@ export default function OrganizationMembersContent() {
 
                     {/* Remove member button - only show for admins and not for the current user */}
                     {selectedOrg?.isAdmin &&
-                     member.user_id !== userInfo?.id && (
-                      <button
-                        onClick={() => handleRemoveMember(member.user_id, member.display_name)}
-                        disabled={removingMembers.has(member.user_id)}
-                        className="p-1 text-red-600 hover:text-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
-                        title="Remove member from organization"
-                      >
-                        {removingMembers.has(member.user_id) ? (
-                          <div className="w-4 h-4 animate-spin rounded-full border-2 border-red-600 border-t-transparent" />
-                        ) : (
-                          <Trash2 className="w-4 h-4" />
-                        )}
-                      </button>
-                    )}
+                      member.user_id !== userInfo?.id && (
+                        <button
+                          onClick={() => handleRemoveMember(member.user_id, member.display_name)}
+                          disabled={removingMembers.has(member.user_id)}
+                          className="p-1 text-red-600 hover:text-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Remove member from organization"
+                        >
+                          {removingMembers.has(member.user_id) ? (
+                            <div className="w-4 h-4 animate-spin rounded-full border-2 border-red-600 border-t-transparent" />
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
+                        </button>
+                      )}
                   </div>
                 </div>
               </div>

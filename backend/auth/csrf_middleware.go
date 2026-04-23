@@ -3,6 +3,7 @@ package auth
 import (
 	"crypto/subtle"
 	"encoding/json"
+	"strings"
 
 	"github.com/gofiber/fiber/v3"
 )
@@ -35,7 +36,7 @@ func CSRFMiddleware() fiber.Handler {
 		// Fallback: try to get from JSON body
 		if submittedToken == "" {
 			contentType := c.Get("Content-Type")
-			if contentType == "application/json" {
+			if strings.HasPrefix(contentType, "application/json") {
 				// Clone body to avoid consumption issues
 				bodyBytes := make([]byte, len(c.Body()))
 				copy(bodyBytes, c.Body())

@@ -7,7 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import ArcadeButton from "@/components/ArcadeButton";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { apiKeySchema, type APIKeyData } from "@/lib/validation";
-import { fetch } from "@/lib/fetch";
+import { internalFetch } from "@/lib/fetch";
 
 const API_KEY_STATUS = {
   ACTIVE: "active",
@@ -64,7 +64,7 @@ export default function APIKeysContent() {
 
     try {
       const orgParam = selectedOrgId ? `?org_id=${selectedOrgId}` : "";
-      const response = await fetch(`/api/backend/api-keys${orgParam}`, { signal });
+      const response = await internalFetch(`/api/backend/api-keys${orgParam}`, { signal });
 
       if (signal?.aborted) return;
 
@@ -100,7 +100,7 @@ export default function APIKeysContent() {
 
     try {
       const orgParam = selectedOrgId ? `?org_id=${selectedOrgId}` : "";
-      const response = await fetch(`/api/backend/merchants${orgParam}`, {
+      const response = await internalFetch(`/api/backend/api-keys${orgParam}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -146,7 +146,7 @@ export default function APIKeysContent() {
     }
 
     try {
-      const response = await fetch(`/api/backend/api-keys/${keyId}`, {
+      const response = await internalFetch(`/api/backend/api-keys/${keyId}`, {
         method: "DELETE",
       });
 
@@ -165,7 +165,7 @@ export default function APIKeysContent() {
     setApprovalLoading(prev => new Set(prev).add(keyId));
 
     try {
-      const response = await fetch(`/api/backend/api-keys/${keyId}/approve`, {
+      const response = await internalFetch(`/api/backend/api-keys/${keyId}/approve`, {
         method: "POST",
       });
 
@@ -191,7 +191,7 @@ export default function APIKeysContent() {
     setApprovalLoading(prev => new Set(prev).add(keyId));
 
     try {
-      const response = await fetch(`/api/backend/api-keys/${keyId}/reject`, {
+      const response = await internalFetch(`/api/backend/api-keys/${keyId}/reject`, {
         method: "POST",
       });
 
@@ -397,9 +397,8 @@ export default function APIKeysContent() {
                 type="text"
                 {...register("name")}
                 placeholder="e.g., Production Server, Development Environment"
-                className={`w-full px-3 py-2 border rounded-md bg-white text-gray-900 placeholder-gray-500 ${
-                  errors.name ? "border-red-500 focus:ring-red-500" : "border-gray-300 focus:ring-blue-500"
-                } focus:outline-none focus:ring-2`}
+                className={`w-full px-3 py-2 border rounded-md bg-white text-gray-900 placeholder-gray-500 ${errors.name ? "border-red-500 focus:ring-red-500" : "border-gray-300 focus:ring-blue-500"
+                  } focus:outline-none focus:ring-2`}
               />
               {errors.name && (
                 <p className="mt-1 text-sm text-red-600">{errors.name.message}</p>
@@ -476,16 +475,15 @@ export default function APIKeysContent() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span
-                        className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                          key.status === API_KEY_STATUS.ACTIVE
+                        className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${key.status === API_KEY_STATUS.ACTIVE
                             ? "bg-green-100 text-green-800"
                             : key.status === API_KEY_STATUS.PENDING
-                            ? "bg-yellow-100 text-yellow-800"
-                            : "bg-gray-100 text-gray-800"
-                        }`}
+                              ? "bg-yellow-100 text-yellow-800"
+                              : "bg-gray-100 text-gray-800"
+                          }`}
                       >
                         {key.status === API_KEY_STATUS.ACTIVE ? 'Active' :
-                         key.status === API_KEY_STATUS.PENDING ? 'Pending' : 'Inactive'}
+                          key.status === API_KEY_STATUS.PENDING ? 'Pending' : 'Inactive'}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">

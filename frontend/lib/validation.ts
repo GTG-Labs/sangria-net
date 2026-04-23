@@ -1,28 +1,13 @@
 import { z } from "zod";
 import validator from "validator";
 import disposableEmailDomains from "disposable-email-domains";
+import { getDomain } from "tldts";
 import { SecurityUtils, securityValidations } from "./security";
 
-// Extract registrable domain from a full domain
+// Extract registrable domain from a full domain using Public Suffix List
 function getRegistrableDomain(domain: string): string {
-  // Handle simple cases for most common TLDs
-  const parts = domain.split('.');
-  if (parts.length <= 2) {
-    return domain; // Already a registrable domain
-  }
-
-  // For common patterns like subdomain.example.com -> example.com
-  // This is a simplified version - a full implementation would use the Public Suffix List
-  const commonTLDs = ['com', 'org', 'net', 'edu', 'gov', 'mil', 'co.uk', 'co.jp'];
-
-  // Check for two-part TLD (like co.uk)
-  const lastTwoParts = parts.slice(-2).join('.');
-  if (commonTLDs.includes(lastTwoParts)) {
-    return parts.slice(-3).join('.'); // subdomain.example.co.uk -> example.co.uk
-  }
-
-  // Standard single TLD
-  return parts.slice(-2).join('.'); // subdomain.example.com -> example.com
+  const registrableDomain = getDomain(domain);
+  return registrableDomain ?? domain;
 }
 
 // Email validation helper using maintained disposable domain list
@@ -247,24 +232,19 @@ export const tokenSchema = z.object({
 
 // Helper function to safely parse and validate
 export function safeValidate<T>(schema: z.ZodSchema<T>, data: unknown) {
-  try {
+  const result = schema.safeParse(data);
+
+  if (result.success) {
     return {
       success: true as const,
-      data: schema.parse(data),
+      data: result.data,
       error: null,
     };
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return {
-        success: false as const,
-        data: null,
-        error: error.issues[0]?.message || "Validation failed",
-      };
-    }
+  } else {
     return {
       success: false as const,
       data: null,
-      error: "Validation failed",
+      error: result.error?.issues[0]?.message || "Validation failed",
     };
   }
 }

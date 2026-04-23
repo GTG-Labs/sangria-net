@@ -61,6 +61,7 @@ export async function proxyToBackend(
         const validation = JSONSecurity.validateObjectStructure(options.body);
         if (!validation.isValid) {
           console.error('Invalid object structure:', validation.error);
+          clearTimeout(timeoutId); // Clean up timer on early return
           return NextResponse.json(
             { error: "Invalid request data structure" },
             { status: 400 }

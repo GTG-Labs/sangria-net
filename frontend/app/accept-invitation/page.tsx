@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { CheckCircle, XCircle, Loader, LogIn } from "lucide-react";
 import { handleSignIn } from "@/lib/auth-actions";
 import { safeValidate, tokenSchema } from "@/lib/validation";
-import { fetch } from "@/lib/fetch";
+import { internalFetch } from "@/lib/fetch";
 
 export default function AcceptInvitationPage() {
   return (
@@ -56,7 +56,7 @@ function AcceptInvitationContent() {
     setMessage("");
 
     try {
-      const response = await fetch("/api/backend/accept-invitation", {
+      const response = await internalFetch("/api/backend/accept-invitation", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -73,7 +73,7 @@ function AcceptInvitationContent() {
 
         // Check if user is already logged in — if so, redirect to dashboard
         try {
-          const meResponse = await fetch("/api/backend/me");
+          const meResponse = await internalFetch("/api/backend/me");
           if (meResponse.ok) {
             router.push("/dashboard");
             return;

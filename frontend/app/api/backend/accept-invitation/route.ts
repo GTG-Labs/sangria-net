@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     }
 
     // Remove CSRF token from body before forwarding to backend
-    const { csrf_token, ...sanitizedBody } = body;
+    const { csrf_token: _csrf_token, ...sanitizedBody } = body;
 
     // Call backend directly (no auth required)
     const backendUrl = process.env.BACKEND_URL || "http://localhost:8080";

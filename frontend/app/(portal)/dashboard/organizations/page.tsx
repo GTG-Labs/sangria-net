@@ -5,7 +5,7 @@ import { Building, Users, Plus, Settings, UserPlus } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { organizationSchema, type OrganizationData } from "@/lib/validation";
-import { fetch } from "@/lib/fetch";
+import { internalFetch } from "@/lib/fetch";
 
 interface Organization {
   id: string;
@@ -40,7 +40,7 @@ export default function OrganizationsPage() {
   useEffect(() => {
     const fetchUserInfo = async () => {
       try {
-        const response = await fetch("/api/backend/me");
+        const response = await internalFetch("/api/backend/me");
         if (response.ok) {
           const user = await response.json();
           setUserInfo(user);
@@ -55,7 +55,7 @@ export default function OrganizationsPage() {
 
   const handleCreateOrganization = async (data: OrganizationData) => {
     try {
-      const response = await fetch("/api/backend/organizations", {
+      const response = await internalFetch("/api/backend/organizations", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

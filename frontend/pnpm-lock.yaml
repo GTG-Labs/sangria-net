@@ -17,9 +17,6 @@ dependencies:
   '@next/mdx':
     specifier: ^16.1.6
     version: 16.1.6(@mdx-js/loader@3.1.1)(@mdx-js/react@3.1.1)
-  '@types/dompurify':
-    specifier: ^3.2.0
-    version: 3.2.0
   '@types/mdx':
     specifier: ^2.0.13
     version: 2.0.13
@@ -71,6 +68,9 @@ dependencies:
   three:
     specifier: ^0.183.2
     version: 0.183.2
+  tldts:
+    specifier: ^7.0.28
+    version: 7.0.28
   validator:
     specifier: ^13.15.35
     version: 13.15.35
@@ -2054,13 +2054,6 @@ packages:
     resolution: {integrity: sha512-vIChWdVG3LG1SMxEvI/AK+FWJthlrqlTu7fbrlywTkkaONwk/UAGaULXRlf8vkzFBLVm0zkMdCquhL5aOjhXPQ==}
     dependencies:
       '@types/ms': 2.1.0
-    dev: false
-
-  /@types/dompurify@3.2.0:
-    resolution: {integrity: sha512-Fgg31wv9QbLDA0SpTOXO3MaxySc4DKGLi8sna4/Utjo4r3ZRPdCt4UQee8BWr+Q5z21yifghREPJGYaEOEIACg==}
-    deprecated: This is a stub types definition. dompurify provides its own type definitions, so you do not need this installed.
-    dependencies:
-      dompurify: 3.4.0
     dev: false
 
   /@types/estree-jsx@1.0.5:
@@ -6360,6 +6353,17 @@ packages:
     dependencies:
       fdir: 6.5.0(picomatch@4.0.3)
       picomatch: 4.0.3
+
+  /tldts-core@7.0.28:
+    resolution: {integrity: sha512-7W5Efjhsc3chVdFhqtaU0KtK32J37Zcr9RKtID54nG+tIpcY79CQK/veYPODxtD/LJ4Lue66jvrQzIX2Z2/pUQ==}
+    dev: false
+
+  /tldts@7.0.28:
+    resolution: {integrity: sha512-+Zg3vWhRUv8B1maGSTFdev9mjoo8Etn2Ayfs4cnjlD3CsGkxXX4QyW3j2WJ0wdjYcYmy7Lx2RDsZMhgCWafKIw==}
+    hasBin: true
+    dependencies:
+      tldts-core: 7.0.28
+    dev: false
 
   /to-regex-range@5.0.1:
     resolution: {integrity: sha512-65P7iz6X5yEr1cwcgvQxbbIw7Uk3gOy5dIdtZ4rDveLqhrdJP+Li/Hx6tyK0NEb+2GCyneCMJiGqrADCSNk8sQ==}

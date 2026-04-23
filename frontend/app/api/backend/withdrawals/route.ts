@@ -25,8 +25,20 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const body = await request.json();
-    if (!body || typeof body !== 'object') {
+    // Parse JSON with isolated error handling
+    let body;
+    try {
+      body = await request.json();
+    } catch (error) {
+      console.error('Invalid JSON in withdrawal POST request:', error);
+      return new Response(JSON.stringify({ error: "Invalid request format" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    // Validate body is a plain object (not array)
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
       return new Response(JSON.stringify({ error: "Invalid request body" }), {
         status: 400,
         headers: { "Content-Type": "application/json" },
@@ -35,13 +47,13 @@ export async function POST(request: NextRequest) {
 
     // Remove CSRF token from body before forwarding to backend
     // The client-side CSRF token should not be sent to internal services
-    const { csrf_token, ...sanitizedBody } = body;
+    const { csrf_token: _csrf_token, ...sanitizedBody } = body;
 
     return proxyToBackend("POST", "/internal/withdrawals", { body: sanitizedBody });
   } catch (error) {
-    console.error('Invalid JSON in withdrawal POST request:', error);
-    return new Response(JSON.stringify({ error: "Invalid request format" }), {
-      status: 400,
+    console.error('Error in withdrawal POST request:', error);
+    return new Response(JSON.stringify({ error: "Internal server error" }), {
+      status: 500,
       headers: { "Content-Type": "application/json" },
     });
   }

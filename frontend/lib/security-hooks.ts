@@ -20,8 +20,19 @@ export function useDebounce<T>(value: T, delay: number): T {
 // Rate limiting hook for form submissions
 export function useRateLimit(maxAttempts: number = 5, windowMs: number = 60000) {
   const attemptsRef = useRef<number[]>([]);
+  const cooldownEndRef = useRef<number | null>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
   const [isBlocked, setIsBlocked] = useState(false);
-  const [cooldownEnd, setCooldownEnd] = useState<number | null>(null);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, []);
 
   const checkRateLimit = useCallback(() => {
     const now = Date.now();
@@ -30,35 +41,45 @@ export function useRateLimit(maxAttempts: number = 5, windowMs: number = 60000) 
     // Remove old attempts outside the window
     attemptsRef.current = attemptsRef.current.filter(attempt => attempt > windowStart);
 
-    // Check if we're still in cooldown
-    if (cooldownEnd && now < cooldownEnd) {
-      return false;
+    // Check if we're still in cooldown using ref for current value
+    const currentCooldownEnd = cooldownEndRef.current;
+    if (currentCooldownEnd && now < currentCooldownEnd) {
+      return { ok: false, retryAfterMs: currentCooldownEnd - now };
     }
 
     // Check if we've exceeded the rate limit
     if (attemptsRef.current.length >= maxAttempts) {
       const cooldownDuration = 30000; // 30 second cooldown
-      setCooldownEnd(now + cooldownDuration);
+      const newCooldownEnd = now + cooldownDuration;
+
+      cooldownEndRef.current = newCooldownEnd;
       setIsBlocked(true);
 
-      // Auto-unblock after cooldown
-      setTimeout(() => {
+      // Clear existing timer
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+
+      // Auto-unblock after cooldown with cleanup tracking
+      timerRef.current = setTimeout(() => {
+        cooldownEndRef.current = null;
         setIsBlocked(false);
-        setCooldownEnd(null);
+        timerRef.current = null;
       }, cooldownDuration);
 
-      return false;
+      return { ok: false, retryAfterMs: cooldownDuration };
     }
 
     // Record this attempt
     attemptsRef.current.push(now);
-    return true;
-  }, [maxAttempts, windowMs, cooldownEnd]);
+    return { ok: true, retryAfterMs: 0 };
+  }, [maxAttempts, windowMs]);
 
   const getRemainingCooldown = useCallback(() => {
-    if (!cooldownEnd) return 0;
-    return Math.max(0, cooldownEnd - Date.now());
-  }, [cooldownEnd]);
+    const currentCooldownEnd = cooldownEndRef.current;
+    if (!currentCooldownEnd) return 0;
+    return Math.max(0, currentCooldownEnd - Date.now());
+  }, []);
 
   const getAttemptsRemaining = useCallback(() => {
     return Math.max(0, maxAttempts - attemptsRef.current.length);
@@ -67,8 +88,8 @@ export function useRateLimit(maxAttempts: number = 5, windowMs: number = 60000) 
   return {
     canProceed: checkRateLimit,
     isBlocked,
-    remainingCooldown: getRemainingCooldown(),
-    attemptsRemaining: getAttemptsRemaining(),
+    remainingCooldown: getRemainingCooldown,
+    attemptsRemaining: getAttemptsRemaining,
   };
 }
 
@@ -91,13 +112,14 @@ export function useSecureSubmit<T>(
 
   // Stable references for memoization optimization
   const canProceed = rateLimit.canProceed;
-  const remainingCooldown = rateLimit.remainingCooldown;
-  const attemptsRemaining = rateLimit.attemptsRemaining;
+  const getRemainingCooldown = rateLimit.remainingCooldown;
+  const getAttemptsRemaining = rateLimit.attemptsRemaining;
 
   const secureSubmit = useCallback(async (data: T) => {
-    // Check rate limiting
-    if (!canProceed()) {
-      throw new Error(`Too many attempts. Please wait ${Math.ceil(remainingCooldown / 1000)} seconds.`);
+    // Check rate limiting with correct return format
+    const rateLimitResult = canProceed();
+    if (!rateLimitResult.ok) {
+      throw new Error(`Too many attempts. Please wait ${Math.ceil(rateLimitResult.retryAfterMs / 1000)} seconds.`);
     }
 
     // Prevent duplicate submissions using ref to avoid stale closure
@@ -118,14 +140,14 @@ export function useSecureSubmit<T>(
       isSubmittingRef.current = false;
       setIsSubmitting(false);
     }
-  }, [onSubmit, canProceed, remainingCooldown]);
+  }, [onSubmit, canProceed, getRemainingCooldown]);
 
   return {
     secureSubmit,
     isSubmitting,
     isBlocked: rateLimit.isBlocked,
-    attemptsRemaining,
-    remainingCooldown,
+    attemptsRemaining: getAttemptsRemaining,
+    remainingCooldown: getRemainingCooldown,
   };
 }
 
@@ -209,6 +231,9 @@ export function useSecureInput(
 }
 
 // File upload security hook
+// SECURITY NOTE: Client-side validation is for UX only. All security enforcement
+// must be done server-side. Magic byte validation provides better protection than
+// MIME types but can still be bypassed by sophisticated attackers.
 export function useSecureFileUpload(options: {
   maxSize?: number; // bytes
   allowedTypes?: string[];
@@ -224,56 +249,80 @@ export function useSecureFileUpload(options: {
   const [errors, setErrors] = useState<string[]>([]);
   const [isValidating, setIsValidating] = useState(false);
 
-  const validateFile = useCallback((file: File): string | null => {
-    // File size check
+  // Magic bytes for file type detection (more secure than MIME/extension)
+  const checkMagicBytes = useCallback(async (file: File): Promise<string | null> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const buffer = e.target?.result as ArrayBuffer;
+        if (!buffer) {
+          resolve('Unable to read file');
+          return;
+        }
+
+        const bytes = new Uint8Array(buffer.slice(0, 12)); // Read first 12 bytes
+        const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+
+        // Magic byte signatures for allowed file types
+        const signatures: Record<string, RegExp[]> = {
+          'image/jpeg': [/^ffd8ff/],
+          'image/png': [/^89504e470d0a1a0a/],
+          'image/gif': [/^474946383[79]61/],
+          'application/pdf': [/^255044462d/],
+        };
+
+        // Check if file matches any allowed magic bytes
+        for (const [mimeType, patterns] of Object.entries(signatures)) {
+          if (allowedTypes.includes(mimeType)) {
+            for (const pattern of patterns) {
+              if (pattern.test(hex)) {
+                resolve(null); // Valid file type
+                return;
+              }
+            }
+          }
+        }
+
+        resolve(`File type not allowed. Only ${allowedTypes.join(', ')} files are permitted.`);
+      };
+
+      reader.onerror = () => resolve('Unable to read file');
+      reader.readAsArrayBuffer(file.slice(0, 12)); // Only read first 12 bytes
+    });
+  }, [allowedTypes]);
+
+  const validateFile = useCallback(async (file: File): Promise<string | null> => {
+    // File size check (this is safe client-side validation)
     if (file.size > maxSize) {
       return `File too large: ${Math.round(file.size / 1024 / 1024)}MB (max ${Math.round(maxSize / 1024 / 1024)}MB)`;
     }
 
-    // File type check
-    if (!allowedTypes.includes(file.type)) {
-      return `Invalid file type: ${file.type}. Allowed: ${allowedTypes.join(', ')}`;
-    }
-
-    // File name security check
+    // File name security check (prevent path traversal, etc.)
     const dangerousChars = /[<>:"|?*\x00-\x1f]/;
     if (dangerousChars.test(file.name)) {
       return 'File name contains invalid characters';
     }
 
-    // Extension vs MIME type check (basic)
-    const extension = file.name.split('.').pop()?.toLowerCase();
-    const mimeToExt: Record<string, string[]> = {
-      'image/jpeg': ['jpg', 'jpeg'],
-      'image/png': ['png'],
-      'image/gif': ['gif'],
-      'application/pdf': ['pdf'],
-    };
-
-    const expectedExts = mimeToExt[file.type];
-    if (expectedExts && extension && !expectedExts.includes(extension)) {
-      return 'File extension does not match file type';
+    // SECURITY: Magic byte validation (more secure than MIME type checking)
+    // Note: This provides better protection but server-side validation is still required
+    const magicByteError = await checkMagicBytes(file);
+    if (magicByteError) {
+      return magicByteError;
     }
 
     return null;
-  }, [maxSize, allowedTypes]);
+  }, [maxSize, checkMagicBytes]);
 
   const addFiles = useCallback(async (newFiles: FileList | File[]) => {
     setIsValidating(true);
     const fileArray = Array.from(newFiles);
 
-    // Check total file limit
-    if (files.length + fileArray.length > maxFiles) {
-      setErrors(prev => [...prev, `Too many files. Maximum ${maxFiles} allowed.`]);
-      setIsValidating(false);
-      return;
-    }
-
     const validFiles: File[] = [];
     const newErrors: string[] = [];
 
+    // Validate each file (now async due to magic byte checking)
     for (const file of fileArray) {
-      const error = validateFile(file);
+      const error = await validateFile(file);
       if (error) {
         newErrors.push(`${file.name}: ${error}`);
       } else {
@@ -281,10 +330,30 @@ export function useSecureFileUpload(options: {
       }
     }
 
-    setFiles(prev => [...prev, ...validFiles]);
-    setErrors(prev => [...prev, ...newErrors]);
+    // Move capacity enforcement inside setFiles to prevent race conditions
+    let capacityError: string | null = null;
+    setFiles(prev => {
+      const currentCount = prev.length;
+      const allowedSlots = Math.max(0, maxFiles - currentCount);
+
+      if (validFiles.length > allowedSlots) {
+        capacityError = `Too many files. Maximum ${maxFiles} allowed.`;
+        // Only add files up to the limit
+        return [...prev, ...validFiles.slice(0, allowedSlots)];
+      }
+      return [...prev, ...validFiles];
+    });
+
+    // Update errors using functional updater
+    setErrors(prev => {
+      const allErrors = [...prev, ...newErrors];
+      if (capacityError) {
+        allErrors.push(capacityError);
+      }
+      return allErrors;
+    });
     setIsValidating(false);
-  }, [files.length, maxFiles, validateFile]);
+  }, [maxFiles, validateFile]);
 
   const removeFile = useCallback((index: number) => {
     setFiles(prev => prev.filter((_, i) => i !== index));

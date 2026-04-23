@@ -75,34 +75,48 @@ export function addTokenToJSON<T extends object>(data: T): T & { csrf_token?: st
  *
  * @returns Object containing:
  *   - token: Current CSRF token (null if not loaded)
+ *   - isLoading: Whether token is currently being fetched
+ *   - error: Error message if token fetch failed
  *   - refresh: Function to clear cached token and fetch a new one
  *   - addToFormData: Function to add current token to FormData
  *   - addToJSON: Function to add current token to JSON payload
+ *   - handleAPICall: Function with automatic 403 retry logic
  *
- * Usage for 403 recovery:
+ * Usage for loading states:
  * ```
- * const { refresh } = useCSRFToken();
+ * const { token, isLoading, error, refresh } = useCSRFToken();
  *
- * try {
- *   await apiCall();
- * } catch (error) {
- *   if (error.status === 403) {
- *     await refresh();
- *     await apiCall(); // Retry with fresh token
- *   }
- * }
+ * if (isLoading) return <div>Loading...</div>;
+ * if (error) return <div>Error: {error} <button onClick={refresh}>Retry</button></div>;
+ *
+ * // Use token safely - guaranteed to be loaded
+ * ```
+ *
+ * Usage for automatic 403 recovery:
+ * ```
+ * const { handleAPICall } = useCSRFToken();
+ *
+ * const result = await handleAPICall(() =>
+ *   fetch('/api/endpoint', { method: 'POST', ... })
+ * );
  * ```
  */
 export function useCSRFToken() {
   const [token, setTokenState] = useState<string | null>(() => {
-    // Get existing token from storage if available
+    // Don't use existing token from storage - always fetch fresh to avoid stale tokens
     if (typeof window === 'undefined') return null;
-    return getToken();
+    return null;
   });
+
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Fetch a new CSRF token from the backend (via frontend proxy)
   const fetchToken = async () => {
     try {
+      setIsLoading(true);
+      setError(null);
+
       const response = await fetch('/api/csrf-token', {
         credentials: 'include', // Include cookies for CSRF token storage
       });
@@ -113,12 +127,16 @@ export function useCSRFToken() {
         if (serverToken) {
           setToken(serverToken);
           setTokenState(serverToken);
+          setIsLoading(false);
           return serverToken;
         }
       }
       throw new Error(`Failed to fetch CSRF token: ${response.status}`);
     } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Failed to fetch CSRF token';
       console.error('Failed to fetch CSRF token:', error);
+      setError(errorMsg);
+      setIsLoading(false);
       throw error;
     }
   };
@@ -128,6 +146,7 @@ export function useCSRFToken() {
     // Clear stored token and state
     clearToken();
     setTokenState(null);
+    setError(null);
 
     try {
       return await fetchToken();
@@ -137,13 +156,13 @@ export function useCSRFToken() {
     }
   };
 
-  // Fetch server-generated token if not available
+  // Fetch server-generated token on mount
   useEffect(() => {
-    if (typeof window === 'undefined' || token) return;
+    if (typeof window === 'undefined') return;
     fetchToken().catch(() => {
       // Error already logged in fetchToken
     });
-  }, [token]);
+  }, []); // Only run on mount
 
   // Create token-aware versions of helper functions that use hook state
   const addToFormData = (formData: FormData): FormData => {
@@ -154,9 +173,9 @@ export function useCSRFToken() {
   };
 
   const addToJSON = <T extends object>(data: T): T & { csrf_token?: string } => {
-    const currentToken = getToken();
-    if (currentToken) {
-      return { ...data, csrf_token: currentToken };
+    // Use the hook's token state instead of storage to ensure we have a fresh token
+    if (token) {
+      return { ...data, csrf_token: token };
     }
     return data;
   };
@@ -190,6 +209,8 @@ export function useCSRFToken() {
 
   return {
     token,
+    isLoading,
+    error,
     refresh,
     addToFormData,
     addToJSON,

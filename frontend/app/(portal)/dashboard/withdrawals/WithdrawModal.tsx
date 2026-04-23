@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { X as XIcon, AlertCircle } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { createWithdrawalSchema, type WithdrawalData } from "@/lib/validation";
-import { fetch } from "@/lib/fetch";
+import { internalFetch } from "@/lib/fetch";
 
 interface APIKey {
   id: string;
@@ -43,7 +43,7 @@ export default function WithdrawModal({
   const [error, setError] = useState<string | null>(null);
 
   // Memoized resolver to prevent recreation on every render
-  const memoizedResolver = useCallback(() => {
+  const memoizedResolver = useMemo(() => {
     return zodResolver(createWithdrawalSchema(balance));
   }, [balance]);
 
@@ -52,7 +52,7 @@ export default function WithdrawModal({
     handleSubmit,
     formState: { errors, isValid },
   } = useForm<WithdrawalData>({
-    resolver: memoizedResolver(),
+    resolver: memoizedResolver,
     mode: "onChange",
     defaultValues: {
       merchantId: merchants.length === 1 ? merchants[0].id : "",
@@ -68,7 +68,7 @@ export default function WithdrawModal({
     const microunits = Math.round(Number(data.amount) * 1_000_000);
 
     try {
-      const response = await fetch("/api/backend/withdrawals", {
+      const response = await internalFetch("/api/backend/withdrawals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -134,9 +134,8 @@ export default function WithdrawModal({
               <select
                 id="merchant"
                 {...register("merchantId")}
-                className={`w-full px-3 py-2 border rounded-md bg-white text-gray-900 ${
-                  errors.merchantId ? "border-red-500" : "border-gray-300"
-                }`}
+                className={`w-full px-3 py-2 border rounded-md bg-white text-gray-900 ${errors.merchantId ? "border-red-500" : "border-gray-300"
+                  }`}
               >
                 <option value="">Select a merchant</option>
                 {merchants.map((m) => (
@@ -178,9 +177,8 @@ export default function WithdrawModal({
                 min="0"
                 {...register("amount")}
                 placeholder="0.00"
-                className={`w-full pl-7 pr-3 py-2 border rounded-md bg-white text-gray-900 placeholder-gray-400 ${
-                  errors.amount ? "border-red-500" : "border-gray-300"
-                }`}
+                className={`w-full pl-7 pr-3 py-2 border rounded-md bg-white text-gray-900 placeholder-gray-400 ${errors.amount ? "border-red-500" : "border-gray-300"
+                  }`}
               />
             </div>
             {errors.amount && (

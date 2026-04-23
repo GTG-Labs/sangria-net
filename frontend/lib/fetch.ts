@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // Enhanced fetch wrapper with automatic CSRF protection
 // Server-safe CSRF token retrieval
 function getCSRFToken(): string | null {
@@ -59,7 +60,7 @@ async function getOrFetchCSRFToken(): Promise<string | null> {
 }
 
 // Override the global fetch with CSRF-aware version
-export async function fetch(url: string, options: RequestInit = {}): Promise<Response> {
+export async function internalFetch(url: string, options: RequestInit = {}): Promise<Response> {
   // Prepare headers
   const headers = new Headers(options.headers);
 
@@ -82,10 +83,10 @@ export async function fetch(url: string, options: RequestInit = {}): Promise<Res
 // Convenience methods for cleaner API calls
 export const api = {
   get: (url: string, options: RequestInit = {}) =>
-    fetch(url, { ...options, method: 'GET' }),
+    internalFetch(url, { ...options, method: 'GET' }),
 
   post: (url: string, body?: any, options: RequestInit = {}) =>
-    fetch(url, {
+    internalFetch(url, {
       ...options,
       method: 'POST',
       headers: {
@@ -96,7 +97,7 @@ export const api = {
     }),
 
   put: (url: string, body?: any, options: RequestInit = {}) =>
-    fetch(url, {
+    internalFetch(url, {
       ...options,
       method: 'PUT',
       headers: {
@@ -107,5 +108,5 @@ export const api = {
     }),
 
   delete: (url: string, options: RequestInit = {}) =>
-    fetch(url, { ...options, method: 'DELETE' }),
+    internalFetch(url, { ...options, method: 'DELETE' }),
 };

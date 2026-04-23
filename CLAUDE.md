@@ -69,8 +69,8 @@ Use these terms consistently:
 - **Sentinel errors.** Use package-level `var Err... = errors.New(...)` for typed error handling.
 
 ### Security
-- **CSRF Protection is automatic.** Frontend components use standard `fetch()` calls — never manual CSRF token handling. The fetch wrapper (`lib/fetch.ts`) automatically injects tokens. Backend validates via `auth.CSRFMiddleware()`.
-- **Use secure fetch wrapper.** Import `{ fetch } from "@/lib/fetch"` instead of global `fetch` for automatic CSRF protection on state-changing requests.
+- **CSRF Protection is automatic.** Frontend components use standard `internalFetch()` calls — never manual CSRF token handling. The fetch wrapper (`lib/fetch.ts`) automatically injects tokens. Backend validates via `auth.CSRFMiddleware()`.
+- **Use secure fetch wrapper.** Import `{ internalFetch } from "@/lib/fetch"` instead of global `fetch` for automatic CSRF protection on state-changing requests.
 
 ### SDK
 - **SDK surface is a product.** Breaking changes to `@sangria-sdk/core` or `sangria-merchant-sdk` need explicit justification.

@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    if (!body || typeof body !== 'object') {
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
       return new Response(JSON.stringify({ error: "Invalid request body" }), {
         status: 400,
         headers: { "Content-Type": "application/json" },
@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
 
     // Remove CSRF token from body before forwarding to backend
     // The client-side CSRF token should not be sent to internal services
-    const { csrf_token, ...sanitizedBody } = body;
+    const { csrf_token: _csrf_token, ...sanitizedBody } = body;
 
     return proxyToBackend("POST", "/internal/merchants", { body: sanitizedBody });
   } catch (error) {

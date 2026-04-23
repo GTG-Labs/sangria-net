@@ -88,7 +88,8 @@ export class SecurityUtils {
   // Validate safe character sets for different input types
   static containsOnlySafeChars(input: string, type: 'name' | 'email' | 'currency' | 'general'): boolean {
     // First check for dangerous control/invisible characters
-    const dangerousControlChars = /[\u202A-\u202E\u200B-\u200D\u2066-\u2069\uFFF9-\uFFFB\u180E\u061C\u2028-\u2029\u{E0000}-\u{E007F}]/u;    if (dangerousControlChars.test(input)) {
+    const dangerousControlChars = /[\u202A-\u202E\u200B-\u200D\u2066-\u2069\uFFF9-\uFFFB\u180E\u061C\u2028-\u2029\u{E0000}-\u{E007F}]/u;
+    if (dangerousControlChars.test(input)) {
       return false;
     }
 
@@ -241,29 +242,62 @@ export class JSONSecurity {
     return dangerousKeys.includes(key);
   }
 
+  // Check for circular references using WeakSet-based detection
+  private static hasCycles(obj: unknown, visited = new WeakSet<object>()): boolean {
+    if (obj === null || obj === undefined || typeof obj !== 'object') {
+      return false;
+    }
+
+    // Detect circular reference
+    if (visited.has(obj as object)) {
+      return true;
+    }
+
+    // Mark object as visited
+    visited.add(obj as object);
+
+    try {
+      if (Array.isArray(obj)) {
+        for (const item of obj) {
+          if (this.hasCycles(item, visited)) {
+            return true;
+          }
+        }
+      } else {
+        for (const key in obj) {
+          if (Object.prototype.hasOwnProperty.call(obj, key)) {
+            if (this.hasCycles((obj as Record<string, unknown>)[key], visited)) {
+              return true;
+            }
+          }
+        }
+      }
+    } finally {
+      // Remove from visited set for other traversal paths
+      visited.delete(obj as object);
+    }
+
+    return false;
+  }
+
   // Validate object structure before serialization
   static validateObjectStructure(obj: unknown): { isValid: boolean; error?: string } {
-    try {
-      // Check for circular references
-      JSON.stringify(obj);
-
-      // Check depth (prevent deeply nested objects)
-      if (this.getObjectDepth(obj) > 10) {
-        return { isValid: false, error: 'Object nesting too deep' };
-      }
-
-      // Check for dangerous keys
-      if (this.containsDangerousKeys(obj)) {
-        return { isValid: false, error: 'Object contains dangerous properties' };
-      }
-
-      return { isValid: true };
-    } catch (error) {
-      if (error instanceof TypeError && error.message.includes('circular')) {
-        return { isValid: false, error: 'Circular reference detected' };
-      }
-      return { isValid: false, error: 'Invalid object structure' };
+    // Check for circular references first
+    if (this.hasCycles(obj)) {
+      return { isValid: false, error: 'Circular reference detected' };
     }
+
+    // Check depth (prevent deeply nested objects)
+    if (this.getObjectDepth(obj) > 10) {
+      return { isValid: false, error: 'Object nesting too deep' };
+    }
+
+    // Check for dangerous keys
+    if (this.containsDangerousKeys(obj)) {
+      return { isValid: false, error: 'Object contains dangerous properties' };
+    }
+
+    return { isValid: true };
   }
 
   // Calculate object nesting depth with cycle protection

@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { ChevronDown, Building, Users, Plus } from "lucide-react";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { fetch } from "@/lib/fetch";
+import { internalFetch } from "@/lib/fetch";
 
 export default function OrganizationDropdown() {
   const { userInfo, selectedOrgId, selectedOrg, setSelectedOrgId, refreshUserInfo } = useOrganization();
@@ -43,7 +43,7 @@ export default function OrganizationDropdown() {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch("/api/backend/organizations", {
+      const response = await internalFetch("/api/backend/organizations", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -63,7 +63,7 @@ export default function OrganizationDropdown() {
           console.error('Failed to parse organization creation response:', error);
           return null;
         });
-        setCreateError(data.error || "Failed to create organization");
+        setCreateError(data?.error || "Failed to create organization");
       }
     } catch (err) {
       console.error("Error creating organization:", err);
@@ -121,9 +121,8 @@ export default function OrganizationDropdown() {
               <button
                 key={org.id}
                 onClick={() => handleOrganizationSelect(org.id)}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors text-left hover:bg-gray-50 ${
-                  selectedOrgId === org.id ? "bg-blue-50 text-blue-900" : "text-gray-700"
-                }`}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors text-left hover:bg-gray-50 ${selectedOrgId === org.id ? "bg-blue-50 text-blue-900" : "text-gray-700"
+                  }`}
               >
                 {org.isPersonal ? (
                   <Users className="h-4 w-4 flex-shrink-0" />

@@ -31,7 +31,7 @@ export async function POST(
 
     // Remove CSRF token from body before forwarding to backend
     // The client-side CSRF token should not be sent to internal services
-    const { csrf_token, ...sanitizedBody } = body;
+    const { csrf_token: _csrf_token, ...sanitizedBody } = body;
 
     return proxyToBackend("POST", `/internal/withdrawals/${encodeURIComponent(id)}/cancel`, { body: sanitizedBody });
   } catch (error) {

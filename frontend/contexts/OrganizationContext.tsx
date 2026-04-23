@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { fetch } from "@/lib/fetch";
+import { internalFetch } from "@/lib/fetch";
 
 interface Organization {
   id: string;
@@ -51,7 +51,7 @@ export function OrganizationProvider({ children }: OrganizationProviderProps) {
 
   const fetchUserInfo = async () => {
     try {
-      const response = await fetch("/api/backend/me");
+      const response = await internalFetch("/api/backend/me");
       if (response.ok) {
         const user = await response.json();
         setUserInfo(user);
