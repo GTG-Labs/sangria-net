@@ -31,4 +31,4 @@ pnpm format             # Prettier
 
 ## Security
 
-See root CLAUDE.md § Security.
+See root CLAUDE.md § Non-Negotiable Principles § Security.

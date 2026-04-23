@@ -16,7 +16,7 @@ For protocol details see [Sangria-Overview.md](Sangria-Overview.md). For archite
 | `dbSchema/` | Database schema — single source of truth | Drizzle ORM (TypeScript), PostgreSQL |
 | `frontend/` | Docs site + merchant dashboard | Next.js 16, React 19, Tailwind 4 |
 | `sdk/sdk-typescript/` | TypeScript merchant SDK (`@sangria-sdk/core`) | TypeScript, adapters for Express/Fastify/Hono |
-| `sdk/python/` | Python merchant SDK (`sangria-merchant-sdk`) | Python 3.10+, httpx, FastAPI adapter |
+| `sdk/python/` | Python merchant SDK (`sangria-core`) | Python 3.10+, httpx, FastAPI adapter |
 | `playground/` | Example merchant servers + e2e test client | Express, Fastify, Hono, FastAPI, uv |
 | `mythos/` | Internal admin dashboard | Next.js 16, WorkOS AuthKit, port 3001 |
 
@@ -73,7 +73,7 @@ Use these terms consistently:
 - **Use secure fetch wrapper.** Import `{ internalFetch } from "@/lib/fetch"` instead of global `fetch` for automatic CSRF protection on state-changing requests.
 
 ### SDK
-- **SDK surface is a product.** Breaking changes to `@sangria-sdk/core` or `sangria-merchant-sdk` need explicit justification.
+- **SDK surface is a product.** Breaking changes to `@sangria-sdk/core` or `sangria-core` need explicit justification.
 - Match idioms of each host framework (Express middleware vs Fastify plugin vs FastAPI dependency) rather than forcing a single abstraction.
 - Keep TypeScript and Python SDK behavior in lockstep. If you add a feature to one, either add it to the other or explicitly document why it's language-specific.
 - When changing SDK behavior, update the relevant playground examples.
