@@ -1,12 +1,15 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import { withAuth } from "@workos-inc/authkit-nextjs";
+import { verifyAdmin } from "@/lib/admin";
 
-const BACKEND_URL = process.env.BACKEND_URL;
-
-if (!BACKEND_URL) {
-  throw new Error("BACKEND_URL is not configured");
-}
+const BACKEND_URL: string = (() => {
+  const url = process.env.BACKEND_URL;
+  if (!url) {
+    throw new Error("BACKEND_URL is not configured");
+  }
+  return url;
+})();
 
 export async function proxyToBackend(
   method: string,
@@ -20,6 +23,18 @@ export async function proxyToBackend(
       return NextResponse.json(
         { error: "Authentication required" },
         { status: 401 }
+      );
+    }
+
+    // Defense-in-depth: every mythos backend call is an admin operation.
+    // Verify admin status at the proxy layer in addition to the layout-level
+    // gate and backend's RequireAdmin middleware — if either regresses,
+    // non-admin authenticated users still can't reach admin endpoints.
+    const isAdmin = await verifyAdmin(accessToken);
+    if (!isAdmin) {
+      return NextResponse.json(
+        { error: "Admin access required" },
+        { status: 403 }
       );
     }
 
