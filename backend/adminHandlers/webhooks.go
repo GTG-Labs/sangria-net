@@ -3,6 +3,7 @@ package adminHandlers
 import (
 	"encoding/json"
 	"log/slog"
+	"net"
 	"os"
 	"strings"
 
@@ -10,8 +11,35 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/workos/workos-go/v4/pkg/webhooks"
 
+	"sangria/backend/config"
 	dbengine "sangria/backend/dbEngine"
 )
+
+// isWorkOSIPAllowed checks the caller IP against the pre-parsed allowlist
+// built at startup by config.LoadRateLimitConfig. Empty allowlist = fail-closed:
+// all webhook requests rejected until configured. Only the incoming IP is
+// parsed per-request; config entries are already net.IP / *net.IPNet values.
+func isWorkOSIPAllowed(ip string) bool {
+	// Strip IPv6 zone suffix (e.g. "fe80::1%eth0") before parsing.
+	if i := strings.IndexByte(ip, '%'); i >= 0 {
+		ip = ip[:i]
+	}
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		return false
+	}
+	for _, allowedIP := range config.RateLimit.WorkOSWebhookAllowedIPs {
+		if allowedIP.Equal(parsed) {
+			return true
+		}
+	}
+	for _, cidr := range config.RateLimit.WorkOSWebhookAllowedCIDRs {
+		if cidr.Contains(parsed) {
+			return true
+		}
+	}
+	return false
+}
 
 // WorkOS webhook event types
 const (
@@ -29,6 +57,19 @@ type WorkOSWebhookEvent struct {
 // HandleWorkOSWebhook processes incoming WorkOS webhooks
 func HandleWorkOSWebhook(pool *pgxpool.Pool) fiber.Handler {
 	return func(c fiber.Ctx) error {
+		// Reject anything not from WorkOS's published source IPs before any
+		// signature work. Prefer X-Envoy-External-Address (set by Railway's
+		// Envoy edge from the TCP peer, unspoofable) over c.IP() which trusts
+		// client-supplied X-Forwarded-For. Fall back to c.IP() for local dev.
+		clientIP := c.Get("X-Envoy-External-Address")
+		if clientIP == "" {
+			clientIP = c.IP()
+		}
+		if !isWorkOSIPAllowed(clientIP) {
+			slog.Warn("workos webhook: IP not in allowlist", "ip", clientIP)
+			return c.Status(403).JSON(fiber.Map{"error": "forbidden"})
+		}
+
 		// Get raw request body and signature header
 		rawBody := c.Body()
 		signature := c.Get("WorkOS-Signature")

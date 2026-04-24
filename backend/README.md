@@ -8,7 +8,7 @@ HTTP API server for x402 crypto payments, merchant management, and double-entry 
 - A running Postgres instance with the schema already pushed (see [`dbSchema/README.md`](../dbSchema/README.md))
 - WorkOS account (for user authentication)
 - Coinbase CDP account (for crypto wallet creation)
-- SendGrid account (for invitation emails)
+- Resend account (for invitation emails)
 
 ## Setup
 
@@ -19,6 +19,18 @@ go run .
 
 The server starts on the port specified by the `PORT` environment variable (required).
 
+### Upgrade notes
+
+> **Required migration step before this revision rolls out:** populate `WORKOS_WEBHOOK_ALLOWED_IPS` in every environment. The WorkOS webhook handler is fail-closed — if this variable is unset or empty, **every** incoming `/webhooks/workos` request is rejected with `403`, silently breaking invitation acceptance and any other WorkOS-driven flows. See the `WORKOS_WEBHOOK_ALLOWED_IPS` row in the env table below.
+>
+> Copy the current source IP list from [WorkOS's webhook docs](https://workos.com/docs/events/data-syncing/webhooks). As of this change, the published list is:
+>
+> ```
+> WORKOS_WEBHOOK_ALLOWED_IPS=3.217.146.166,23.21.184.92,34.204.154.149,44.213.245.178,44.215.236.82,50.16.203.9,52.1.251.34,52.21.49.187,174.129.36.47
+> ```
+>
+> Operators: set this before deploying. Reviewers/release managers: mirror this note in the PR description and release notes so downstream deployments don't silently drop webhooks.
+
 ### Environment variables
 
 | Variable | Required | Description |
@@ -28,8 +40,8 @@ The server starts on the port specified by the `PORT` environment variable (requ
 | `WORKOS_CLIENT_ID` | Yes | WorkOS client ID |
 | `WORKOS_TOKEN_ISSUER` | Yes | JWT issuer for validation (e.g., `https://api.workos.com/user_management/<client_id>`) |
 | `WORKOS_WEBHOOK_SECRET` | Yes | WorkOS webhook signing secret for validating webhook requests |
-| `SENDGRID_API_KEY` | Yes | SendGrid API key for sending invitation emails |
-| `SENDGRID_FROM_EMAIL` | Yes | Email address used as sender for SendGrid invitation emails |
+| `RESEND_API_KEY` | Yes | Resend API key for sending invitation emails |
+| `RESEND_FROM_EMAIL` | Yes | Email address used as sender for Resend invitation emails |
 | `FRONTEND_URL` | Yes | Public URL of frontend application (used to build invitation accept links) |
 | `ALLOWED_ORIGINS` | No | CORS allowed origins, comma-separated (default: `http://localhost:3000`) |
 | `CDP_API_KEY` | Yes | Coinbase Developer Platform API key |
@@ -38,9 +50,20 @@ The server starts on the port specified by the `PORT` environment variable (requ
 | `X402_FACILITATOR_URL` | Yes | Facilitator URL (testnet: `https://x402.org/facilitator`) |
 | `PLATFORM_FEE_PERCENT` | No | Fee percentage per payment (default: `0`, recommended: `0.5`) |
 | `PLATFORM_FEE_MIN_MICROUNITS` | No | Minimum fee in microunits (default: `0`, recommended: `1000` = $0.001) |
+| `PAYMENT_MAX_MICROUNITS` | No | Max value accepted for a single payment in microunits (default: `1000000000000` = $1,000,000). Rejected at handler before fee math. |
 | `WITHDRAWAL_AUTO_APPROVE_THRESHOLD` | No | Auto-approve withdrawals up to this amount in microunits (default: `200000000` = $200) |
 | `WITHDRAWAL_MIN_AMOUNT` | No | Minimum withdrawal in microunits (default: `1000000` = $1.00) |
 | `WITHDRAWAL_FEE_FLAT` | No | Flat fee per withdrawal in microunits (default: `0`) |
+| `RATE_LIMIT_V1_PER_MIN` | No | Per-API-key limit on `/v1/*` requests per minute (default: `30`) |
+| `RATE_LIMIT_INTERNAL_PER_MIN` | No | Per-WorkOS-user limit on `/internal/*` requests per minute (default: `60`) |
+| `RATE_LIMIT_ADMIN_PER_MIN` | No | Per-admin limit on `/admin/*` requests per minute (default: `100`) |
+| `RATE_LIMIT_INVITATIONS_PER_MIN` | No | Per-org limit on invitation sends per minute; tighter than general internal bucket because each call dispatches a paid Resend email (default: `10`) |
+| `RATE_LIMIT_ACCEPT_INVITATION_PER_MIN` | No | Per-IP limit on public `/accept-invitation` per minute (default: `20`) |
+| `RATE_LIMIT_AUTH_FAILURES_PER_MIN` | No | Per-IP limit on failed API-key auth attempts per minute; blocks brute force (default: `10`) |
+| `RATE_LIMIT_DISABLED` | No | Emergency kill switch — set to `true` to bypass every rate limiter without redeploying (default: `false`) |
+| `WORKOS_WEBHOOK_ALLOWED_IPS` | Yes | Comma-separated allowlist of WorkOS source IPs for `/webhooks/workos`. Fail-closed: empty value rejects every webhook. See https://workos.com/docs/events/data-syncing/webhooks |
+
+> Rate-limit bucket keys (per-user, per-API-key, per-org, per-IP) and their fallbacks are defined in [`backend/ratelimit/rate_limit.go`](ratelimit/rate_limit.go). Consult that file for the exact key-derivation rules — e.g. how `/internal/*` is keyed on first login before `workos_user` is populated, how the IP-keyed limiters resolve the client IP (`X-Envoy-External-Address` preferred, `c.IP()` fallback), and how attacker-controlled path segments feed `PerOrgLimiter`.
 
 ## API reference
 
@@ -73,7 +96,7 @@ These are called by the Sangria frontend dashboard. The user logs in via WorkOS 
 | POST | `/internal/withdrawals/:id/cancel` | WorkOS JWT | Cancel a pending withdrawal (merchant self-service) |
 | GET | `/internal/organizations/:id/members` | WorkOS JWT | List organization members |
 | DELETE | `/internal/organizations/:id/members/:userId` | WorkOS JWT + Admin | Remove a member from organization (admin only) |
-| POST | `/internal/organizations/:id/invitations` | WorkOS JWT + Admin | Send SendGrid invitation to join organization |
+| POST | `/internal/organizations/:id/invitations` | WorkOS JWT + Admin | Send Resend invitation to join organization |
 
 ### SDK endpoints — `/v1/*` (API key)
 
@@ -99,7 +122,7 @@ Requires WorkOS JWT and the user must exist in the `admins` table.
 | POST | `/admin/withdrawals/:id/reject` | Admin | Reject and reverse a pending withdrawal |
 | POST | `/admin/withdrawals/:id/complete` | Admin | Mark withdrawal as completed after bank transfer |
 | POST | `/admin/withdrawals/:id/fail` | Admin | Mark withdrawal as failed and reverse balance debit |
-| GET | `/admin/withdrawals` | Admin | List withdrawals (filterable by ?status=) |
+| GET | `/admin/withdrawals` | Admin | List withdrawals across all merchants (paginated, ?limit=&cursor=&status=) |
 
 ### API key format
 
@@ -122,7 +145,7 @@ Sangria uses a multi-tenant organization system where users can belong to multip
 - **Organizations**: Main business entities that own accounts, API keys, and transactions
 - **Organization Members**: Junction table linking users to organizations with admin status
 - **Personal Organizations**: Each user automatically gets a personal organization
-- **Organization Invitations**: SendGrid-based invitation system for adding users to organizations
+- **Organization Invitations**: Resend-based invitation system for adding users to organizations
 
 ### Organization Resolution
 
@@ -149,7 +172,7 @@ API key creation flow:
 
 ## Project structure
 
-```
+```text
 backend/
 ├── main.go                        # Server startup + route registration
 ├── routes/
@@ -179,7 +202,7 @@ backend/
 │   ├── wallets.go                 # CreateWalletPool
 │   ├── treasury.go               # FundTreasury
 │   ├── withdrawals.go             # ApproveWithdrawal, RejectWithdrawal, CompleteWithdrawal, FailWithdrawal
-│   ├── invitations.go             # CreateOrganizationInvitation (SendGrid integration), AcceptOrganizationInvitation (token-based)
+│   ├── invitations.go             # CreateOrganizationInvitation (Resend integration), AcceptOrganizationInvitation (token-based)
 │   └── webhooks.go                # HandleWorkOSWebhook (invitation.accepted)
 ├── dbEngine/
 │   ├── models.go                  # All Go types + enums
@@ -228,7 +251,7 @@ backend/
 
 ### Withdrawal lifecycle
 
-```
+```text
                           +-----------+
                           |  pending  |
                      +--->| _approval |---+---+
@@ -276,13 +299,13 @@ Sangria uses a hybrid approach for organization invitations:
 
 ### Architecture
 - **Authentication**: WorkOS handles user authentication and JWT tokens
-- **Email Delivery**: SendGrid sends beautiful HTML invitation emails
+- **Email Delivery**: Resend sends beautiful HTML invitation emails
 - **Business Logic**: Sangria manages invitation tokens, organization membership, and approval workflow
 
 ### Invitation Flow
 1. Organization admin creates invitation via dashboard (`POST /internal/organizations/:id/invitations`)
 2. System generates secure invitation token and stores in `organization_invitations` table
-3. SendGrid sends beautiful HTML email with invitation link to recipient
+3. Resend sends beautiful HTML email with invitation link to recipient
 4. Recipient clicks invitation link and accepts without authentication (`POST /accept-invitation`)
 5. System marks invitation as accepted and waits for user to sign in
 6. When user signs in via WorkOS, frontend calls (`POST /internal/users`)
