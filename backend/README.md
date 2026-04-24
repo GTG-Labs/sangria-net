@@ -19,6 +19,18 @@ go run .
 
 The server starts on the port specified by the `PORT` environment variable (required).
 
+### Upgrade notes
+
+> **Required migration step before this revision rolls out:** populate `WORKOS_WEBHOOK_ALLOWED_IPS` in every environment. The WorkOS webhook handler is fail-closed — if this variable is unset or empty, **every** incoming `/webhooks/workos` request is rejected with `403`, silently breaking invitation acceptance and any other WorkOS-driven flows. See the `WORKOS_WEBHOOK_ALLOWED_IPS` row in the env table below.
+>
+> Copy the current source IP list from [WorkOS's webhook docs](https://workos.com/docs/events/data-syncing/webhooks). As of this change, the published list is:
+>
+> ```
+> WORKOS_WEBHOOK_ALLOWED_IPS=3.217.146.166,23.21.184.92,34.204.154.149,44.213.245.178,44.215.236.82,50.16.203.9,52.1.251.34,52.21.49.187,174.129.36.47
+> ```
+>
+> Operators: set this before deploying. Reviewers/release managers: mirror this note in the PR description and release notes so downstream deployments don't silently drop webhooks.
+
 ### Environment variables
 
 | Variable | Required | Description |
@@ -42,6 +54,16 @@ The server starts on the port specified by the `PORT` environment variable (requ
 | `WITHDRAWAL_AUTO_APPROVE_THRESHOLD` | No | Auto-approve withdrawals up to this amount in microunits (default: `200000000` = $200) |
 | `WITHDRAWAL_MIN_AMOUNT` | No | Minimum withdrawal in microunits (default: `1000000` = $1.00) |
 | `WITHDRAWAL_FEE_FLAT` | No | Flat fee per withdrawal in microunits (default: `0`) |
+| `RATE_LIMIT_V1_PER_MIN` | No | Per-API-key limit on `/v1/*` requests per minute (default: `30`) |
+| `RATE_LIMIT_INTERNAL_PER_MIN` | No | Per-WorkOS-user limit on `/internal/*` requests per minute (default: `60`) |
+| `RATE_LIMIT_ADMIN_PER_MIN` | No | Per-admin limit on `/admin/*` requests per minute (default: `100`) |
+| `RATE_LIMIT_INVITATIONS_PER_MIN` | No | Per-org limit on invitation sends per minute; tighter than general internal bucket because each call dispatches a paid Resend email (default: `10`) |
+| `RATE_LIMIT_ACCEPT_INVITATION_PER_MIN` | No | Per-IP limit on public `/accept-invitation` per minute (default: `20`) |
+| `RATE_LIMIT_AUTH_FAILURES_PER_MIN` | No | Per-IP limit on failed API-key auth attempts per minute; blocks brute force (default: `10`) |
+| `RATE_LIMIT_DISABLED` | No | Emergency kill switch — set to `true` to bypass every rate limiter without redeploying (default: `false`) |
+| `WORKOS_WEBHOOK_ALLOWED_IPS` | Yes | Comma-separated allowlist of WorkOS source IPs for `/webhooks/workos`. Fail-closed: empty value rejects every webhook. See https://workos.com/docs/events/data-syncing/webhooks |
+
+> Rate-limit bucket keys (per-user, per-API-key, per-org, per-IP) and their fallbacks are defined in [`backend/ratelimit/rate_limit.go`](ratelimit/rate_limit.go). Consult that file for the exact key-derivation rules — e.g. how `/internal/*` is keyed on first login before `workos_user` is populated, how the IP-keyed limiters resolve the client IP (`X-Envoy-External-Address` preferred, `c.IP()` fallback), and how attacker-controlled path segments feed `PerOrgLimiter`.
 
 ## API reference
 
