@@ -28,6 +28,9 @@ export async function proxy(request: NextRequest, event: NextFetchEvent) {
   // Forward nonce into request headers for server components
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('x-nonce', nonce);
+  // Also set CSP on the request so Next.js's SSR layer can read the nonce
+  // and inject it into framework-generated scripts/styles.
+  requestHeaders.set('content-security-policy', cspHeader);
   // Call the authkit middleware first
   const authResponse = await authMiddleware(request, event);
   // Create response based on auth result
