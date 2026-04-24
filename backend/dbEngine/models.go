@@ -277,10 +277,7 @@ type Withdrawal struct {
 	ReviewNote              *string          `json:"review_note"`
 	CompletedBy             *string          `json:"completed_by"`
 	FailedBy                *string          `json:"failed_by"`
-	// Internal dedup key for merchant retries on POST /withdrawals — scanned from
-	// the DB so idempotent replays can short-circuit, but never serialized to
-	// clients. `json:"-"` hides it from all HTTP responses (merchant + admin).
-	IdempotencyKey          string           `json:"-"`
+	IdempotencyKey          string           `json:"idempotency_key"`
 	CreatedAt               time.Time        `json:"created_at"`
 	ApprovedAt              *time.Time       `json:"approved_at"`
 	ProcessedAt             *time.Time       `json:"processed_at"`

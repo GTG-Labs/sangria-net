@@ -140,10 +140,6 @@ func SettlePayment(pool *pgxpool.Pool) fiber.Handler {
 		if err != nil || amount <= 0 {
 			return c.Status(400).JSON(fiber.Map{"error": "invalid payment amount"})
 		}
-		// Reject absurd amounts before any fee math runs. 
-		if amount > config.PaymentConfig.MaxAmountMicrounits {
-			return c.Status(400).JSON(fiber.Map{"error": "payment amount exceeds maximum"})
-		}
 
 		// ── 2. Lookup wallet, build requirements ─────────────────────────
 
@@ -210,17 +206,7 @@ func SettlePayment(pool *pgxpool.Pool) fiber.Handler {
 
 		// ── 5. Build ledger lines ────────────────────────────────────────
 
-		fee, err := config.PlatformFee.CalculateFee(amount)
-		if err != nil {
-			// The amount already passed PaymentConfig.MaxAmountMicrounits upstream,
-			// so a CalculateFee failure here is a server-side arithmetic or config
-			// problem (e.g. misconfigured RateBasisPoints) — not a client mistake.
-			slog.Error("settle payment: fee calculation failed", "amount_micro", amount, "error", err)
-			return c.Status(500).JSON(fiber.Map{
-				"error":        "internal error calculating fee",
-				"error_reason": "fee_calculation_failed",
-			})
-		}
+		fee := config.PlatformFee.CalculateFee(amount)
 		merchantAmount := amount - fee
 		if merchantAmount <= 0 {
 			slog.Error("settle payment: fee exceeds payment amount", "amount_micro", amount, "fee_micro", fee)
@@ -351,33 +337,11 @@ func SettlePayment(pool *pgxpool.Pool) fiber.Handler {
 		// ── 9. Confirm the pending ledger transaction ────────────────────
 
 		if err := dbengine.ConfirmTransaction(c.Context(), pool, txn.ID, settleResp.Transaction); err != nil {
-			switch {
-			case errors.Is(err, dbengine.ErrTransactionNotPending):
+			if errors.Is(err, dbengine.ErrTransactionNotPending) {
 				// A concurrent request already confirmed this transaction — that's a success.
 				logger.Info("settle payment: transaction already confirmed by concurrent request",
 					"tx_hash", settleResp.Transaction)
-			case errors.Is(err, dbengine.ErrDuplicateTxHash):
-				// CRITICAL: another confirmed transaction already claims this tx_hash.
-				// The ledger is intact; request failed to commit and needs investigation.
-				// 2 pending rows mapped to the same on-chain settlement.
-				logger.Error("CRITICAL: tx_hash already bound to another confirmed transaction",
-					"txn_id", txn.ID,
-					"tx_hash", settleResp.Transaction,
-					"idempotency_key", txn.IdempotencyKey,
-				)
-				// Mark the pending row as failed so future retries with the same
-				// idempotency key short-circuit via ErrPreviouslyFailed instead of
-				// looping back to this same collision.
-				if failErr := dbengine.FailTransaction(c.Context(), pool, txn.ID); failErr != nil {
-					logger.Error("CRITICAL: failed to mark collided transaction as failed",
-						"txn_id", txn.ID,
-						"tx_hash", settleResp.Transaction,
-						"idempotency_key", txn.IdempotencyKey,
-						"error", failErr,
-					)
-				}
-				return c.Status(500).JSON(fiber.Map{"error": "settlement collision detected — contact support"})
-			default:
+			} else {
 				// CRITICAL: on-chain settlement succeeded but we couldn't confirm
 				// the ledger row. The pending row with its idempotency key remains
 				// as a recovery artifact — a retry of the same payload will find it
