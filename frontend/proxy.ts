@@ -8,6 +8,24 @@ const authMiddleware = authkitMiddleware({
   redirectUri: process.env.NEXT_PUBLIC_WORKOS_REDIRECT_URI,
 });
 
+// Headers.forEach() in undici joins multiple Set-Cookie values into one
+// comma-separated string, breaking downstream cookie parsing. Extract them
+// individually via getSetCookie() and append each one preserved.
+function copyHeaders(src: Headers, dst: Headers) {
+  const setCookies =
+    typeof (src as Headers & { getSetCookie?: () => string[] }).getSetCookie === 'function'
+      ? (src as Headers & { getSetCookie: () => string[] }).getSetCookie()
+      : [];
+  for (const cookie of setCookies) {
+    dst.append('set-cookie', cookie);
+  }
+  src.forEach((value, key) => {
+    const lower = key.toLowerCase();
+    if (lower === 'set-cookie' || lower === 'content-security-policy') return;
+    dst.set(key, value);
+  });
+}
+
 export async function proxy(request: NextRequest, event: NextFetchEvent) {
   // Generate a random nonce for this request
   const nonce = crypto.randomBytes(16).toString('base64');
@@ -43,22 +61,13 @@ export async function proxy(request: NextRequest, event: NextFetchEvent) {
     // it so the x-nonce propagates to server components.
     if (!authResponse.headers.get('location')) {
       const passthrough = NextResponse.next({ request: { headers: requestHeaders } });
-      authResponse.headers.forEach((value, key) => {
-        if (key.toLowerCase() !== 'content-security-policy') {
-          passthrough.headers.set(key, value);
-        }
-      });
+      copyHeaders(authResponse.headers, passthrough.headers);
       response = passthrough;
     }
   } else if (authResponse instanceof Response) {
     // Convert Response to NextResponse
     response = NextResponse.next({ request: { headers: requestHeaders } });
-    // Copy relevant headers from auth response
-    authResponse.headers.forEach((value, key) => {
-      if (key.toLowerCase() !== 'content-security-policy') { // Don't copy CSP
-        response.headers.set(key, value);
-      }
-    });
+    copyHeaders(authResponse.headers, response.headers);
   } else {
     response = NextResponse.next({ request: { headers: requestHeaders } });
   }
