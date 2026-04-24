@@ -29,6 +29,7 @@ const RATE_LIMIT_MAX_REQUESTS = 5;
 const IDEMPOTENCY_TTL_MS = 5 * 60_000;
 const MIN_IDEMPOTENCY_KEY_LENGTH = 8;
 const MAX_IDEMPOTENCY_KEY_LENGTH = 128;
+const SWEEP_EVERY_N_REQUESTS = 50;
 
 const paymentRateLimitStore = new Map<
   string,
@@ -38,6 +39,7 @@ const idempotencyStore = new Map<
   string,
   { status: "in_flight" | "completed" | "unresolved"; expiresAt: number }
 >();
+let requestCounter = 0;
 
 function requireEnv(name: string): string {
   const val = process.env[name];
@@ -119,9 +121,15 @@ function cleanupStateStores(now: number): void {
 
 function checkRateLimit(userId: string): boolean {
   const now = Date.now();
-  cleanupStateStores(now);
+  requestCounter += 1;
+  if (requestCounter % SWEEP_EVERY_N_REQUESTS === 0) {
+    cleanupStateStores(now);
+  }
 
   const entry = paymentRateLimitStore.get(userId);
+  if (entry && now - entry.windowStart > RATE_LIMIT_WINDOW_MS) {
+    paymentRateLimitStore.delete(userId);
+  }
   if (!entry || now - entry.windowStart > RATE_LIMIT_WINDOW_MS) {
     paymentRateLimitStore.set(userId, { windowStart: now, count: 1 });
     return true;
@@ -140,10 +148,16 @@ function reserveIdempotency(
   | { ok: true; storeKey: string }
   | { ok: false; status: "in_flight" | "completed" | "unresolved" } {
   const now = Date.now();
-  cleanupStateStores(now);
+  requestCounter += 1;
+  if (requestCounter % SWEEP_EVERY_N_REQUESTS === 0) {
+    cleanupStateStores(now);
+  }
 
   const storeKey = `${userId}:${idempotencyKey}`;
   const existing = idempotencyStore.get(storeKey);
+  if (existing && now > existing.expiresAt) {
+    idempotencyStore.delete(storeKey);
+  }
   if (existing && now <= existing.expiresAt) {
     return { ok: false, status: existing.status };
   }
@@ -188,13 +202,6 @@ export async function POST(request: Request) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  if (!checkRateLimit(user.id)) {
-    return Response.json(
-      { error: "Rate limit exceeded. Try again shortly." },
-      { status: 429 }
-    );
-  }
-
   const idempotencyKey = request.headers.get("x-idempotency-key");
   if (
     !idempotencyKey ||
@@ -217,9 +224,25 @@ export async function POST(request: Request) {
   }
   const { storeKey: idempotencyStoreKey } = idempotencyReservation;
 
+  if (!checkRateLimit(user.id)) {
+    releaseIdempotency(idempotencyStoreKey);
+    return Response.json(
+      { error: "Rate limit exceeded. Try again shortly." },
+      { status: 429 }
+    );
+  }
+
   const stream = new ReadableStream({
     async start(controller) {
-      const send = (event: SseEvent) => controller.enqueue(encode(event));
+      let streamClosed = false;
+      const send = (event: SseEvent) => {
+        if (streamClosed) return;
+        try {
+          controller.enqueue(encode(event));
+        } catch {
+          streamClosed = true;
+        }
+      };
       let completed = false;
       let settlementAttempted = false;
 
@@ -233,6 +256,10 @@ export async function POST(request: Request) {
         const generatePaymentUrl = `${BACKEND_URL}/v1/generate-payment`;
         const settlePaymentUrl = `${BACKEND_URL}/v1/settle-payment`;
         const demoResource = `${MYTHOS_BASE_URL}/newspaper`;
+        const negotiateSignal = AbortSignal.any([
+          request.signal,
+          AbortSignal.timeout(15_000),
+        ]);
 
         // ----------------------------------------------------------------
         // Step 1: Negotiate — ask Sangria backend for payment requirements
@@ -250,7 +277,7 @@ export async function POST(request: Request) {
             description: "Access premium newspaper content",
             resource: demoResource,
           }),
-          signal: AbortSignal.timeout(15_000),
+          signal: negotiateSignal,
         });
 
         if (initialResp.status !== 200) {
@@ -266,6 +293,11 @@ export async function POST(request: Request) {
         const accepts = paymentRequired.accepts[0];
         if (!accepts) throw new Error("payment requirements missing accepts[]");
         const amountMicro = BigInt(accepts.amount);
+        if (amountMicro !== BigInt(DEMO_PRICE_MICROUNITS)) {
+          throw new Error(
+            "Negotiated amount does not match configured demo price"
+          );
+        }
         const wholePart = amountMicro / MICROUNITS_PER_USDC;
         const fractionalPart = (amountMicro % MICROUNITS_PER_USDC)
           .toString()
@@ -387,7 +419,10 @@ export async function POST(request: Request) {
         } else {
           releaseIdempotency(idempotencyStoreKey);
         }
-        controller.close();
+        if (!streamClosed) {
+          streamClosed = true;
+          controller.close();
+        }
       }
     },
   });
@@ -397,6 +432,7 @@ export async function POST(request: Request) {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache, no-store, max-age=0",
       Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
     },
   });
 }

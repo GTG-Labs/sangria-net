@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 
 // ---------------------------------------------------------------------------
 // Article data
@@ -258,6 +258,35 @@ function PaywallModal({
     phase: "idle",
   });
   const idempotencyKeyRef = useRef<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const shouldUnlockRef = useRef(false);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+      }
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      abortRef.current?.abort();
+      document.removeEventListener("keydown", onKeyDown);
+      previouslyFocusedRef.current?.focus();
+    };
+  }, [onClose]);
+
+  useEffect(() => {
+    if (paymentState.phase === "success" && shouldUnlockRef.current) {
+      shouldUnlockRef.current = false;
+      onSuccess(article.slug);
+    }
+  }, [article.slug, onSuccess, paymentState.phase]);
 
   const startPayment = useCallback(async () => {
     if (!idempotencyKeyRef.current) {
@@ -271,13 +300,19 @@ function PaywallModal({
     };
 
     setPaymentState({ phase: "paying", steps: { ...steps } });
+    shouldUnlockRef.current = false;
 
     try {
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+
       const response = await fetch("/api/x402-pay", {
         method: "POST",
         headers: {
           "x-idempotency-key": idempotencyKeyRef.current,
         },
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -301,6 +336,10 @@ function PaywallModal({
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
+        if (controller.signal.aborted) {
+          await reader.cancel();
+          return;
+        }
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n\n");
@@ -335,10 +374,8 @@ function PaywallModal({
 
           setPaymentState((prev) => {
             if (prev.phase !== "paying" && prev.phase !== "error") return prev;
-            const prevSteps =
-              prev.phase === "paying"
-                ? prev.steps
-                : (prev as { steps: PaymentSteps }).steps;
+            const prevSteps = prev.steps;
+            const currentPhase = prev.phase;
 
             if (event.step === "error") {
               return {
@@ -356,7 +393,9 @@ function PaywallModal({
                   data: event.data as NegotiateData | undefined,
                 },
               };
-              return { phase: "paying", steps: updatedSteps };
+              return currentPhase === "error"
+                ? { ...prev, steps: updatedSteps }
+                : { phase: "paying", steps: updatedSteps };
             }
 
             if (event.step === "sign") {
@@ -367,7 +406,9 @@ function PaywallModal({
                   data: event.data as SignData | undefined,
                 },
               };
-              return { phase: "paying", steps: updatedSteps };
+              return currentPhase === "error"
+                ? { ...prev, steps: updatedSteps }
+                : { phase: "paying", steps: updatedSteps };
             }
 
             if (event.step === "settle") {
@@ -379,13 +420,15 @@ function PaywallModal({
                 },
               };
 
-              if (event.step === "settle" && event.status === "done") {
-                onSuccess(article.slug);
+              if (event.status === "done" && currentPhase !== "error") {
+                shouldUnlockRef.current = true;
                 return { phase: "success", steps: updatedSteps };
               }
 
               // Update only the current streamed step.
-              return { phase: "paying", steps: updatedSteps };
+              return currentPhase === "error"
+                ? { ...prev, steps: updatedSteps }
+                : { phase: "paying", steps: updatedSteps };
             }
 
             return prev;
@@ -410,7 +453,7 @@ function PaywallModal({
         error: message,
       }));
     }
-  }, [article.slug, onSuccess]);
+  }, []);
 
   const steps =
     paymentState.phase === "paying" ||
