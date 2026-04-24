@@ -10,13 +10,15 @@
   },
   "dependencies": {
     "@coinbase/cdp-sdk": "^1.47.0",
+    "@t3-oss/env-nextjs": "^0.13.11",
     "@workos-inc/authkit-nextjs": "^3.0.0",
     "@x402/core": "^2.10.0",
     "@x402/evm": "^2.10.0",
     "next": "16.2.3",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "viem": "^2.47.16"
+    "viem": "^2.47.16",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
