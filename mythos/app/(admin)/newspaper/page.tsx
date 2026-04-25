@@ -258,17 +258,61 @@ function PaywallModal({
     phase: "idle",
   });
   const idempotencyKeyRef = useRef<string | null>(null);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const shouldUnlockRef = useRef(false);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
+    const dialog = dialogRef.current;
+
+    const getFocusableElements = () => {
+      if (!dialog) return [];
+      return Array.from(
+        dialog.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        )
+      ).filter(
+        (el) =>
+          !el.hasAttribute("disabled") &&
+          el.getAttribute("aria-hidden") !== "true"
+      );
+    };
+
+    requestAnimationFrame(() => {
+      const focusables = getFocusableElements();
+      const target = focusables[0] ?? dialog;
+      target?.focus();
+    });
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
         onClose();
+        return;
+      }
+
+      if (event.key !== "Tab") return;
+
+      const focusables = getFocusableElements();
+      if (!focusables.length) {
+        event.preventDefault();
+        dialog?.focus();
+        return;
+      }
+
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      if (event.shiftKey) {
+        if (!active || active === first || !dialog?.contains(active)) {
+          event.preventDefault();
+          last.focus();
+        }
+      } else if (!active || active === last || !dialog?.contains(active)) {
+        event.preventDefault();
+        first.focus();
       }
     };
 
@@ -289,9 +333,8 @@ function PaywallModal({
   }, [article.slug, onSuccess, paymentState.phase]);
 
   const startPayment = useCallback(async () => {
-    if (!idempotencyKeyRef.current) {
-      idempotencyKeyRef.current = crypto.randomUUID();
-    }
+    // Always use a fresh key per attempt so unresolved retries are not blocked.
+    idempotencyKeyRef.current = crypto.randomUUID();
 
     const steps: PaymentSteps = {
       negotiate: { status: "idle" },
@@ -493,6 +536,8 @@ function PaywallModal({
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-label={`Paywall for ${article.headline}`}

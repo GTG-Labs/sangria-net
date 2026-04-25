@@ -1,23 +1,12 @@
 import Link from "next/link";
-import { handleSignOut } from "@/lib/auth-actions";
 
 export default function DashboardPage() {
   return (
     <div className="min-h-full bg-black px-6 py-12 text-white">
       <div className="mx-auto max-w-5xl">
-        <div className="flex items-start justify-between gap-6">
-          <div>
-            <h1 className="text-4xl font-bold text-white">mythos</h1>
-            <p className="mt-2 text-gray-400">Admin Dashboard</p>
-          </div>
-          <form action={handleSignOut}>
-            <button
-              type="submit"
-              className="rounded-lg bg-white px-6 py-2 text-sm font-medium text-black transition-colors hover:bg-gray-200"
-            >
-              Sign Out
-            </button>
-          </form>
+        <div>
+          <h1 className="text-4xl font-bold text-white">mythos</h1>
+          <p className="mt-2 text-gray-400">Admin Dashboard</p>
         </div>
 
         <div className="mt-10 grid gap-6 md:grid-cols-2">

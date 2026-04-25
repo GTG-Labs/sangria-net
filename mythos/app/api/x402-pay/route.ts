@@ -19,9 +19,6 @@ import { verifyAdmin } from "@/lib/admin";
 const BACKEND_URL = (
   process.env.BACKEND_URL ?? "http://localhost:8080"
 ).replace(/\/+$/, "");
-const MYTHOS_BASE_URL = (
-  process.env.MYTHOS_BASE_URL ?? "http://localhost:3001"
-).replace(/\/+$/, "");
 const DEMO_PRICE_MICROUNITS = 100;
 const MICROUNITS_PER_USDC = BigInt(1_000_000);
 const RATE_LIMIT_WINDOW_MS = 60_000;
@@ -39,6 +36,9 @@ const idempotencyStore = new Map<
   string,
   { status: "in_flight" | "completed" | "unresolved"; expiresAt: number }
 >();
+// Internal demo tradeoff: keeping this state in-memory is acceptable for a
+// low-traffic/single-instance deployment. If this route is ever scaled to
+// multiple instances, move these stores to a shared persistence layer.
 let requestCounter = 0;
 
 function requireEnv(name: string): string {
@@ -119,13 +119,15 @@ function cleanupStateStores(now: number): void {
   }
 }
 
-function checkRateLimit(userId: string): boolean {
-  const now = Date.now();
+function maybeSweepStateStores(): void {
   requestCounter += 1;
   if (requestCounter % SWEEP_EVERY_N_REQUESTS === 0) {
-    cleanupStateStores(now);
+    cleanupStateStores(Date.now());
   }
+}
 
+function checkRateLimit(userId: string): boolean {
+  const now = Date.now();
   const entry = paymentRateLimitStore.get(userId);
   if (entry && now - entry.windowStart > RATE_LIMIT_WINDOW_MS) {
     paymentRateLimitStore.delete(userId);
@@ -148,11 +150,6 @@ function reserveIdempotency(
   | { ok: true; storeKey: string }
   | { ok: false; status: "in_flight" | "completed" | "unresolved" } {
   const now = Date.now();
-  requestCounter += 1;
-  if (requestCounter % SWEEP_EVERY_N_REQUESTS === 0) {
-    cleanupStateStores(now);
-  }
-
   const storeKey = `${userId}:${idempotencyKey}`;
   const existing = idempotencyStore.get(storeKey);
   if (existing && now > existing.expiresAt) {
@@ -187,6 +184,18 @@ function releaseIdempotency(storeKey: string): void {
   idempotencyStore.delete(storeKey);
 }
 
+function resolveMythosBaseURL(request: Request): string {
+  const envValue = process.env.MYTHOS_BASE_URL?.trim();
+  if (envValue) {
+    return envValue.replace(/\/+$/, "");
+  }
+  try {
+    return new URL(request.url).origin.replace(/\/+$/, "");
+  } catch {
+    return "http://localhost:3001";
+  }
+}
+
 // ---------------------------------------------------------------------------
 // POST /api/x402-pay  — Server-Sent Events payment flow
 // ---------------------------------------------------------------------------
@@ -214,6 +223,7 @@ export async function POST(request: Request) {
     );
   }
 
+  maybeSweepStateStores();
   const idempotencyReservation = reserveIdempotency(user.id, idempotencyKey);
   if (!idempotencyReservation.ok) {
     const duplicateMessage =
@@ -232,6 +242,30 @@ export async function POST(request: Request) {
     );
   }
 
+  const mythosBaseURL = resolveMythosBaseURL(request);
+  const demoResource = `${mythosBaseURL}/newspaper`;
+
+  let merchantApiKey: string;
+  let buyerAddress: Address;
+  let cdpApiKeyName: string;
+  let cdpApiKeyPrivateKey: string;
+  let cdpWalletSecret: string;
+  try {
+    merchantApiKey = requireEnv("SANGRIA_SECRET_KEY");
+    const buyerAddrRaw = requireEnv("BUYER_ADDRESS");
+    if (!isAddress(buyerAddrRaw)) {
+      throw new Error("BUYER_ADDRESS is not a valid Ethereum address");
+    }
+    buyerAddress = buyerAddrRaw as Address;
+    cdpApiKeyName = requireEnv("CDP_API_KEY_NAME");
+    cdpApiKeyPrivateKey = requireEnv("CDP_API_KEY_PRIVATE_KEY");
+    cdpWalletSecret = requireEnv("CDP_WALLET_SECRET");
+  } catch (err) {
+    releaseIdempotency(idempotencyStoreKey);
+    const message = err instanceof Error ? err.message : String(err);
+    return Response.json({ error: message }, { status: 500 });
+  }
+
   const stream = new ReadableStream({
     async start(controller) {
       let streamClosed = false;
@@ -247,15 +281,8 @@ export async function POST(request: Request) {
       let settlementAttempted = false;
 
       try {
-        const merchantApiKey = requireEnv("SANGRIA_SECRET_KEY");
-        const buyerAddrRaw = requireEnv("BUYER_ADDRESS");
-        if (!isAddress(buyerAddrRaw)) {
-          throw new Error(`BUYER_ADDRESS is not a valid Ethereum address`);
-        }
-        const BUYER_ADDRESS = buyerAddrRaw as Address;
         const generatePaymentUrl = `${BACKEND_URL}/v1/generate-payment`;
         const settlePaymentUrl = `${BACKEND_URL}/v1/settle-payment`;
-        const demoResource = `${MYTHOS_BASE_URL}/newspaper`;
         const negotiateSignal = AbortSignal.any([
           request.signal,
           AbortSignal.timeout(15_000),
@@ -322,12 +349,12 @@ export async function POST(request: Request) {
         send({ step: "sign", status: "pending" });
 
         const cdp = new CdpClient({
-          apiKeyId: requireEnv("CDP_API_KEY_NAME"),
-          apiKeySecret: requireEnv("CDP_API_KEY_PRIVATE_KEY"),
-          walletSecret: requireEnv("CDP_WALLET_SECRET"),
+          apiKeyId: cdpApiKeyName,
+          apiKeySecret: cdpApiKeyPrivateKey,
+          walletSecret: cdpWalletSecret,
         });
 
-        const account = await cdp.evm.getAccount({ address: BUYER_ADDRESS });
+        const account = await cdp.evm.getAccount({ address: buyerAddress });
         const signer: ClientEvmSigner = {
           address: account.address as Address,
           signTypedData: account.signTypedData.bind(account),
@@ -373,7 +400,15 @@ export async function POST(request: Request) {
         // ----------------------------------------------------------------
         send({ step: "settle", status: "pending" });
 
+        if (request.signal.aborted) {
+          throw new Error("Request aborted before settlement");
+        }
+
         settlementAttempted = true;
+        const settleSignal = AbortSignal.any([
+          request.signal,
+          AbortSignal.timeout(120_000),
+        ]);
         const settleResp = await fetch(settlePaymentUrl, {
           method: "POST",
           headers: {
@@ -383,7 +418,7 @@ export async function POST(request: Request) {
           body: JSON.stringify({
             payment_payload: paymentSignature,
           }),
-          signal: AbortSignal.timeout(120_000),
+          signal: settleSignal,
         });
 
         if (settleResp.status !== 200) {
