@@ -23,7 +23,9 @@ cp .env.example .env.local
 # Fill in required environment variables — see § Environment Variables below.
 ```
 
-All env var reads live in `lib/env.ts` (Zod-validated via `@t3-oss/env-nextjs`). Missing or malformed vars fail `pnpm build` with a clear validation error instead of shipping to production with a silent fallback. Add new env vars there, never directly via `process.env`.
+**Policy.** Every env var read by code in this app (`frontend/**/*.ts(x)`) must be declared in `lib/env.ts` and validated by its Zod schema (via `@t3-oss/env-nextjs`). Never read `process.env.X` directly anywhere else. Missing or malformed vars fail `pnpm build` with a clear validation error instead of shipping to production with a silent fallback.
+
+**Narrow exception.** Some env vars are read internally by third-party libraries we don't control (e.g. WorkOS AuthKit reads `WORKOS_CLIENT_ID`, `WORKOS_API_KEY`, `WORKOS_COOKIE_PASSWORD` from `process.env` itself). These cannot be routed through our schema and so are listed in the env table below with `Validated: No` for operator visibility. **Do not invent additional exceptions.** If you find yourself wanting to add a new var outside `lib/env.ts`, add it to the schema instead. If a genuine library-internal var is added, document it in this section's table with a one-line rationale and a `// TODO: see lib/env.ts` comment at any related call site so future readers know why it bypasses the schema.
 
 ### Development
 ```bash
