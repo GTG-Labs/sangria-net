@@ -250,6 +250,7 @@ export async function POST(request: Request) {
   let cdpApiKeyName: string;
   let cdpApiKeyPrivateKey: string;
   let cdpWalletSecret: string;
+  let signer: ClientEvmSigner;
   try {
     merchantApiKey = requireEnv("SANGRIA_SECRET_KEY");
     const buyerAddrRaw = requireEnv("BUYER_ADDRESS");
@@ -260,8 +261,22 @@ export async function POST(request: Request) {
     cdpApiKeyName = requireEnv("CDP_API_KEY_NAME");
     cdpApiKeyPrivateKey = requireEnv("CDP_API_KEY_PRIVATE_KEY");
     cdpWalletSecret = requireEnv("CDP_WALLET_SECRET");
+
+    // Pre-check buyer account before opening the SSE stream so misconfigurations
+    // fail as HTTP errors rather than mid-stream.
+    const cdp = new CdpClient({
+      apiKeyId: cdpApiKeyName,
+      apiKeySecret: cdpApiKeyPrivateKey,
+      walletSecret: cdpWalletSecret,
+    });
+    const account = await cdp.evm.getAccount({ address: buyerAddress });
+    signer = {
+      address: account.address as Address,
+      signTypedData: account.signTypedData.bind(account),
+    };
   } catch (err) {
     releaseIdempotency(idempotencyStoreKey);
+    console.error("x402-pay preflight validation failed", { error: err });
     const message = err instanceof Error ? err.message : String(err);
     return Response.json({ error: message }, { status: 500 });
   }
@@ -354,18 +369,6 @@ export async function POST(request: Request) {
         // ----------------------------------------------------------------
         send({ step: "sign", status: "pending" });
 
-        const cdp = new CdpClient({
-          apiKeyId: cdpApiKeyName,
-          apiKeySecret: cdpApiKeyPrivateKey,
-          walletSecret: cdpWalletSecret,
-        });
-
-        const account = await cdp.evm.getAccount({ address: buyerAddress });
-        const signer: ClientEvmSigner = {
-          address: account.address as Address,
-          signTypedData: account.signTypedData.bind(account),
-        };
-
         const client = new x402Client().register(
           "eip155:*",
           new ExactEvmScheme(signer)
@@ -390,14 +393,16 @@ export async function POST(request: Request) {
         if (!signature) {
           throw new Error("x402 v2 client returned payload without signature");
         }
+        const signaturePreview =
+          signature.length > 22 ? signature.slice(0, 22) + "..." : signature;
 
         send({
           step: "sign",
           status: "done",
           data: {
             signer:
-              signedPreview.payload?.authorization?.from ?? account.address,
-            signaturePreview: signature.slice(0, 22) + "...",
+              signedPreview.payload?.authorization?.from ?? signer.address,
+            signaturePreview,
           },
         });
 

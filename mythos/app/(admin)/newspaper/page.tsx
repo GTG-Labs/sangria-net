@@ -394,12 +394,16 @@ function PaywallModal({
         buffer = lines.pop() ?? "";
 
         for (const chunk of lines) {
-          const line = chunk.replace(/^data: /, "").trim();
-          if (!line) continue;
+          const dataLines = chunk
+            .split("\n")
+            .filter((entry) => /^data:\s*/.test(entry))
+            .map((entry) => entry.replace(/^data:\s*/, ""));
+          const payload = dataLines.join("\n").trim();
+          if (!payload) continue;
 
           let event: StreamEvent;
           try {
-            const parsed = JSON.parse(line) as StreamEvent;
+            const parsed = JSON.parse(payload) as StreamEvent;
             if (
               parsed.step !== "negotiate" &&
               parsed.step !== "sign" &&
