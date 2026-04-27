@@ -115,6 +115,9 @@ export const accounts = pgTable(
   (table) => [
     index("idx_accounts_organization_id").on(table.organizationId),
     index("idx_accounts_type").on(table.type),
+    uniqueIndex("uq_accounts_org_liability_usd")
+      .on(table.organizationId)
+      .where(sql`type = 'LIABILITY' AND currency = 'USD'`),
   ],
 );
 
