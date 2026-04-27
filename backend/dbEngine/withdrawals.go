@@ -110,7 +110,7 @@ func CreateWithdrawal(
 		 JOIN organization_members om ON om.organization_id = a.organization_id
 		 WHERE a.organization_id = $1 AND om.user_id = $2 AND om.is_admin = true
 		   AND a.type = 'LIABILITY' AND a.currency = 'USD'
-		 FOR UPDATE`,
+		 FOR UPDATE OF a`,
 		organizationID, userID,
 	).Scan(&orgAcctID)
 	if err != nil {
@@ -234,8 +234,8 @@ func GetWithdrawalByID(ctx context.Context, pool *pgxpool.Pool, id string) (With
 }
 
 // GetWithdrawalsByOrganizationPaginated returns paginated withdrawals for an
-// organization (across all its merchants) with total count. Uses created_at as
-// cursor for stable, performant pagination.
+// organization with total count. Uses created_at as the cursor for stable,
+// performant pagination.
 func GetWithdrawalsByOrganizationPaginated(
 	ctx context.Context,
 	pool *pgxpool.Pool,
@@ -462,9 +462,9 @@ func getOrgLiabilityAccountIDTx(ctx context.Context, tx pgx.Tx, organizationID s
 }
 
 // writeReversalLedgerEntries is the shared reversal logic used by reject, cancel,
-// and fail. Looks up the merchant and clearing accounts, then writes the reversal
-// ledger entries (debit clearing, credit merchant). Returns the reversal
-// transaction ID. Must be called within an existing DB transaction.
+// and fail. Looks up the organization and clearing accounts, then writes the
+// reversal ledger entries (debit clearing, credit organization). Returns the
+// reversal transaction ID. Must be called within an existing DB transaction.
 func writeReversalLedgerEntries(ctx context.Context, tx pgx.Tx, w Withdrawal, idempotencyKey string) (string, error) {
 	orgAcctID, err := getOrgLiabilityAccountIDTx(ctx, tx, w.OrganizationID)
 	if err != nil {

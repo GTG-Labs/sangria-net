@@ -65,7 +65,7 @@ func RequestWithdrawal(pool *pgxpool.Pool) fiber.Handler {
 				return c.Status(400).JSON(fiber.Map{"error": "insufficient balance"})
 			}
 			if errors.Is(err, dbengine.ErrWithdrawalNotFound) {
-				return c.Status(400).JSON(fiber.Map{"error": "organization not found or access denied"})
+				return c.Status(404).JSON(fiber.Map{"error": "organization not found or access denied"})
 			}
 			slog.Error("create withdrawal", "organization_id", req.OrganizationID, "error", err)
 			return c.Status(500).JSON(fiber.Map{"error": "failed to create withdrawal"})
@@ -167,7 +167,7 @@ func CancelWithdrawal(pool *pgxpool.Pool) fiber.Handler {
 
 		if err := dbengine.CancelWithdrawal(c.Context(), pool, withdrawalID, req.OrganizationID, user.ID); err != nil {
 			if errors.Is(err, dbengine.ErrWithdrawalNotFound) {
-				return c.Status(400).JSON(fiber.Map{"error": "withdrawal not found, not pending approval, or access denied"})
+				return c.Status(404).JSON(fiber.Map{"error": "withdrawal not found, not pending approval, or access denied"})
 			}
 			slog.Error("cancel withdrawal", "withdrawal_id", withdrawalID, "error", err)
 			return c.Status(500).JSON(fiber.Map{"error": "failed to cancel withdrawal"})

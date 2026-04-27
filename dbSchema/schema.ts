@@ -268,7 +268,7 @@ export const cryptoWallets = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// Withdrawals — merchant payout requests
+// Withdrawals — organization payout requests
 // ---------------------------------------------------------------------------
 
 export const withdrawals = pgTable(
