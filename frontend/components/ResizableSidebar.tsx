@@ -8,19 +8,17 @@ const DEFAULT_WIDTH = 240;
 const STORAGE_KEY = "sidebar-width";
 
 export default function ResizableSidebar({ children }: { children: React.ReactNode }) {
-  const [width, setWidth] = useState(DEFAULT_WIDTH);
-  const widthRef = useRef(DEFAULT_WIDTH);
+  const [width, setWidth] = useState<number>(() => {
+    if (typeof window === "undefined") return DEFAULT_WIDTH;
+    const parsed = Number(window.localStorage.getItem(STORAGE_KEY));
+    return Number.isFinite(parsed) && parsed >= MIN_WIDTH && parsed <= MAX_WIDTH
+      ? parsed
+      : DEFAULT_WIDTH;
+  });
+  const widthRef = useRef(width);
+  const cleanupRef = useRef<(() => void) | null>(null);
 
-  useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      const parsed = Number(stored);
-      if (parsed >= MIN_WIDTH && parsed <= MAX_WIDTH) {
-        setWidth(parsed);
-        widthRef.current = parsed;
-      }
-    }
-  }, []);
+  useEffect(() => () => cleanupRef.current?.(), []);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -33,32 +31,27 @@ export default function ResizableSidebar({ children }: { children: React.ReactNo
       setWidth(clamped);
     };
 
-    const handleMouseUp = () => {
+    const cleanup = () => {
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
       document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
+      document.removeEventListener("mouseup", cleanup);
       localStorage.setItem(STORAGE_KEY, String(widthRef.current));
+      cleanupRef.current = null;
     };
 
+    cleanupRef.current = cleanup;
     document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseup", handleMouseUp);
+    document.addEventListener("mouseup", cleanup);
   }, []);
 
   return (
     <aside
       className="relative border-b border-zinc-200 bg-[#FAFAF8] lg:min-h-screen lg:border-b-0 lg:border-r"
+      style={{ width }}
     >
-      <div className="hidden lg:block h-full" style={{ width }}>
-        <div className="flex h-full flex-col px-3 pt-3 pb-0">
-          {children}
-        </div>
-      </div>
-
-      <div className="lg:hidden">
-        <div className="flex h-full flex-col px-3 pt-3 pb-0">
-          {children}
-        </div>
+      <div className="flex h-full flex-col px-3 pt-3 pb-0">
+        {children}
       </div>
 
       <div

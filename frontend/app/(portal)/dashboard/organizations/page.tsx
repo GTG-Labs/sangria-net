@@ -208,7 +208,7 @@ export default function OrganizationsPage() {
           <p className="text-gray-600 mb-6">
             Create your first organization to get started with team collaboration.
           </p>
-          <ArcadeButton onClick={() => setIsCreating(true)} variant="blue">
+          <ArcadeButton onClick={() => setIsCreating(true)} variant="blue" size="sm">
             Create Organization
           </ArcadeButton>
         </div>
