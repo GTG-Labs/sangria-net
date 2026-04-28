@@ -11,6 +11,7 @@ import { withAuth } from "@workos-inc/authkit-nextjs";
 import type { Address } from "viem";
 import { isAddress } from "viem";
 import { verifyAdmin } from "@/lib/admin";
+import { env } from "@/lib/env";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,9 +20,9 @@ export const dynamic = "force-dynamic";
 // Config
 // ---------------------------------------------------------------------------
 
-const BACKEND_URL = (
-  process.env.BACKEND_URL ?? "http://localhost:8080"
-).replace(/\/+$/, "");
+// All required env vars are validated at build time via `mythos/lib/env.ts`.
+// Strip any trailing slash so callers can append paths without doubling up.
+const BACKEND_URL = env.BACKEND_URL.replace(/\/+$/, "");
 const DEMO_PRICE_MICROUNITS = 100;
 const MICROUNITS_PER_USDC = BigInt(1_000_000);
 const RATE_LIMIT_WINDOW_MS = 60_000;
@@ -43,12 +44,6 @@ const idempotencyStore = new Map<
 // low-traffic/single-instance deployment. If this route is ever scaled to
 // multiple instances, move these stores to a shared persistence layer.
 let requestCounter = 0;
-
-function requireEnv(name: string): string {
-  const val = process.env[name];
-  if (!val) throw new Error(`Missing required env var: ${name}`);
-  return val;
-}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -188,9 +183,8 @@ function releaseIdempotency(storeKey: string): void {
 }
 
 function resolveMythosBaseURL(request: Request): string {
-  const envValue = process.env.MYTHOS_BASE_URL?.trim();
-  if (envValue) {
-    return envValue.replace(/\/+$/, "");
+  if (env.MYTHOS_BASE_URL) {
+    return env.MYTHOS_BASE_URL.replace(/\/+$/, "");
   }
   try {
     return new URL(request.url).origin.replace(/\/+$/, "");
@@ -254,15 +248,14 @@ export async function POST(request: Request) {
   let cdpWalletSecret: string;
   let signer: ClientEvmSigner;
   try {
-    merchantApiKey = requireEnv("SANGRIA_SECRET_KEY");
-    const buyerAddrRaw = requireEnv("BUYER_ADDRESS");
-    if (!isAddress(buyerAddrRaw)) {
+    merchantApiKey = env.SANGRIA_SECRET_KEY;
+    if (!isAddress(env.BUYER_ADDRESS)) {
       throw new Error("BUYER_ADDRESS is not a valid Ethereum address");
     }
-    buyerAddress = buyerAddrRaw as Address;
-    cdpApiKeyName = requireEnv("CDP_API_KEY_NAME");
-    cdpApiKeyPrivateKey = requireEnv("CDP_API_KEY_PRIVATE_KEY");
-    cdpWalletSecret = requireEnv("CDP_WALLET_SECRET");
+    buyerAddress = env.BUYER_ADDRESS as Address;
+    cdpApiKeyName = env.CDP_API_KEY_NAME;
+    cdpApiKeyPrivateKey = env.CDP_API_KEY_PRIVATE_KEY;
+    cdpWalletSecret = env.CDP_WALLET_SECRET;
 
     // Pre-check buyer account before opening the SSE stream so misconfigurations
     // fail as HTTP errors rather than mid-stream.

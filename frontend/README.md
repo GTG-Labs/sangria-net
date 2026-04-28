@@ -20,12 +20,12 @@ pnpm install
 ### Environment Setup
 ```bash
 cp .env.example .env.local
-# Fill in required environment variables:
-# - WORKOS_CLIENT_ID
-# - WORKOS_API_KEY
-# - NEXT_PUBLIC_WORKOS_REDIRECT_URI
-# - BACKEND_URL
+# Fill in required environment variables — see § Environment Variables below.
 ```
+
+**Policy.** Every env var read by code in this app (`frontend/**/*.ts(x)`) must be declared in `lib/env.ts` and validated by its Zod schema (via `@t3-oss/env-nextjs`). Never read `process.env.X` directly anywhere else. Missing or malformed vars fail `pnpm build` with a clear validation error instead of shipping to production with a silent fallback.
+
+**Narrow exception.** Some env vars are read internally by third-party libraries we don't control (e.g. WorkOS AuthKit reads `WORKOS_CLIENT_ID`, `WORKOS_API_KEY`, `WORKOS_COOKIE_PASSWORD` from `process.env` itself). These cannot be routed through our schema and so are listed in the env table below with `Validated: No` for operator visibility. **Do not invent additional exceptions.** If you find yourself wanting to add a new var outside `lib/env.ts`, add it to the schema instead. If a genuine library-internal var is added, document it in this section's table with a one-line rationale and a `// TODO: see lib/env.ts` comment at any related call site so future readers know why it bypasses the schema.
 
 ### Development
 ```bash
@@ -176,18 +176,18 @@ pnpm audit --audit-level high # Critical/high vulnerabilities only
 
 ## 🔧 Environment Variables
 
-```bash
-# Authentication (WorkOS)
-WORKOS_CLIENT_ID=your_client_id
-WORKOS_API_KEY=your_api_key
-NEXT_PUBLIC_WORKOS_REDIRECT_URI=http://localhost:3000/auth/callback
+App-managed env vars (those whose `Validated` column is `Yes`) are checked at build time by `lib/env.ts` via `@t3-oss/env-nextjs` + Zod — `pnpm build` fails on any missing or malformed value, so no silent localhost fallbacks reach production. The remaining vars are consumed directly by libraries (e.g. WorkOS AuthKit reads `WORKOS_CLIENT_ID` / `WORKOS_API_KEY` from `process.env` itself); they're listed here for operator visibility but aren't in the schema.
 
-# Backend API
-BACKEND_URL=http://localhost:8080
+| Variable | Required | Scope | Validated | Description |
+|---|---|---|---|---|
+| `BACKEND_URL` | Yes | Server | Yes | Go backend base URL (e.g. `https://api.getsangria.com`). Must be a valid URL. |
+| `BASE_URL` | Yes | Server | Yes | Public URL of this app, used by WorkOS AuthKit's OAuth callback (`app/auth/callback/route.ts`). Must be a valid URL. |
+| `NEXT_PUBLIC_WORKOS_REDIRECT_URI` | Yes | Client | Yes | WorkOS redirect URI, inlined at build time. Must be a valid URL. |
+| `WORKOS_CLIENT_ID` | Yes | Server | No | WorkOS client ID. Consumed by AuthKit internally; not in `lib/env.ts`. |
+| `WORKOS_API_KEY` | Yes | Server | No | WorkOS API key. Consumed by AuthKit internally; not in `lib/env.ts`. |
+| `WORKOS_COOKIE_PASSWORD` | Yes | Server | No | 32-byte secret used by AuthKit to encrypt session cookies. Consumed internally. Generate via `openssl rand -base64 32`. |
 
-# Environment
-NODE_ENV=development|production
-```
+**Adding a new var:** edit `lib/env.ts` — add it to the appropriate `server` or `client` schema block *and* to the `runtimeEnv` mapping (Next.js's build-time inlining requires the literal `process.env.NEXT_PUBLIC_X` reference there). Do not add `process.env` reads elsewhere.
 
 ## 🚀 Deployment
 
